@@ -33,3 +33,4 @@ logs-desarrollo/
 .vercel/
 .env.local
 .wrangler/
+r2-worker/.dev.vars
