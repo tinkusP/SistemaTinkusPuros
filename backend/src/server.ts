@@ -93,6 +93,7 @@ import configuracionPagoRoutes from "./routes/ConfiguracionPagoRoutes";
 import credencialQrRoutes from "./routes/CredencialQrRoutes";
 import reporteRoutes from "./routes/ReporteRoutes";
 import tokenRegistroRoutes from "./routes/TokenRegistroRoutes";
+import { servirArchivoR2 } from "./services/AlmacenamientoService";
 
 
 import swaggerUi from "swagger-ui-express";
@@ -137,6 +138,7 @@ app.use(
 
 app.use(
   "/uploads",
+  servirArchivoR2,
   express.static(
     path.resolve(
       process.cwd(),

@@ -6,15 +6,16 @@ import PerfilUsuario from "../models/PerfilUsuario";
 import DocumentoUsuario, { type TipoDocumentoUsuario } from "../models/DocumentoUsuario";
 import Autorizacion from "../models/AutorizacionEdicionPerfil";
 import { comprimirPdfOptimizado } from "../services/pdfService";
+import {
+  eliminarArchivoAlmacenado,
+  subirArchivoProcesado,
+} from "../services/AlmacenamientoService";
 
 type Archivo = { path: string; mimetype: string };
 type CampoAutorizado = "DATOS_PERSONALES" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
 
 const eliminarArchivoPublico = async (ruta?: string | null) => {
-  if (!ruta?.startsWith("/uploads/")) return;
-  const absoluta = path.resolve(process.cwd(), "public", ruta.replace(/^\/+/, ""));
-  const raiz = path.resolve(process.cwd(), "public", "uploads");
-  if (absoluta.startsWith(`${raiz}${path.sep}`)) await fs.rm(absoluta, { force: true });
+  await eliminarArchivoAlmacenado(ruta);
 };
 
 export const completarPerfilAutorizado = async (req: Request, res: Response) => {
@@ -56,6 +57,11 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
     if (esPdf) await comprimirPdfOptimizado({ rutaEntrada: archivo.path, rutaSalida: salida });
     else await sharp(archivo.path).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).webp({ quality: 78 }).toFile(salida);
     const nuevaRuta = `/uploads/cuentas-perfil/${seguro}/${nombre}`;
+    await subirArchivoProcesado(
+      nuevaRuta,
+      salida,
+      esPdf ? "application/pdf" : "image/webp",
+    );
     if (anterior?.ruta && anterior.ruta !== nuevaRuta) await eliminarArchivoPublico(anterior.ruta);
     await DocumentoUsuario.findOneAndUpdate({ perfilUsuario: perfil._id, tipoDocumento: tipo, fechaEliminado: null }, { ruta: nuevaRuta, estado: "PENDIENTE", observacion: null, usuarioEdit: perfil._id, fechaEdit: new Date() }, { upsert: true, new: true });
   };
@@ -80,7 +86,9 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
     if (foto) {
       const nombre = `FOTO_${seguro}.webp`;
       const nuevaRuta = `/uploads/cuentas-perfil/${seguro}/${nombre}`;
-      await sharp(foto.path).rotate().resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(carpeta, nombre));
+      const salida = path.join(carpeta, nombre);
+      await sharp(foto.path).rotate().resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toFile(salida);
+      await subirArchivoProcesado(nuevaRuta, salida, "image/webp");
       if (perfil.fotoPerfil && perfil.fotoPerfil !== nuevaRuta) await eliminarArchivoPublico(perfil.fotoPerfil);
       perfil.fotoPerfil = nuevaRuta;
       await perfil.save();

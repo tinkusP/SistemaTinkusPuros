@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import sharp from "sharp";
 import { promises as fsPromises } from "node:fs";
 import type { NextFunction, Request, Response } from "express";
+import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 const carpeta = path.resolve(process.cwd(), "public", "uploads", "bauchers");
 fs.mkdirSync(carpeta, { recursive: true });
 const storage = multer.diskStorage({ destination: (_req, _file, cb) => cb(null, carpeta), filename: (_req, file, cb) => cb(null, `BAUCHER_${Date.now()}_${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase() || ".img"}`) });
@@ -25,6 +26,11 @@ export async function convertirBaucherAWebp(req: Request, res: Response, next: N
     req.file.path = rutaWebp;
     req.file.mimetype = "image/webp";
     req.file.size = (await fsPromises.stat(rutaWebp)).size;
+    await subirArchivoProcesado(
+      `/uploads/bauchers/${nombreWebp}`,
+      rutaWebp,
+      "image/webp",
+    );
     next();
   } catch (error) {
     await Promise.all([fsPromises.unlink(rutaOriginal).catch(() => undefined), fsPromises.unlink(rutaTemporal).catch(() => undefined)]);

@@ -1488,6 +1488,7 @@ import { consumirTokenRegistro } from "./TokenRegistroController";
 import TokenRegistro from "../models/TokenRegistro";
 import Cuota from "../models/Cuota";
 import Rol from "../models/Rol";
+import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 
 class SolicitudInvalidaError extends Error {}
 
@@ -2162,6 +2163,12 @@ export class PerfilUsuarioController {
         perfil.fotoPerfil =
           `${rutaPublicaCarpeta}/${nombreFoto}`;
 
+        await subirArchivoProcesado(
+          perfil.fotoPerfil,
+          rutaFoto,
+          "image/webp",
+        );
+
         await perfil.save({
           session,
         });
@@ -2205,6 +2212,11 @@ export class PerfilUsuarioController {
         }
 
         rutasGeneradas.push(rutaSalida);
+        await subirArchivoProcesado(
+          `${rutaPublicaCarpeta}/${nombre}`,
+          rutaSalida,
+          esPdf ? "application/pdf" : "image/webp",
+        );
         return nombre;
       };
 
@@ -2772,7 +2784,9 @@ static getPerfilUsuarioById = async (
     try {
       validarIdParametro(req.params.id);
 
-      const perfilAnterior = await PerfilUsuario.findById(req.params.id).select("estado ci");
+      const perfilAnterior = await PerfilUsuario.findById(req.params.id).select(
+        "estado ci apellidoPaterno apellidoMaterno",
+      );
       if (!perfilAnterior) return res.status(404).json({ error: "Perfil no encontrado" });
 
       if (req.body.estado === "ELIMINADO") {
@@ -2791,18 +2805,27 @@ static getPerfilUsuarioById = async (
         const carpetaFoto = path.resolve(process.cwd(), "public", "uploads", "cuentas-perfil", ciFoto);
         await fs.mkdir(carpetaFoto, { recursive: true });
         const nombreFoto = `FOTO_${ciFoto}.webp`;
-        await sharp(archivo.path).rotate().resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toFile(path.join(carpetaFoto, nombreFoto));
+        const salidaFoto = path.join(carpetaFoto, nombreFoto);
+        await sharp(archivo.path).rotate().resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).webp({ quality: 80, effort: 4 }).toFile(salidaFoto);
         await eliminarRutaSiExiste(archivo.path);
         rutaFotoNueva = `/uploads/cuentas-perfil/${ciFoto}/${nombreFoto}`;
+        await subirArchivoProcesado(rutaFotoNueva, salidaFoto, "image/webp");
       }
 
+      const actualizaApellidos =
+        req.body.apellidoPaterno !== undefined ||
+        req.body.apellidoMaterno !== undefined;
       const apellidoPaternoActualizado = req.body.apellidoPaterno !== undefined
         ? textoOpcional(req.body.apellidoPaterno)
         : perfilAnterior.apellidoPaterno;
       const apellidoMaternoActualizado = req.body.apellidoMaterno !== undefined
         ? textoOpcional(req.body.apellidoMaterno)
         : perfilAnterior.apellidoMaterno;
-      if (!apellidoPaternoActualizado && !apellidoMaternoActualizado) {
+      if (
+        actualizaApellidos &&
+        !apellidoPaternoActualizado &&
+        !apellidoMaternoActualizado
+      ) {
         throw new SolicitudInvalidaError("Debe ingresar al menos un apellido");
       }
 

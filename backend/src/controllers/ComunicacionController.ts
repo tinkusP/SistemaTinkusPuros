@@ -7,6 +7,7 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import fs from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 
 export const listarAnuncios = async (_req: Request, res: Response) => res.json({ anuncios: await Anuncio.find({ fechaEliminado: null }).sort({ fechaCreado: -1 }) });
 export const crearAnuncio = async (req: Request, res: Response) => {
@@ -15,8 +16,10 @@ export const crearAnuncio = async (req: Request, res: Response) => {
     const carpeta = path.resolve(process.cwd(), "public", "uploads", "anuncios");
     await fs.mkdir(carpeta, { recursive: true });
     const nombre = `AFICHE_${anuncio._id}.webp`;
-    await sharp(req.file.buffer).rotate().resize({ width: 1800, height: 2400, fit: "inside", withoutEnlargement: true }).webp({ quality: 84 }).toFile(path.join(carpeta, nombre));
+    const salida = path.join(carpeta, nombre);
+    await sharp(req.file.buffer).rotate().resize({ width: 1800, height: 2400, fit: "inside", withoutEnlargement: true }).webp({ quality: 84 }).toFile(salida);
     anuncio.afiche = `/uploads/anuncios/${nombre}`;
+    await subirArchivoProcesado(anuncio.afiche, salida, "image/webp");
     await anuncio.save();
   }
   if (anuncio.publicado && anuncio.tipo !== "ENSAYO") { const usuarios = await PerfilUsuario.find({ estado: "ACTIVO", fechaEliminado: null }).select("_id"); await Notificacion.insertMany(usuarios.map((u) => ({ usuarioId: u._id, anuncioId: anuncio._id, titulo: anuncio.titulo, mensaje: anuncio.contenido, tipo: anuncio.tipo === "URGENTE" ? "ADVERTENCIA" : "INFO", enlace: "/comunicados" })), { ordered: false }).catch(() => undefined); }
