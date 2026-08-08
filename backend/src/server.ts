@@ -152,13 +152,17 @@ app.get(
   (_req, res) => {
     res.status(200).json({
       message:
-        "API Discoteca funcionando correctamente",
+        "API Sistema Tinkus Puros funcionando correctamente",
 
       status:
         "OK",
     });
   },
 );
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // routes
 app.use(auditarActividad);
