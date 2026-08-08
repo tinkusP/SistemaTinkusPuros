@@ -1,0 +1,7 @@
+import api from"@/lib/axios";import{obtenerMensajeError}from"./apiError";
+export type CategoriaFormacion="PASO"|"CANCION";export type PasoVideo={_id:string;titulo:string;descripcion?:string;categoria?:CategoriaFormacion;tipoFuente:"ARCHIVO"|"YOUTUBE";rutaVideo?:string;youtubeUrl?:string;autorNombre:string;fechaCreado:string;usuarioAutorId?:{nombres:string;apellidoPaterno:string;fotoPerfil?:string}};
+const fallo=(e:unknown):never=>{throw new Error(obtenerMensajeError(e,"No se pudo completar la operación"));};
+export async function listarPasos(categoria:CategoriaFormacion="PASO"){try{return(await api.get<{videos:PasoVideo[]}>("/pasos-videos",{params:{categoria}})).data.videos}catch(e){return fallo(e)}}
+export async function consultarPermisoPublicar(){try{return(await api.get<{puedePublicar:boolean}>("/pasos-videos/permiso-publicar")).data.puedePublicar}catch{return false}}
+export async function publicarPaso(datos:{titulo:string;descripcion:string;youtubeUrl:string;video:File|null;categoria?:CategoriaFormacion}){const f=new FormData();f.append("titulo",datos.titulo);f.append("categoria",datos.categoria??"PASO");if(datos.descripcion)f.append("descripcion",datos.descripcion);if(datos.youtubeUrl)f.append("youtubeUrl",datos.youtubeUrl);if(datos.video)f.append("video",datos.video);try{return(await api.post("/pasos-videos",f)).data}catch(e){return fallo(e)}}
+export async function eliminarPaso(id:string){try{return(await api.delete(`/pasos-videos/${id}`)).data}catch(e){return fallo(e)}}

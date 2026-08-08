@@ -1,0 +1,16 @@
+import { Router } from "express";
+import { body, param } from "express-validator";
+import { authenticate } from "../middleware/auth";
+import { soloAdministracion } from "../middleware/soloAdministracion";
+import { handleInputErrors } from "../middleware/validation";
+import { cambiarEstadoEntrega, crearPrenda, entregar, guardarMiTalla, guardarTalla, miIndumentaria, resumenIndumentaria } from "../controllers/IndumentariaController";
+const router = Router();
+router.get("/mia", authenticate, miIndumentaria);
+router.put("/mia/tallas", authenticate, body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarMiTalla);
+router.use(authenticate, soloAdministracion);
+router.get("/", resumenIndumentaria);
+router.put("/tallas", body("fraternoId").isMongoId(), body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarTalla);
+router.post("/prendas", body("nombre").trim().notEmpty(), handleInputErrors, crearPrenda);
+router.post("/entregas", body("fraternoId").isMongoId(), body("prendaId").isMongoId(), body("cantidad").optional().isInt({ min: 1 }).toInt(), handleInputErrors, entregar);
+router.patch("/entregas/:id", param("id").isMongoId(), body("estado").isIn(["ENTREGADO", "DEVUELTO", "PERDIDO", "DANADO"]), handleInputErrors, cambiarEstadoEntrega);
+export default router;

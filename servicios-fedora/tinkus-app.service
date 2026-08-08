@@ -1,0 +1,27 @@
+[Unit]
+Description=Sistema web Tinkus (backend y frontend HTTPS)
+Requires=tinkus-mongo.service
+After=tinkus-mongo.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jimmy
+Group=jimmy
+WorkingDirectory=/home/jimmy/tinkus/backend
+EnvironmentFile=/etc/tinkus/tinkus.env
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=4001
+Environment=HTTPS_CERT_PATH=/etc/tinkus/servidor.crt
+Environment=HTTPS_KEY_PATH=/etc/tinkus/servidor.key
+Environment=HTTPS_CA_PATH=/etc/tinkus/tinkus-ca.crt
+ExecStart=/usr/bin/node /home/jimmy/tinkus/backend/dist/index.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

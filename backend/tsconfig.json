@@ -1,0 +1,34 @@
+// {
+//   "compilerOptions": {
+//     "outDir": "./dist",
+//     "rootDir": "./src",
+//     "lib": ["esnext"],
+//     "target": "ESNext",
+//     "moduleResolution": "NodeNext",
+//     "module": "NodeNext",
+//     "strict": false,
+//     "sourceMap": true,
+   
+//     "declaration": true,
+//      "esModuleInterop": true,
+//     "allowSyntheticDefaultImports": true
+//   },
+//   "include": ["src/**/*.ts"]
+// }
+
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "lib": ["esnext"],
+    "target": "ESNext",
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext",
+    "strict": false,
+    "sourceMap": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/**/*.ts"]
+}

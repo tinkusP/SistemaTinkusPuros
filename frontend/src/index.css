@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .input-preregistro {
+    @apply w-full rounded-xl border border-[#cdbfae] bg-[#fffdf8] px-3 py-2.5 text-sm text-[#262022] outline-none transition focus:border-[#74122A] focus:ring-4 focus:ring-[#74122A]/10;
+  }
+}
+.fixed.inset-0 { overflow-y: auto; overscroll-behavior: contain; }
+.fixed.inset-0 > section,
+.fixed.inset-0 > div:not(.fixed) { max-height: calc(100dvh - 2rem) !important; overflow-y: auto !important; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+@media (max-width: 640px) {
+  .fixed.inset-0 { align-items: start !important; padding: .75rem !important; }
+  .fixed.inset-0 > section,
+  .fixed.inset-0 > div:not(.fixed) { max-height: calc(100dvh - 1.5rem) !important; }
+}
+@media print {
+  body * { visibility: hidden !important; }
+  #vista-impresion-bloque, #vista-impresion-bloque * { visibility: visible !important; }
+  #vista-impresion-bloque { position: absolute; inset: 0; width: 100%; max-width: none; padding: 10mm; }
+  #vista-impresion-bloque .no-print { display: none !important; }
+  @page { size: landscape; margin: 8mm; }
+}

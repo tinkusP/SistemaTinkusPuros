@@ -1,0 +1,15 @@
+[Unit]
+Description=Base de datos local de Tinkus
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/jimmy/tinkus
+ExecStart=/usr/local/bin/docker compose -f /home/jimmy/tinkus/docker-compose.local.yml up -d mongo
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

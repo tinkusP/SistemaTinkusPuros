@@ -1,0 +1,35 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: tinkus-mongodb-local
+    restart: unless-stopped
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -f /data/configdb/tinkus-keyfile ]; then
+          openssl rand -base64 756 > /data/configdb/tinkus-keyfile
+          chmod 400 /data/configdb/tinkus-keyfile
+          chown 999:999 /data/configdb/tinkus-keyfile
+        fi
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/configdb/tinkus-keyfile
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: tinkus_local
+      MONGO_INITDB_ROOT_PASSWORD: tinkus_local_2026
+      MONGO_INITDB_DATABASE: tinkus
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - tinkus_mongodb_data:/data/db
+      - tinkus_mongodb_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--username", "tinkus_local", "--password", "tinkus_local_2026", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  tinkus_mongodb_data:
+    name: tinkus_mongodb_data
+  tinkus_mongodb_config:
+    name: tinkus_mongodb_config

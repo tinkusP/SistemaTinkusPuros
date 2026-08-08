@@ -1,0 +1,3 @@
+import mongoose,{Document,Schema} from "mongoose";
+export interface AceptacionTerminosPagoType extends Document{usuarioId:mongoose.Types.ObjectId;gestionId:mongoose.Types.ObjectId;versionTerminos:number;fechaAceptacion:Date;ip?:string;}
+const schema=new Schema<AceptacionTerminosPagoType>({usuarioId:{type:Schema.Types.ObjectId,ref:"PerfilUsuario",required:true},gestionId:{type:Schema.Types.ObjectId,ref:"Gestion",required:true},versionTerminos:{type:Number,required:true},fechaAceptacion:{type:Date,default:Date.now},ip:String},{versionKey:false,collection:"aceptaciones_terminos_pago"});schema.index({usuarioId:1,gestionId:1,versionTerminos:1},{unique:true});export default mongoose.model<AceptacionTerminosPagoType>("AceptacionTerminosPago",schema);

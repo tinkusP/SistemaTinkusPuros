@@ -1,0 +1,32 @@
+# Dependencias y compilaciones
+**/node_modules/
+**/dist/
+**/.vite/
+*.tsbuildinfo
+
+# Variables y secretos
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+certificados-locales/
+
+# Archivos generados o privados de usuarios
+backend/public/uploads/
+backend/uploads/
+backend/storage/
+respaldos/
+logs-desarrollo/
+*.archive
+*.log
+
+# Sistema y editores
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+

@@ -1,0 +1,5 @@
+export type PersonaResumen = { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string; ci: string; email?: string; fotoPerfil?: string };
+export type GestionResumen = { _id: string; nombre: string; anio?: number };
+export type Fraterno = { _id: string; preregistroId: string | { _id: string; numeroPreRegistro: string }; usuarioId: string | PersonaResumen; gestionId: string | GestionResumen; numeroFraterno: string; fechaIngreso: string; estado: "ACTIVO" | "INACTIVO" | "RETIRADO" };
+export type Traspaso = { _id: string; preregistroId: string | { _id: string; numeroPreRegistro: string }; usuarioOrigenId: string | PersonaResumen; usuarioDestinoId: string | PersonaResumen; montoTotalCuota: number; montoPagadoAlTraspaso: number; saldoAlTraspaso: number; motivo: string; observacion?: string; estado: string; fechaSolicitud: string };
+export type Asistencia = { _id: string; fraternoId: string | { _id: string; numeroFraterno: string }; usuarioId: string | PersonaResumen; gestionId: string | GestionResumen; fechaClave: string; fecha: string; horaEntrada: string; horaSalida?: string; estado: "PRESENTE" | "INCOMPLETA" | "ANULADA" };

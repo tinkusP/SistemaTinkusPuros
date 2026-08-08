@@ -1,0 +1,11 @@
+import api from "@/lib/axios";
+export type Prenda = { _id: string; nombre: string; requiereTalla: boolean; activo: boolean };
+export type Entrega = { _id: string; fraternoId: any; prendaId: Prenda; cantidad: number; talla?: string; estado: string; fechaEntrega: string };
+export type TallaFraterno = { _id: string; fraternoId: any; tallaPolera: string; tallaChamarra: string };
+export const obtenerIndumentaria = async () => (await api.get("/indumentaria")).data as { tallas: any[]; prendas: Prenda[]; entregas: Entrega[] };
+export const obtenerMiIndumentaria = async () => (await api.get("/indumentaria/mia")).data as { fraterno: any | null; talla: TallaFraterno | null; entregas: Entrega[] };
+export const guardarMisTallas = async (datos:{tallaPolera:string;tallaChamarra:string}) => (await api.put("/indumentaria/mia/tallas",datos)).data;
+export const guardarTalla = async (datos: { fraternoId: string; tallaPolera: string; tallaChamarra: string }) => (await api.put("/indumentaria/tallas", datos)).data;
+export const crearPrenda = async (datos: { nombre: string; requiereTalla: boolean }) => (await api.post("/indumentaria/prendas", datos)).data;
+export const crearEntrega = async (datos: { fraternoId: string; prendaId: string; cantidad: number; talla?: string }) => (await api.post("/indumentaria/entregas", datos)).data;
+export const cambiarEntrega = async (id: string, estado: string) => (await api.patch(`/indumentaria/entregas/${id}`, { estado })).data;
