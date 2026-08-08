@@ -2772,7 +2772,9 @@ static getPerfilUsuarioById = async (
     try {
       validarIdParametro(req.params.id);
 
-      const perfilAnterior = await PerfilUsuario.findById(req.params.id).select("estado ci");
+      const perfilAnterior = await PerfilUsuario.findById(req.params.id).select(
+        "estado ci apellidoPaterno apellidoMaterno",
+      );
       if (!perfilAnterior) return res.status(404).json({ error: "Perfil no encontrado" });
 
       if (req.body.estado === "ELIMINADO") {
@@ -2796,13 +2798,20 @@ static getPerfilUsuarioById = async (
         rutaFotoNueva = `/uploads/cuentas-perfil/${ciFoto}/${nombreFoto}`;
       }
 
+      const actualizaApellidos =
+        req.body.apellidoPaterno !== undefined ||
+        req.body.apellidoMaterno !== undefined;
       const apellidoPaternoActualizado = req.body.apellidoPaterno !== undefined
         ? textoOpcional(req.body.apellidoPaterno)
         : perfilAnterior.apellidoPaterno;
       const apellidoMaternoActualizado = req.body.apellidoMaterno !== undefined
         ? textoOpcional(req.body.apellidoMaterno)
         : perfilAnterior.apellidoMaterno;
-      if (!apellidoPaternoActualizado && !apellidoMaternoActualizado) {
+      if (
+        actualizaApellidos &&
+        !apellidoPaternoActualizado &&
+        !apellidoMaternoActualizado
+      ) {
         throw new SolicitudInvalidaError("Debe ingresar al menos un apellido");
       }
 

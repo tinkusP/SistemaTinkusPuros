@@ -30,3 +30,6 @@ logs-desarrollo/
 *.swp
 *~
 
+.vercel/
+.env.local
+.wrangler/
