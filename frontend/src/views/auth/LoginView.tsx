@@ -200,6 +200,11 @@ export default function LoginView() {
         const codigosRoles = usuario.roles.map((rolUsuario) =>
           String(rolUsuario?.codigo ?? rolUsuario?.nombre ?? "").trim().toUpperCase(),
         );
+        const esAdministrador = codigosRoles.some((codigo) =>
+          ["ADMIN", "ADMINISTRADOR", "SUPERADMIN", "SUPERADMINISTRADOR"].includes(
+            codigo.replace(/[\s_-]/g, ""),
+          ),
+        );
 
         console.log(
           "Rol consultado:",
@@ -236,8 +241,9 @@ export default function LoginView() {
           return;
         }
         if (
-          codigoRol ===
-          "POSTULANTE"
+          !esAdministrador &&
+          (codigosRoles.includes("POSTULANTE") ||
+            codigosRoles.includes("FRATERNO"))
         ) {
           navigate(
             "/comunicados",
@@ -250,8 +256,7 @@ export default function LoginView() {
         }
 
         if (
-          codigoRol ===
-          "ADMINISTRADOR"
+          esAdministrador
         ) {
           navigate(
             "/dashboard",
