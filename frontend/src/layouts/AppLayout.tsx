@@ -47,6 +47,11 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "📊",
   },
   {
+    nombre: "Respaldo total",
+    ruta: "/respaldo",
+    icono: "💾",
+  },
+  {
     nombre: "Comunicados",
     ruta: "/comunicados",
     icono: "📢",
@@ -226,8 +231,9 @@ export default function AppLayout() {
           .toUpperCase()
       : "";
   const permisoPorRuta:Record<string,string>={"/tokens-registro":"TOKENS_GESTIONAR","/dashboard":"VISTA_DASHBOARD","/gestion":"VISTA_GESTIONES","/perfil-usuario":"VISTA_USUARIOS","/facultades":"VISTA_FACULTADES","/rol":"VISTA_ROLES","/preregistros":"VISTA_PREREGISTROS","/postulantes-guia":"VISTA_POSTULANTES_GUIA","/asistencias-postulantes-guia":"VISTA_ASISTENCIA_GUIA","/guias-bloques":"VISTA_GUIAS_BLOQUES","/indumentaria":"VISTA_INDUMENTARIA","/anuncios":"VISTA_ANUNCIOS","/auditoria":"VISTA_AUDITORIA","/cuotas":"VISTA_PAGOS","/asistencias":"VISTA_ASISTENCIAS","/fraternos":"VISTA_FRATERNOS","/traspasos":"VISTA_TRASPASOS","/pasos":"VISTA_PASOS","/cancionero":"VISTA_CANCIONERO"};
+  const esPropietarioRespaldo = String(usuario?.email ?? "").trim().toLowerCase() === "devdjcod@gmail.com";
   const opcionesVisibles = esAdministrador
-    ? opcionesMenu.filter(opcion => opcion.ruta !== "/mi-bloque-guia" || esGuia)
+    ? opcionesMenu.filter(opcion => (opcion.ruta !== "/mi-bloque-guia" || esGuia) && (opcion.ruta !== "/respaldo" || esPropietarioRespaldo))
     : esGuia
       ? opcionesMenu.filter(opcion => ["/comunicados", "/mi-bloque-guia", "/pasos", "/cancionero"].includes(opcion.ruta))
       : opcionesMenu.filter(opcion => ["/comunicados", "/pasos", "/cancionero"].includes(opcion.ruta)||permisosUsuario.has(permisoPorRuta[opcion.ruta]));

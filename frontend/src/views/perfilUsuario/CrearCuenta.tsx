@@ -264,6 +264,7 @@ import {
 
 import {
   createPerfilUsuario,
+  type ErrorRegistroCuenta,
 } from "@/api/PerfilUsuarioApi";
 
 import {
@@ -294,13 +295,13 @@ export default function CrearCuenta() {
   const navigate =
     useNavigate();
   const [solicitudEnviada, setSolicitudEnviada] = useState(false);
-  const [errorRegistro, setErrorRegistro] = useState<string | null>(null);
+  const [errorRegistro, setErrorRegistro] = useState<ErrorRegistroCuenta | null>(null);
   const [codigoToken, setCodigoToken] = useState("");
   const [tokenValidado, setTokenValidado] = useState<any>(null);
   const [restaurandoToken, setRestaurandoToken] = useState(true);
   const accesoQuery = useQuery({ queryKey: ["configuracion-publica-token"], queryFn: obtenerConfiguracionPublicaToken, retry: false });
   const requiereToken = accesoQuery.data?.requerirTokenRegistro !== false;
-  const validarMutation = useMutation({mutationFn:validarToken,onSuccess:(r)=>{setTokenValidado(r.token);guardarTokenBorrador(r.token);toast.success(`Token ${r.token.codigo} válido`)},onError:(e)=>{limpiarTokenBorrador();setTokenValidado(null);setErrorRegistro(e instanceof Error?e.message:"Token no válido")}});
+  const validarMutation = useMutation({mutationFn:validarToken,onSuccess:(r)=>{setTokenValidado(r.token);guardarTokenBorrador(r.token);toast.success(`Token ${r.token.codigo} válido`)},onError:(e)=>{limpiarTokenBorrador();setTokenValidado(null);const error=new Error(e instanceof Error?e.message:"Token no válido") as ErrorRegistroCuenta;error.tipo="TOKEN";error.accion="Solicita o escanea otro token vigente";setErrorRegistro(error)}});
 
   useEffect(() => {
     const guardado = leerTokenBorrador<{ codigo?: string; fechaExpiracion?: string }>();
@@ -388,10 +389,10 @@ export default function CrearCuenta() {
         (
           error,
         ) => {
-          const mensaje = error instanceof Error
-            ? error.message
-            : "No se pudo registrar la cuenta";
-          setErrorRegistro(mensaje);
+          const detalle = error instanceof Error
+            ? error as ErrorRegistroCuenta
+            : new Error("No se pudo registrar la cuenta") as ErrorRegistroCuenta;
+          setErrorRegistro(detalle);
         },
     });
 
@@ -446,7 +447,7 @@ export default function CrearCuenta() {
   ========================================= */
 
   if (restaurandoToken || accesoQuery.isLoading) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><p className="rounded-2xl bg-white p-7 font-bold text-[#841534] shadow">Recuperando tu registro...</p></main>;
-  if (!tokenValidado) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><section className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl"><div className="text-center text-5xl">🔐</div><h1 className="mt-4 text-center text-2xl font-black text-[#841534]">Token de invitación</h1><p className="mt-2 text-center text-sm text-slate-600">Escribe el código o escanea el QR entregado por administración. Una vez validado quedará guardado en este dispositivo mientras completas el registro.</p><form className="mt-6 space-y-4" onSubmit={async e=>{e.preventDefault();setErrorRegistro(null);try{await validarMutation.mutateAsync(codigoToken)}catch{}}}><input autoFocus value={codigoToken} onChange={e=>setCodigoToken(e.target.value.toUpperCase())} placeholder="FRA-XXXXXXXX" className="w-full rounded-xl border px-4 py-3 text-center font-mono text-lg uppercase tracking-widest"/><button disabled={validarMutation.isPending||!codigoToken.trim()} className="w-full rounded-xl bg-[#841534] px-4 py-3 font-bold text-white disabled:opacity-50">{validarMutation.isPending?"Validando...":"Continuar al registro"}</button></form><div className="my-5 flex items-center gap-3 text-xs font-bold uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200"/>o escanea<span className="h-px flex-1 bg-slate-200"/></div><EscanerTokenRegistro alLeer={async token=>{setCodigoToken(token);setErrorRegistro(null);try{await validarMutation.mutateAsync(token)}catch{}}}/><Link to="/auth/login" className="mt-5 block text-center text-sm font-bold text-[#841534]">Volver al inicio de sesión</Link>{errorRegistro&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-center text-sm text-red-700">{errorRegistro}</div>}</section></main>;
+  if (!tokenValidado) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><section className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl"><div className="text-center text-5xl">🔐</div><h1 className="mt-4 text-center text-2xl font-black text-[#841534]">Token de invitación</h1><p className="mt-2 text-center text-sm text-slate-600">Escribe el código o escanea el QR entregado por administración. Una vez validado quedará guardado en este dispositivo mientras completas el registro.</p><form className="mt-6 space-y-4" onSubmit={async e=>{e.preventDefault();setErrorRegistro(null);try{await validarMutation.mutateAsync(codigoToken)}catch{}}}><input autoFocus value={codigoToken} onChange={e=>setCodigoToken(e.target.value.toUpperCase())} placeholder="FRA-XXXXXXXX" className="w-full rounded-xl border px-4 py-3 text-center font-mono text-lg uppercase tracking-widest"/><button disabled={validarMutation.isPending||!codigoToken.trim()} className="w-full rounded-xl bg-[#841534] px-4 py-3 font-bold text-white disabled:opacity-50">{validarMutation.isPending?"Validando...":"Continuar al registro"}</button></form><div className="my-5 flex items-center gap-3 text-xs font-bold uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200"/>o escanea<span className="h-px flex-1 bg-slate-200"/></div><EscanerTokenRegistro alLeer={async token=>{setCodigoToken(token);setErrorRegistro(null);try{await validarMutation.mutateAsync(token)}catch{}}}/><Link to="/auth/login" className="mt-5 block text-center text-sm font-bold text-[#841534]">Volver al inicio de sesión</Link>{errorRegistro&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-center text-sm text-red-700">{errorRegistro.message}</div>}</section></main>;
 
   if (
     gestionQuery.isLoading
@@ -584,8 +585,9 @@ export default function CrearCuenta() {
               <button type="button" onClick={() => setErrorRegistro(null)} aria-label="Cerrar" className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-xl font-black text-slate-700">✕</button>
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-red-100 text-3xl text-red-700">!</div>
               <h2 id="error-registro-titulo" className="mt-4 text-2xl font-black text-red-700">No se pudo enviar la solicitud</h2>
-              <p className="mt-3 text-slate-700">{errorRegistro}</p>
-              <p className="mt-3 text-sm text-slate-500">Tus datos permanecen en el formulario. Corrige o reemplaza el archivo indicado y vuelve a intentarlo.</p>
+              <p className="mt-3 text-slate-700">{errorRegistro.message}</p>
+              {errorRegistro.archivo && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">Archivo que debes revisar: {errorRegistro.archivo}</p>}
+              <p className="mt-3 text-sm text-slate-500">{errorRegistro.accion ?? (errorRegistro.tipo === "DUPLICADO" ? "Revisa el dato duplicado o inicia sesión si la cuenta ya te pertenece." : errorRegistro.tipo === "TOKEN" ? "Solicita un nuevo token a administración." : errorRegistro.tipo === "ARCHIVO" ? "Reemplaza únicamente el archivo señalado y vuelve a intentarlo." : "Tus datos permanecen en el formulario. Revisa el campo indicado y vuelve a intentarlo.")}</p>
               <button type="button" autoFocus onClick={() => setErrorRegistro(null)} className="mt-6 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white">Entendido, corregir</button>
             </section>
           </div>

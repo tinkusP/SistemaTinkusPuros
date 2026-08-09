@@ -1491,7 +1491,21 @@ import Rol from "../models/Rol";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import { eliminarArchivoAlmacenado, subirArchivoProcesado } from "../services/AlmacenamientoService";
 
-class SolicitudInvalidaError extends Error {}
+type DetalleSolicitudInvalida = {
+  tipo?: "DUPLICADO" | "ARCHIVO" | "DATO" | "TOKEN";
+  campo?: string;
+  archivo?: string;
+  accion?: string;
+};
+
+class SolicitudInvalidaError extends Error {
+  detalle: DetalleSolicitudInvalida;
+  constructor(message: string, detalle: DetalleSolicitudInvalida = {}) {
+    super(message);
+    this.name = "SolicitudInvalidaError";
+    this.detalle = detalle;
+  }
+}
 
 const normalizarEmail = (valor: unknown): string => {
   if (typeof valor !== "string" || !valor.trim()) {
@@ -1685,6 +1699,7 @@ const responderError = (
   if (error instanceof SolicitudInvalidaError) {
     return res.status(400).json({
       error: error.message,
+      ...error.detalle,
     });
   }
 
@@ -1728,6 +1743,9 @@ const responderError = (
 
     return res.status(409).json({
       error: mensaje,
+      tipo: "DUPLICADO",
+      campo: campo === "email" ? "email" : campo === "ci" ? "ci" : undefined,
+      accion: campo === "email" ? "Ingresa otro correo o inicia sesión si la cuenta te pertenece" : "Verifica el CI o inicia sesión si ya tienes una cuenta",
     });
   }
 
@@ -1810,11 +1828,12 @@ export class PerfilUsuarioController {
       if (!carnetIdentidadPdf) {
         throw new SolicitudInvalidaError(
           "Debe adjuntar el carnet de identidad como PDF o imagen",
+          { tipo: "ARCHIVO", campo: "carnetIdentidadPdf", archivo: "Carnet de identidad (anverso)", accion: "Selecciona una imagen o PDF del anverso del carnet" },
         );
       }
-      if (!fotoPerfilArchivo) throw new SolicitudInvalidaError("La foto de perfil es obligatoria");
-      if (!esArchivoPdfRegistro(carnetIdentidadPdf) && !carnetIdentidadReverso) throw new SolicitudInvalidaError("Debe adjuntar anverso y reverso del carnet cuando utiliza imágenes");
-      if (esArchivoPdfRegistro(carnetIdentidadReverso)) throw new SolicitudInvalidaError("El reverso del carnet debe ser una imagen");
+      if (!fotoPerfilArchivo) throw new SolicitudInvalidaError("La foto de perfil es obligatoria", { tipo: "ARCHIVO", campo: "fotoPerfil", archivo: "Foto de perfil", accion: "Selecciona una fotografía de perfil" });
+      if (!esArchivoPdfRegistro(carnetIdentidadPdf) && !carnetIdentidadReverso) throw new SolicitudInvalidaError("Debe adjuntar anverso y reverso del carnet cuando utiliza imágenes", { tipo: "ARCHIVO", campo: "carnetIdentidadReverso", archivo: "Carnet de identidad (reverso)", accion: "Selecciona la imagen del reverso o sube un único PDF del carnet" });
+      if (esArchivoPdfRegistro(carnetIdentidadReverso)) throw new SolicitudInvalidaError("El reverso del carnet debe ser una imagen", { tipo: "ARCHIVO", campo: "carnetIdentidadReverso", archivo: "Carnet de identidad (reverso)", accion: "Reemplaza el reverso por una imagen" });
 
       if (
         esArchivoPdfRegistro(carnetIdentidadPdf) &&
@@ -1822,6 +1841,7 @@ export class PerfilUsuarioController {
       ) {
         throw new SolicitudInvalidaError(
           "El archivo del carnet de identidad no es un PDF válido",
+          { tipo: "ARCHIVO", campo: "carnetIdentidadPdf", archivo: "Carnet de identidad", accion: "Reemplaza este archivo; su contenido no corresponde a un PDF válido" },
         );
       }
 
@@ -1831,6 +1851,7 @@ export class PerfilUsuarioController {
       ) {
         throw new SolicitudInvalidaError(
           "El archivo del registro universitario no es un PDF válido",
+          { tipo: "ARCHIVO", campo: "registroUniversitarioPdf", archivo: "Registro universitario", accion: "Reemplaza este archivo; su contenido no corresponde a un PDF válido" },
         );
       }
 
@@ -1936,6 +1957,13 @@ export class PerfilUsuarioController {
 
         throw new SolicitudInvalidaError(
           mensaje,
+          {
+            tipo: "DUPLICADO",
+            campo: cuentaExistente.email === email ? "email" : "ci",
+            accion: cuentaExistente.email === email
+              ? "Ingresa otro correo o inicia sesión si esta cuenta te pertenece"
+              : "Verifica el CI o inicia sesión si ya tienes una cuenta",
+          },
         );
       }
 
@@ -2156,6 +2184,7 @@ export class PerfilUsuarioController {
         } catch {
           throw new SolicitudInvalidaError(
             "La fotografía de perfil está incompleta o dañada. Vuelve a tomarla o selecciona otra imagen.",
+            { tipo: "ARCHIVO", campo: "fotoPerfil", archivo: "Foto de perfil", accion: "Vuelve a tomarla o selecciona otra imagen" },
           );
         }
 
@@ -2211,6 +2240,7 @@ export class PerfilUsuarioController {
               : "registro universitario";
           throw new SolicitudInvalidaError(
             `El archivo del ${nombreDocumento} está incompleto, dañado o no es una imagen/PDF válido. Vuelve a tomarlo o selecciona otro archivo.`,
+            { tipo: "ARCHIVO", campo: archivo.fieldname, archivo: nombreDocumento, accion: "Reemplaza únicamente este archivo y vuelve a intentarlo" },
           );
         }
 

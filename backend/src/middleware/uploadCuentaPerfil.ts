@@ -138,6 +138,23 @@ const CAMPOS_DOCUMENTO = new Set([
   "registroUniversitarioPdf",
 ]);
 
+const NOMBRES_CAMPOS: Record<string, string> = {
+  fotoPerfil: "foto de perfil",
+  carnetIdentidadPdf: "carnet de identidad (anverso)",
+  carnetIdentidadReverso: "carnet de identidad (reverso)",
+  registroUniversitarioPdf: "registro universitario",
+};
+
+const errorArchivo = (file: Express.Multer.File, mensaje: string) => {
+  const error = new Error(`${NOMBRES_CAMPOS[file.fieldname] ?? file.fieldname}: ${mensaje}`) as Error & {
+    campoArchivo?: string;
+    tipoError?: string;
+  };
+  error.campoArchivo = file.fieldname;
+  error.tipoError = "ARCHIVO";
+  return error;
+};
+
 /*
 |--------------------------------------------------------------------------
 | Almacenamiento temporal
@@ -208,9 +225,7 @@ const fileFilter: multer.Options["fileFilter"] = (
       !EXTENSIONES_IMAGEN_PERMITIDAS.has(extension)
     ) {
       callback(
-        new Error(
-          "La foto debe ser una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP",
-        ),
+        errorArchivo(file, "debe ser una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP"),
       );
 
       return;
@@ -237,9 +252,7 @@ const fileFilter: multer.Options["fileFilter"] = (
       )
     ) {
       callback(
-        new Error(
-          "El documento debe ser PDF o una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP",
-        ),
+        errorArchivo(file, "debe ser PDF o una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP"),
       );
 
       return;
@@ -254,9 +267,7 @@ const fileFilter: multer.Options["fileFilter"] = (
   }
 
   callback(
-    new Error(
-      `El campo de archivo ${file.fieldname} no está permitido`,
-    ),
+    errorArchivo(file, "no corresponde a un campo permitido"),
   );
 };
 

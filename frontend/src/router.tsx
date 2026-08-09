@@ -62,6 +62,7 @@ import ReportesView from "./views/reportes/ReportesView";
 import PasosVideoView from "./views/guia/PasosVideoView";
 import CancioneroView from "./views/guia/CancioneroView";
 import TokenRegistroView from "./views/tokens/TokenRegistroView";
+import RespaldoView from "./views/respaldo/RespaldoView";
 const MiCredencialQrView=lazy(()=>import("./views/perfilUsuario/MiCredencialQrView"));
 const EscanerQrView=lazy(()=>import("./views/perfilUsuario/EscanerQrView"));
 
@@ -177,6 +178,7 @@ export default function Router() {
             <Route path="/asistencias-postulantes-guia" element={<AsistenciaPostulanteGuiaView />} />
             <Route path="/facultades" element={<FacultadesView />} />
             <Route path="/reportes" element={<ReportesView />} />
+            <Route path="/respaldo" element={<RespaldoView />} />
             <Route path="/tokens-registro" element={<TokenRegistroView />} />
             <Route path="/indumentaria" element={<IndumentariaView />} />
             <Route path="/pasos" element={<PasosVideoView />} />
