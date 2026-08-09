@@ -1231,12 +1231,21 @@ export async function loginPerfilUsuario(
 
     return respuesta;
   } catch (error) {
-    throw new Error(
-      obtenerMensajeError(
-        error,
-        "Error iniciando sesión",
-      ),
-    );
+    if (isAxiosError(error)) {
+      const data = error.response?.data as { codigo?: unknown; error?: unknown } | undefined;
+      throw new ErrorLogin(
+        typeof data?.error === "string" ? data.error : obtenerMensajeError(error, "Error iniciando sesión"),
+        typeof data?.codigo === "string" ? data.codigo : "ERROR_LOGIN",
+      );
+    }
+    throw new ErrorLogin(obtenerMensajeError(error, "Error iniciando sesión"), "ERROR_LOGIN");
+  }
+}
+
+export class ErrorLogin extends Error {
+  constructor(message: string, public readonly codigo: string) {
+    super(message);
+    this.name = "ErrorLogin";
   }
 }
 

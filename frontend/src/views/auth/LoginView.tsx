@@ -16,9 +16,12 @@ import {
   Mail,
   ShieldCheck,
   Sparkles,
+  AlarmClock,
+  UserPlus,
 } from "lucide-react";
 
 import {
+  ErrorLogin,
   loginPerfilUsuario,
 } from "@/api/PerfilUsuarioApi";
 
@@ -75,6 +78,9 @@ export default function LoginView() {
     mensajeLogin,
     setMensajeLogin,
   ] = useState("");
+
+  const [modalRevision, setModalRevision] = useState<{ titulo: string; mensaje: string } | null>(null);
+  const [cuentaNoExiste, setCuentaNoExiste] = useState(false);
 
   const [
     verificandoRol,
@@ -294,6 +300,19 @@ export default function LoginView() {
           ? error.message
           : "No se pudo iniciar sesión";
 
+      if (error instanceof ErrorLogin && ["CUENTA_EN_REVISION", "CUENTA_SIN_ALTA"].includes(error.codigo)) {
+        setMensajeLogin("");
+        setCuentaNoExiste(false);
+        setModalRevision({
+          titulo: error.codigo === "CUENTA_EN_REVISION" ? "Cuenta en revisión" : "Aún no te dieron de alta",
+          mensaje,
+        });
+        return;
+      }
+
+      const noExiste = error instanceof ErrorLogin && error.codigo === "CUENTA_NO_EXISTE";
+      setCuentaNoExiste(noExiste);
+
       setMensajeLogin(
         mensaje,
       );
@@ -312,6 +331,8 @@ export default function LoginView() {
     formData: LoginForm,
   ) => {
     setMensajeLogin("");
+    setCuentaNoExiste(false);
+    setModalRevision(null);
 
     mutate({
       email: formData.email
@@ -576,6 +597,7 @@ export default function LoginView() {
                         <p className="mt-1 text-sm font-medium leading-5 text-amber-800">
                           {mensajeLogin}
                         </p>
+                        {cuentaNoExiste ? <button type="button" onClick={() => navigate("/auth/registrar")} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#841534] px-4 py-2 text-sm font-bold text-white"><UserPlus className="h-4 w-4"/>No tengo cuenta, registrarme</button> : null}
                       </div>
                     </div>
                   </div>
@@ -673,6 +695,7 @@ export default function LoginView() {
           </div>
         </div>
       </div>
+      {modalRevision ? <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-cuenta-revision"><section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-2xl"><div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-amber-100 text-amber-700"><AlarmClock className="h-9 w-9"/></div><h2 id="titulo-cuenta-revision" className="mt-4 text-2xl font-black text-[#841534]">{modalRevision.titulo}</h2><p className="mt-3 leading-6 text-slate-600">{modalRevision.mensaje}</p><div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">No necesitas volver a registrarte. Administración debe revisar y habilitar tu cuenta.</div><button type="button" autoFocus onClick={() => setModalRevision(null)} className="mt-6 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white">Entendido, esperaré</button></section></div> : null}
     </section>
   );
 }
