@@ -69,10 +69,17 @@ export async function obtenerConfiguracionTokens(_req: Request, res: Response) {
   return res.json({ gestion, configuracion: await ConfiguracionPago.findOne({ gestionId: gestion._id }), cupos: await ocupacion(gestion) });
 }
 
+export async function obtenerConfiguracionPublica(_req: Request, res: Response) {
+  const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
+  if (!gestion) return res.status(404).json({ error: "No existe gestión activa" });
+  const configuracion = await ConfiguracionPago.findOne({ gestionId: gestion._id, activo: true }).select("requerirTokenRegistro");
+  return res.json({ gestionId: gestion._id, requerirTokenRegistro: configuracion?.requerirTokenRegistro !== false });
+}
+
 export async function guardarConfiguracionTokens(req: Request, res: Response) {
   const gestion = await Gestion.findById(req.body.gestionId); if (!gestion) return res.status(404).json({ error: "Gestión no encontrada" });
   gestion.cupoMaximoHombres = Number(req.body.cupoMaximoHombres); gestion.cupoMaximoMujeres = Number(req.body.cupoMaximoMujeres); await gestion.save();
-  const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { tarifaInterno: Number(req.body.tarifaInterno), tarifaExterno: Number(req.body.tarifaExterno), primeraCuota: Number(req.body.primeraCuota), vigenciaTokenHoras: Number(req.body.vigenciaTokenHoras), plazoPrimeraCuotaHoras: Number(req.body.plazoPrimeraCuotaHoras), cantidadBloques: Number(req.body.cantidadBloques), fechaEditado: new Date(), usuarioEditor: req.usuario?._id, activo: true }, $setOnInsert: { terminos: "Al enviar un pago declaro que los datos y el comprobante son verdaderos.", versionTerminos: 1 } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+  const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { requerirTokenRegistro: req.body.requerirTokenRegistro !== false, tarifaInterno: Number(req.body.tarifaInterno), tarifaExterno: Number(req.body.tarifaExterno), primeraCuota: Number(req.body.primeraCuota), vigenciaTokenHoras: Number(req.body.vigenciaTokenHoras), plazoPrimeraCuotaHoras: Number(req.body.plazoPrimeraCuotaHoras), cantidadBloques: Number(req.body.cantidadBloques), fechaEditado: new Date(), usuarioEditor: req.usuario?._id, activo: true }, $setOnInsert: { terminos: "Al enviar un pago declaro que los datos y el comprobante son verdaderos.", versionTerminos: 1 } }, { upsert: true, new: true, setDefaultsOnInsert: true });
   return res.json({ message: "Cupos, tarifas y plazos actualizados", gestion, configuracion, cupos: await ocupacion(gestion) });
 }
 

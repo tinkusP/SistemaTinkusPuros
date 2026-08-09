@@ -72,6 +72,40 @@ export async function eliminarArchivoAlmacenado(ruta?: string | null) {
   if (local.startsWith(`${raiz}${path.sep}`)) await fs.rm(local, { force: true });
 }
 
+/** Mueve una ruta conservando el archivo tanto en R2 como en almacenamiento local. */
+export async function moverArchivoAlmacenado(rutaOrigen: string, rutaDestino: string, contentType: string) {
+  if (rutaOrigen === rutaDestino) return true;
+  let encontrado = false;
+  if (almacenamientoR2Activo()) {
+    const origen = await fetch(endpoint(rutaOrigen), { headers: headersAutorizacion() });
+    if (origen.ok) {
+      const contenido = await origen.arrayBuffer();
+      const subida = await fetch(endpoint(rutaDestino), { method: "PUT", headers: { ...headersAutorizacion(), "content-type": origen.headers.get("content-type") || contentType }, body: contenido });
+      if (!subida.ok) throw new Error(`R2 rechazó la migración (${subida.status})`);
+      const eliminacion = await fetch(endpoint(rutaOrigen), { method: "DELETE", headers: headersAutorizacion() });
+      if (!eliminacion.ok && eliminacion.status !== 404) throw new Error(`R2 rechazó la eliminación anterior (${eliminacion.status})`);
+      encontrado = true;
+    } else if (origen.status !== 404) {
+      throw new Error(`R2 rechazó la lectura para migración (${origen.status})`);
+    }
+  }
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  const localOrigen = path.resolve(process.cwd(), "public", rutaOrigen.replace(/^\/+/, ""));
+  const localDestino = path.resolve(process.cwd(), "public", rutaDestino.replace(/^\/+/, ""));
+  if (localOrigen.startsWith(`${raiz}${path.sep}`) && localDestino.startsWith(`${raiz}${path.sep}`)) {
+    try {
+      await fs.access(localOrigen);
+      await fs.mkdir(path.dirname(localDestino), { recursive: true });
+      await fs.rm(localDestino, { force: true });
+      await fs.rename(localOrigen, localDestino);
+      encontrado = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return encontrado;
+}
+
 export async function servirArchivoR2(
   req: Request,
   res: Response,
