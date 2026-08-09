@@ -8,7 +8,7 @@ import DetalleCuota from "../models/DetalleCuota";
 
 export async function promoverAFraternoSiCorresponde(cuotaId: string, usuarioCreador?: unknown) {
   const cuota = await Cuota.findById(cuotaId);
-  if (!cuota) return null;
+  if (!cuota || cuota.cupoLiberado) return null;
 
   // La condición para adquirir la calidad de fraterno es contar con al menos
   // un pago revisado y verificado. La deuda restante continúa en la cuota.

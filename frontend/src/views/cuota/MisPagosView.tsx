@@ -7,12 +7,17 @@ import { elegirPlanCuotas, obtenerMiCuota, registrarPago, solicitarQrPago } from
 import { fechaActualBoliviaParaInput, formatearFechaCivilCorta } from "@/utils/fechaCivil";
 
 const API = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
-type TipoQr = "TOTAL" | "PRIMERA" | "SEGUNDA";
 type NumeroCuotas = 1 | 2 | 3;
 type FormPago = { monto: number; metodoPago: "QR"; montoEfectivo: 0; montoQr: number; nombrePagador: string; fechaPago: string; baucher: File | null };
 const formInicial = (): FormPago => ({ monto: 0, metodoPago: "QR", montoEfectivo: 0, montoQr: 0, nombrePagador: "", fechaPago: fechaActualBoliviaParaInput(), baucher: null });
 const redondear = (valor: number) => Number(valor.toFixed(2));
-const calcularMontoActual = (total: number, saldo: number, numeroCuotas: NumeroCuotas, pagosVerificados: number) => numeroCuotas === 1 || pagosVerificados >= numeroCuotas - 1 ? redondear(saldo) : Math.min(redondear(total / numeroCuotas), redondear(saldo));
+const distribuirPlan = (total: number, numeroCuotas: NumeroCuotas) => {
+  if (numeroCuotas === 1) return [redondear(total)];
+  if (numeroCuotas === 2) { const primera = redondear(total / 2); return [primera, redondear(total - primera)]; }
+  const primera = Math.min(300, total); const segunda = redondear((total - primera) / 2);
+  return [primera, segunda, redondear(total - primera - segunda)];
+};
+const calcularMontoActual = (total: number, saldo: number, numeroCuotas: NumeroCuotas, pagosVerificados: number) => Math.min(distribuirPlan(total, numeroCuotas)[pagosVerificados] ?? redondear(saldo), redondear(saldo));
 
 export default function MisPagosView() {
   const qc = useQueryClient();
@@ -26,9 +31,10 @@ export default function MisPagosView() {
   const pagoPendiente = q.data?.pagos.some((pago) => pago.estadoRevision === "PENDIENTE") ?? false;
   const numeroCuotas = cuota?.numeroCuotasElegidas;
   const montoActual = cuota && numeroCuotas ? calcularMontoActual(cuota.montoTotal, cuota.saldo, numeroCuotas, pagosVerificados) : 0;
-  const tipoQr: TipoQr = numeroCuotas === 1 ? "TOTAL" : pagosVerificados === 0 ? "PRIMERA" : "SEGUNDA";
+  const numeroPagoActual = Math.min(pagosVerificados + 1, numeroCuotas ?? 1);
   const configuracion = configQr.data?.configuracion;
-  const rutaQr = tipoQr === "TOTAL" ? configuracion?.qrPagoTotal : tipoQr === "PRIMERA" ? configuracion?.qrPrimeraCuota : configuracion?.qrSegundaCuota;
+  const origen = cuota?.tipoOrigenTarifa ?? (cuota?.montoTotal === 850 ? "EXTERNO" : "INTERNO");
+  const rutaQr = numeroCuotas ? configuracion?.qrPlanes?.[origen]?.[String(numeroCuotas) as "1" | "2" | "3"]?.[numeroPagoActual - 1] : undefined;
 
   useEffect(() => {
     setForm((actual) => ({ ...actual, monto: montoActual, montoQr: montoActual }));
@@ -64,23 +70,27 @@ export default function MisPagosView() {
     onError: (error: Error) => toast.error(error.message),
   });
   const solicitarQr = useMutation({
-    mutationFn: () => solicitarQrPago(cuota!._id, tipoQr),
+    mutationFn: () => {
+      if (!numeroCuotas) throw new Error("Primero elige si pagarás en 1, 2 o 3 cuotas");
+      return solicitarQrPago(cuota!._id, numeroCuotas, numeroPagoActual);
+    },
     onSuccess: (respuesta) => toast.success(respuesta.message),
     onError: (error: Error) => toast.error(error.message),
   });
 
   if (q.isLoading) return <div className="min-h-screen bg-[#eee8dc] p-8 text-center">Cargando tu cuota...</div>;
   if (!q.data || !cuota) return <Mensaje titulo="Todavía no tienes una cuota asignada" texto="Tu preregistro debe estar aprobado y administración debe configurar las tarifas de la gestión." />;
-  if (q.data.listaEspera) return <Mensaje titulo="Estás en lista de espera" texto="El plazo para pagar tu primera cuota terminó sin un pago verificado. Tu cupo fue liberado; comunícate con administración para solicitar un nuevo plazo." espera />;
+  if (q.data.listaEspera && !q.data.prorrogaActiva) return <Mensaje titulo="Estás en lista de espera" texto="El plazo para pagar tu primera cuota terminó sin un pago verificado. Tu cupo fue liberado; comunícate con administración para solicitar un nuevo plazo." espera />;
 
   const limite = cuota.fechaVencimiento ? new Date(cuota.fechaVencimiento) : null;
   const horasRestantes = limite ? Math.max(0, Math.ceil((limite.getTime() - Date.now()) / 3600000)) : null;
 
   return <main className="min-h-screen bg-[#eee8dc] p-4 sm:p-8"><div className="mx-auto max-w-5xl space-y-6">
     <header className="rounded-3xl bg-[#74122A] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[.25em] text-[#e9cf91]">Tinkus Puros · Estado financiero</p><h1 className="mt-2 text-3xl font-black">Mi cuota</h1><div className="mt-5 grid gap-3 sm:grid-cols-3"><Resumen titulo="Total" valor={cuota.montoTotal}/><Resumen titulo="Pagado verificado" valor={cuota.montoPagado}/><Resumen titulo="Saldo" valor={cuota.saldo}/></div><Link to="/comunicados" className="mt-5 inline-block text-sm font-bold">← Volver a comunicados</Link></header>
+    {q.data.listaEspera && q.data.prorrogaActiva ? <div className="rounded-xl border border-red-300 bg-red-50 p-4 font-bold text-red-800">Administración te dio un nuevo plazo para pagar, pero tu cupo ya fue liberado y permaneces en lista de espera. El pago no recupera automáticamente el cupo.</div> : null}
     <PagoLimite limite={limite} horas={horasRestantes} monto={montoActual} saldo={cuota.saldo}/>
     <PlanCuotas total={cuota.montoTotal} seleccionado={numeroCuotas} bloqueado={pagoPendiente || pagosVerificados > 0} guardando={plan.isPending} elegir={(cantidad) => plan.mutate(cantidad)}/>
-    <QrPago configuracion={configuracion} aceptados={aceptados} tipo={tipoQr} ruta={rutaQr} numeroCuotas={numeroCuotas} monto={montoActual} abrirTerminos={() => setModalTerminos(true)} modal={modalTerminos} cerrar={() => setModalTerminos(false)} aceptar={() => aceptar.mutate()} procesando={aceptar.isPending} solicitar={() => solicitarQr.mutate()} solicitando={solicitarQr.isPending}/>
+    <QrPago configuracion={configuracion} aceptados={aceptados} ruta={rutaQr} numeroCuotas={numeroCuotas} numeroPago={numeroPagoActual} monto={montoActual} abrirTerminos={() => setModalTerminos(true)} modal={modalTerminos} cerrar={() => setModalTerminos(false)} aceptar={() => aceptar.mutate()} procesando={aceptar.isPending} solicitar={() => solicitarQr.mutate()} solicitando={solicitarQr.isPending}/>
     {!aceptados && cuota.saldo > 0 && <p className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center font-bold text-amber-900">Acepta los términos y condiciones para habilitar el QR y el formulario de pago.</p>}
     {aceptados && cuota.saldo > 0 && pagoPendiente && <p className="rounded-2xl border border-blue-300 bg-blue-50 p-5 text-center font-bold text-blue-900">Tu comprobante está en revisión. Podrás registrar el siguiente pago cuando administración lo revise.</p>}
     {aceptados && numeroCuotas && rutaQr && cuota.saldo > 0 && !pagoPendiente && <form onSubmit={(evento) => { evento.preventDefault(); pagar.mutate(); }} className="grid gap-4 rounded-2xl bg-white p-5 shadow-sm sm:grid-cols-2">
@@ -97,12 +107,12 @@ export default function MisPagosView() {
 }
 
 function PlanCuotas({ total, seleccionado, bloqueado, guardando, elegir }: { total: number; seleccionado?: NumeroCuotas; bloqueado: boolean; guardando: boolean; elegir: (cantidad: NumeroCuotas) => void }) {
-  return <section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black text-[#74122A]">¿En cuántas cuotas pagarás?</h2><p className="mt-1 text-sm text-slate-500">El sistema calcula automáticamente los importes sobre el total de Bs {total.toFixed(2)}. La última cuota ajusta los centavos restantes.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{([1, 2, 3] as NumeroCuotas[]).map((cantidad) => <button type="button" key={cantidad} disabled={guardando || (bloqueado && seleccionado !== cantidad)} onClick={() => elegir(cantidad)} className={`rounded-xl border p-4 text-left disabled:cursor-not-allowed disabled:opacity-50 ${seleccionado === cantidad ? "border-[#74122A] bg-[#74122A] text-white" : "bg-[#faf7f1]"}`}><strong className="block text-lg">{cantidad} cuota{cantidad > 1 ? "s" : ""}</strong><span className="text-sm">Aprox. Bs {(total / cantidad).toFixed(2)} cada una</span></button>)}</div>{bloqueado && <p className="mt-3 text-xs font-semibold text-amber-700">El plan queda bloqueado cuando envías el primer comprobante.</p>}</section>;
+  return <section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black text-[#74122A]">¿En cuántas cuotas pagarás?</h2><p className="mt-1 text-sm text-slate-500">Importes definidos para tu tarifa total de Bs {total.toFixed(2)}.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{([1, 2, 3] as NumeroCuotas[]).map((cantidad) => <button type="button" key={cantidad} disabled={guardando || (bloqueado && seleccionado !== cantidad)} onClick={() => elegir(cantidad)} className={`rounded-xl border p-4 text-left disabled:cursor-not-allowed disabled:opacity-50 ${seleccionado === cantidad ? "border-[#74122A] bg-[#74122A] text-white" : "bg-[#faf7f1]"}`}><strong className="block text-lg">{cantidad} cuota{cantidad > 1 ? "s" : ""}</strong><span className="text-sm">{distribuirPlan(total, cantidad).map((monto) => `Bs ${monto.toFixed(2)}`).join(" · ")}</span></button>)}</div>{bloqueado && <p className="mt-3 text-xs font-semibold text-amber-700">El plan queda bloqueado cuando envías el primer comprobante.</p>}</section>;
 }
 
-function QrPago({ configuracion, aceptados, tipo, ruta, numeroCuotas, monto, abrirTerminos, modal, cerrar, aceptar, procesando, solicitar, solicitando }: { configuracion?: ConfigPago; aceptados: boolean; tipo: TipoQr; ruta?: string; numeroCuotas?: NumeroCuotas; monto: number; abrirTerminos: () => void; modal: boolean; cerrar: () => void; aceptar: () => void; procesando: boolean; solicitar: () => void; solicitando: boolean }) {
+function QrPago({ configuracion, aceptados, ruta, numeroCuotas, numeroPago, monto, abrirTerminos, modal, cerrar, aceptar, procesando, solicitar, solicitando }: { configuracion?: ConfigPago; aceptados: boolean; ruta?: string; numeroCuotas?: NumeroCuotas; numeroPago: number; monto: number; abrirTerminos: () => void; modal: boolean; cerrar: () => void; aceptar: () => void; procesando: boolean; solicitar: () => void; solicitando: boolean }) {
   const [marcado, setMarcado] = useState(false);
-  const descargar = async () => { if (!ruta) return; try { const respuesta = await fetch(`${API}${ruta}`); if (!respuesta.ok) throw new Error(); const url = URL.createObjectURL(await respuesta.blob()); const enlace = document.createElement("a"); enlace.href = url; enlace.download = `QR_${tipo}_TINKUS.webp`; enlace.click(); URL.revokeObjectURL(url); } catch { toast.error("No se pudo descargar el QR"); } };
+  const descargar = async () => { if (!ruta) return; try { const respuesta = await fetch(`${API}${ruta}`); if (!respuesta.ok) throw new Error(); const url = URL.createObjectURL(await respuesta.blob()); const enlace = document.createElement("a"); enlace.href = url; enlace.download = `QR_CUOTA_${numeroPago}_TINKUS.webp`; enlace.click(); URL.revokeObjectURL(url); } catch { toast.error("No se pudo descargar el QR"); } };
   if (!configuracion) return <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center"><p className="font-bold text-amber-900">Administración todavía no configuró los QR de esta gestión.</p><p className="mt-1 text-sm text-amber-800">Envía una solicitud para que administración cargue el QR o los datos de depósito.</p><button type="button" onClick={solicitar} disabled={solicitando} className="mt-3 rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white disabled:opacity-50">{solicitando ? "Notificando..." : "Solicitar QR a administración"}</button></section>;
   return <><section className="rounded-2xl bg-white p-5 shadow"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><h2 className="text-xl font-black text-[#74122A]">QR o depósito bancario</h2><p className="text-sm text-slate-500">Primero elige tu plan y acepta los términos para visualizar el código de pago.</p></div>{!aceptados && <button type="button" onClick={abrirTerminos} className="rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white">Ver términos y habilitar QR</button>}</div>{aceptados && !numeroCuotas && <p className="mt-4 rounded-xl bg-blue-50 p-4 text-center font-bold text-blue-800">Elige arriba si pagarás en 1, 2 o 3 cuotas.</p>}{aceptados && numeroCuotas && (ruta ? <div className="mt-5 text-center"><p className="mb-3 font-bold text-[#74122A]">Importe de esta cuota: Bs {monto.toFixed(2)}</p><img src={`${API}${ruta}`} alt="QR o datos para depósito" className="mx-auto max-h-96 w-full max-w-sm object-contain"/><div className="mt-3 flex flex-wrap justify-center gap-2"><a href={`${API}${ruta}`} target="_blank" rel="noreferrer" className="rounded-xl border px-4 py-2 font-bold text-[#74122A]">Abrir QR</a><button type="button" onClick={descargar} className="rounded-xl bg-[#74122A] px-4 py-2 font-bold text-white">Descargar QR</button></div></div> : <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-5 text-center"><p className="font-bold text-amber-900">No hay un QR disponible para este pago.</p><p className="mt-1 text-sm text-amber-800">Puedes avisar ahora mismo a administración para que cargue el código correspondiente.</p><button type="button" onClick={solicitar} disabled={solicitando} className="mt-3 rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white disabled:opacity-50">{solicitando ? "Notificando..." : "Solicitar QR a administración"}</button></div>)}</section>{modal && <div className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-black/65 p-3"><section className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><button type="button" onClick={cerrar} aria-label="Cerrar términos" className="float-right grid h-10 w-10 place-items-center rounded-full bg-slate-100 font-black">✕</button><h2 className="pr-12 text-2xl font-black text-[#74122A]">Términos y condiciones de pago</h2><div className="mt-4 max-h-[45dvh] overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">{configuracion.terminos}</div><label className="mt-4 flex items-start gap-3 rounded-xl border p-4"><input type="checkbox" checked={marcado} onChange={(evento) => setMarcado(evento.target.checked)} className="mt-1"/><span className="text-sm font-semibold">He leído y acepto los términos y condiciones para visualizar los QR y registrar mi pago.</span></label><div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={cerrar} className="rounded-xl border px-4 py-3 font-bold">Cancelar</button><button type="button" onClick={() => marcado ? aceptar() : toast.error("Debes aceptar los términos y condiciones")} disabled={procesando} className="rounded-xl bg-[#74122A] px-4 py-3 font-bold text-white disabled:opacity-50">{procesando ? "Guardando..." : "Aceptar y mostrar QR"}</button></div></section></div>}</>;
 }

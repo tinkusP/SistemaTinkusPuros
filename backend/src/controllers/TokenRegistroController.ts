@@ -17,7 +17,7 @@ async function ocupacion(gestion: any) {
     Fraterno.find({ gestionId: gestion._id, estado: "ACTIVO", fechaEliminado: null }).populate("usuarioId", "sexo").lean(),
     TokenRegistro.find({ gestionId: gestion._id, estado: "UTILIZADO", cuotaId: { $exists: true } }).select("cuotaId sexoCupo").lean(),
   ]);
-  const cuotasReservadas = await Cuota.find({ _id: { $in: tokensUtilizados.map((t) => t.cuotaId) }, montoPagado: 0, $or: [{ fechaVencimiento: { $gt: new Date() } }, { fechaVencimiento: null }], fechaEliminado: null }).select("_id").lean();
+  const cuotasReservadas = await Cuota.find({ _id: { $in: tokensUtilizados.map((t) => t.cuotaId) }, montoPagado: 0, cupoLiberado: { $ne: true }, $or: [{ fechaVencimiento: { $gt: new Date() } }, { fechaVencimiento: null }], fechaEliminado: null }).select("_id").lean();
   const idsReservados = new Set(cuotasReservadas.map((c) => String(c._id)));
   const reservasGenero = (sexo: string) => tokensUtilizados.filter((t) => t.sexoCupo === sexo && idsReservados.has(String(t.cuotaId))).length;
   const usados = (sexo: string) => fraternos.filter((f: any) => String(f.usuarioId?.sexo).toUpperCase() === sexo).length;
@@ -100,7 +100,7 @@ export async function consumirTokenRegistro(entrada: unknown, perfil: any, sessi
   const preregistro = (await Preregistro.create([{ usuarioId: perfil._id, gestionId: token.gestionId, numeroPreRegistro: `TOK-${token.codigo}`, estado: "APROBADO", aceptoReglamento: true, aprobado: true, fechaAprobacion: new Date(), usuarioAprobador: token.generadoPor, usuarioCreador: token.generadoPor }], { session }))[0];
   const plazoPagoHoras = token.plazoPagoHoras || configuracion.plazoPrimeraCuotaHoras || 72; const primeraCuota = configuracion.primeraCuota || 300;
   const montoTotal = esInterno ? (configuracion.tarifaInterno || 770) : (configuracion.tarifaExterno || 850);
-  const cuota = (await Cuota.create([{ preregistroId: preregistro._id, montoTotal, primeraCuotaMonto: primeraCuota, montoPagado: 0, saldo: montoTotal, observacion: `Al dar de alta la cuenta comenzará el plazo de ${plazoPagoHoras} horas para pagar Bs ${primeraCuota} o el total`, usuarioCreador: token.generadoPor }], { session }))[0];
+  const cuota = (await Cuota.create([{ preregistroId: preregistro._id, tipoOrigenTarifa: esInterno ? "INTERNO" : "EXTERNO", tarifaAplicada: montoTotal, montoTotal, primeraCuotaMonto: primeraCuota, montoPagado: 0, saldo: montoTotal, cupoLiberado: false, observacion: `Al dar de alta la cuenta comenzará el plazo de ${plazoPagoHoras} horas para pagar la primera cuota`, usuarioCreador: token.generadoPor }], { session }))[0];
   token.estado = "UTILIZADO"; token.utilizadoPor = perfil._id; token.fechaUtilizado = new Date(); token.preregistroId = preregistro._id; token.cuotaId = cuota._id; token.fraternoId = undefined; await token.save({ session });
   return { fechaVencimiento: undefined };
 }

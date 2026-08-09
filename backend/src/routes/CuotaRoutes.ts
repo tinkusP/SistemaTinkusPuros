@@ -3,7 +3,7 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, registrarPago, revisarPago, solicitarQrPago } from "../controllers/CuotaController";
+import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarQrPago } from "../controllers/CuotaController";
 import type { NextFunction, Request, Response } from "express";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 const router = Router(); const id = param("id").isMongoId();
@@ -42,7 +42,8 @@ router.get("/mia", authenticate, obtenerMiCuota);
  */
 router.get("/:id", authenticate, id, handleInputErrors, detalleCuota);
 router.patch("/:id/plan", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, elegirPlanCuotas);
-router.post("/:id/solicitar-qr", authenticate, id, body("tipoQr").isIn(["TOTAL", "PRIMERA", "SEGUNDA"]), handleInputErrors, solicitarQrPago);
+router.post("/:id/solicitar-qr", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), body("numeroPago").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, solicitarQrPago);
+router.patch("/:id/prorroga-primera-cuota", authenticate, soloAdministracion, id, body("horas").isInt({ min: 1, max: 8760 }).toInt(), body("motivo").trim().isLength({ min: 3, max: 500 }), handleInputErrors, prorrogarPrimeraCuota);
 /** @openapi
  * /api/cuotas/{id}/pagos:
  *   post:
