@@ -64,6 +64,7 @@ import morgan from "morgan";
 import path from "path";
 import fs from "node:fs";
 import compression from "compression";
+import multer from "multer";
 
 import {
   corsConfig,
@@ -202,6 +203,20 @@ app.use("/api/reportes", reporteRoutes);
 app.use("/api/tokens-registro", tokenRegistroRoutes);
 app.use("/api/indumentaria", indumentariaRoutes);
 app.use("/api/guias", guiaRoutes);
+
+// Multer falla antes de entrar al controlador. Convertimos esos fallos en
+// respuestas claras para que el formulario indique qué archivo debe cambiar.
+app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Uno de los archivos supera 30 MB. Reduce su tamaño o selecciona otro archivo." });
+    if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") return res.status(400).json({ error: "Se enviaron demasiados archivos o un campo de archivo no permitido." });
+    return res.status(400).json({ error: `No se pudo recibir el archivo: ${error.message}` });
+  }
+  if (error instanceof Error && /foto|imagen|archivo|carnet|universitario|pdf/i.test(error.message)) {
+    return res.status(400).json({ error: error.message });
+  }
+  next(error);
+});
 
 // En modo local de producción Express sirve el frontend compilado. Así todos
 // los celulares utilizan un solo puerto y no dependen del servidor de Vite.

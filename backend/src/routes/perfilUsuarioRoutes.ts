@@ -813,7 +813,7 @@ router.post(
     },
   ]),
   normalizarRelaciones,
-  body("tokenRegistro").trim().notEmpty().withMessage("El token de registro es obligatorio"),
+  body("tokenRegistro").optional({ checkFalsy: true }).trim(),
   validarRelacionObjectId(
     ["roles", "rolId", "rol"],
     "rol",

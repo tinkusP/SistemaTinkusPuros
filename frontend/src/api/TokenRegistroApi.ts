@@ -3,6 +3,7 @@ export type TokenRegistro={_id:string;codigo:string;sexoCupo?:"HOMBRE"|"MUJER";t
 export type ConfigTokens={gestion:any;configuracion:any;cupos:{HOMBRE:{usados:number;reservados:number;disponibles:number;maximo:number};MUJER:{usados:number;reservados:number;disponibles:number;maximo:number};TOTAL:{usados:number;reservados:number;disponibles:number;maximo:number}}};
 const fallo=(e:unknown,m:string):never=>{throw new Error(obtenerMensajeError(e,m))};
 export async function validarToken(codigo:string){try{return(await api.post("/tokens-registro/validar",{codigo})).data as{valido:boolean;token:any}}catch(e){return fallo(e,"Token no válido")}}
+export async function obtenerConfiguracionPublicaToken(){try{return(await api.get("/tokens-registro/configuracion-publica")).data as{gestionId:string;requerirTokenRegistro:boolean}}catch(e){return fallo(e,"No se pudo consultar el acceso al registro")}}
 export async function obtenerTokens(){try{return(await api.get("/tokens-registro")).data.tokens as TokenRegistro[]}catch(e){return fallo(e,"No se pudieron cargar los tokens")}}
 export async function obtenerConfiguracionTokens(){try{return(await api.get("/tokens-registro/configuracion")).data as ConfigTokens}catch(e){return fallo(e,"No se pudo cargar la configuración")}}
 export async function guardarConfiguracionTokens(datos:any){try{return(await api.put("/tokens-registro/configuracion",datos)).data}catch(e){return fallo(e,"No se pudo guardar la configuración")}}

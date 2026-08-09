@@ -1488,7 +1488,8 @@ import { consumirTokenRegistro } from "./TokenRegistroController";
 import TokenRegistro from "../models/TokenRegistro";
 import Cuota from "../models/Cuota";
 import Rol from "../models/Rol";
-import { subirArchivoProcesado } from "../services/AlmacenamientoService";
+import ConfiguracionPago from "../models/ConfiguracionPago";
+import { eliminarArchivoAlmacenado, subirArchivoProcesado } from "../services/AlmacenamientoService";
 
 class SolicitudInvalidaError extends Error {}
 
@@ -1887,10 +1888,8 @@ export class PerfilUsuarioController {
 
       // Quien se registra con invitación todavía es postulante. El rol
       // FRATERNO se añade únicamente al verificar su primer pago.
-      if (req.body.tokenRegistro) {
-        const rolPostulante = await Rol.findOne({ codigo: "POSTULANTE", estado: true, fechaEliminado: null }).select("_id");
-        if (rolPostulante) roles = [rolPostulante._id];
-      }
+      const rolPostulante = await Rol.findOne({ codigo: "POSTULANTE", estado: true, fechaEliminado: null }).select("_id");
+      if (rolPostulante) roles = [rolPostulante._id];
 
       const gestion =
         normalizarObjectIds(
@@ -1899,6 +1898,12 @@ export class PerfilUsuarioController {
           ),
           "ID de gestión",
         );
+
+      const configuracionRegistro = await ConfiguracionPago.findOne({ gestionId: gestion[0], activo: true }).select("requerirTokenRegistro");
+      const requiereToken = configuracionRegistro?.requerirTokenRegistro !== false;
+      if (requiereToken && !String(req.body.tokenRegistro ?? "").trim()) {
+        throw new SolicitudInvalidaError("El token de registro es obligatorio");
+      }
 
       const password =
         await bcrypt.hash(
@@ -2060,11 +2065,9 @@ export class PerfilUsuarioController {
         session,
       });
 
-      const resultadoToken = await consumirTokenRegistro(
-        req.body.tokenRegistro,
-        perfil,
-        session,
-      );
+      const resultadoToken = req.body.tokenRegistro
+        ? await consumirTokenRegistro(req.body.tokenRegistro, perfil, session)
+        : null;
 
       /*
        * Todos los archivos definitivos del usuario se organizan
@@ -2371,7 +2374,7 @@ export class PerfilUsuarioController {
           perfilSeguro,
 
         documentos,
-        fechaLimitePago: resultadoToken.fechaVencimiento,
+        fechaLimitePago: resultadoToken?.fechaVencimiento,
       });
     } catch (error) {
       if (
@@ -2785,7 +2788,7 @@ static getPerfilUsuarioById = async (
       validarIdParametro(req.params.id);
 
       const perfilAnterior = await PerfilUsuario.findById(req.params.id).select(
-        "estado ci apellidoPaterno apellidoMaterno",
+        "estado ci fotoPerfil apellidoPaterno apellidoMaterno",
       );
       if (!perfilAnterior) return res.status(404).json({ error: "Perfil no encontrado" });
 
@@ -2955,6 +2958,10 @@ static getPerfilUsuarioById = async (
         return res.status(404).json({
           error: "Perfil usuario no encontrado",
         });
+      }
+
+      if (rutaFotoNueva && perfilAnterior.fotoPerfil && perfilAnterior.fotoPerfil !== rutaFotoNueva) {
+        await eliminarArchivoAlmacenado(perfilAnterior.fotoPerfil);
       }
 
       /*

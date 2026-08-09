@@ -3,7 +3,7 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { crearCuota, detalleCuota, eliminarPago, listarCuotas, obtenerMiCuota, registrarPago, revisarPago } from "../controllers/CuotaController";
+import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, registrarPago, revisarPago, solicitarQrPago } from "../controllers/CuotaController";
 import type { NextFunction, Request, Response } from "express";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 const router = Router(); const id = param("id").isMongoId();
@@ -41,6 +41,8 @@ router.get("/mia", authenticate, obtenerMiCuota);
  *   get: { tags: [Cuotas], summary: Ver cuota y pagos parciales, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { 200: { description: Detalle } } }
  */
 router.get("/:id", authenticate, id, handleInputErrors, detalleCuota);
+router.patch("/:id/plan", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, elegirPlanCuotas);
+router.post("/:id/solicitar-qr", authenticate, id, body("tipoQr").isIn(["TOTAL", "PRIMERA", "SEGUNDA"]), handleInputErrors, solicitarQrPago);
 /** @openapi
  * /api/cuotas/{id}/pagos:
  *   post:
@@ -50,7 +52,7 @@ router.get("/:id", authenticate, id, handleInputErrors, detalleCuota);
  *     requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [monto, nombrePagador, fechaPago, baucher], properties: { monto: { type: number }, nombrePagador: { type: string }, fechaPago: { type: string, format: date }, baucher: { type: string, format: binary } } } } } }
  *     responses: { 201: { description: Pendiente de revisión } }
  */
-router.post("/:id/pagos", authenticate, id, uploadBaucher.single("baucher"), convertirBaucherAWebp, body("monto").isFloat({ min: 0.01 }).toFloat(), body("metodoPago").isIn(["EFECTIVO", "QR", "MIXTO"]), body("montoEfectivo").optional().isFloat({ min: 0 }).toFloat(), body("montoQr").optional().isFloat({ min: 0 }).toFloat(), body("nombrePagador").trim().notEmpty(), body("fechaPago").isISO8601(), handleInputErrors, registrarPago);
+router.post("/:id/pagos", authenticate, id, uploadBaucher.single("baucher"), convertirBaucherAWebp, body("monto").isFloat({ min: 0.01 }).toFloat(), body("metodoPago").equals("QR").withMessage("Los pagos de cuotas solo se registran mediante QR o depósito"), body("nombrePagador").trim().notEmpty().withMessage("Debe indicar a nombre de quién está el comprobante"), body("fechaPago").isISO8601(), handleInputErrors, registrarPago);
 router.patch("/:id/pagos/:pagoId/revision", authenticate, soloAdministracion, id, param("pagoId").isMongoId(), uploadBaucher.single("respaldoAdmin"), convertirBaucherAWebp, body("estadoRevision").isIn(["PENDIENTE", "VERIFICADO", "OBSERVADO", "RECHAZADO"]), body("observacionRevision").optional().isLength({ max: 1000 }), handleInputErrors, revisarPago);
 router.delete("/:id/pagos/:pagoId", authenticate, soloAdministracion, id, param("pagoId").isMongoId(), handleInputErrors, eliminarPago);
 export default router;

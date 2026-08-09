@@ -238,6 +238,7 @@
 // }
 
 import {
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -273,8 +274,9 @@ import PerfilUsuarioForm, {
   construirPayloadRegistro,
   type PerfilUsuarioFormData,
 } from "@/components/perfilUsuario/PerfilUsuarioForm";
-import { limpiarBorradorRegistro } from "@/utils/borradorRegistro";
-import { validarToken } from "@/api/TokenRegistroApi";
+import EscanerTokenRegistro from "@/components/perfilUsuario/EscanerTokenRegistro";
+import { guardarTokenBorrador, leerTokenBorrador, limpiarBorradorRegistro, limpiarTokenBorrador } from "@/utils/borradorRegistro";
+import { obtenerConfiguracionPublicaToken, validarToken } from "@/api/TokenRegistroApi";
 
 /* =========================================
    ROL PREDETERMINADO DEL REGISTRO PÚBLICO
@@ -295,7 +297,31 @@ export default function CrearCuenta() {
   const [errorRegistro, setErrorRegistro] = useState<string | null>(null);
   const [codigoToken, setCodigoToken] = useState("");
   const [tokenValidado, setTokenValidado] = useState<any>(null);
-  const validarMutation = useMutation({mutationFn:validarToken,onSuccess:(r)=>setTokenValidado(r.token),onError:(e)=>setErrorRegistro(e instanceof Error?e.message:"Token no válido")});
+  const [restaurandoToken, setRestaurandoToken] = useState(true);
+  const accesoQuery = useQuery({ queryKey: ["configuracion-publica-token"], queryFn: obtenerConfiguracionPublicaToken, retry: false });
+  const requiereToken = accesoQuery.data?.requerirTokenRegistro !== false;
+  const validarMutation = useMutation({mutationFn:validarToken,onSuccess:(r)=>{setTokenValidado(r.token);guardarTokenBorrador(r.token);toast.success(`Token ${r.token.codigo} válido`)},onError:(e)=>{limpiarTokenBorrador();setTokenValidado(null);setErrorRegistro(e instanceof Error?e.message:"Token no válido")}});
+
+  useEffect(() => {
+    const guardado = leerTokenBorrador<{ codigo?: string; fechaExpiracion?: string }>();
+    if (!guardado?.codigo || (guardado.fechaExpiracion && new Date(guardado.fechaExpiracion) <= new Date())) {
+      limpiarTokenBorrador();
+      setRestaurandoToken(false);
+      return;
+    }
+    setCodigoToken(guardado.codigo);
+    validarToken(guardado.codigo)
+      .then((respuesta) => { setTokenValidado(respuesta.token); guardarTokenBorrador(respuesta.token); })
+      .catch(() => limpiarTokenBorrador())
+      .finally(() => setRestaurandoToken(false));
+  }, []);
+
+  useEffect(() => {
+    if (accesoQuery.data?.requerirTokenRegistro === false && !tokenValidado) {
+      limpiarTokenBorrador();
+      setTokenValidado({ codigo: "", gestion: { _id: accesoQuery.data.gestionId }, accesoSinToken: true });
+    }
+  }, [accesoQuery.data, tokenValidado]);
 
   /* =========================================
      OBTENER GESTIÓN ACTIVA
@@ -388,10 +414,8 @@ export default function CrearCuenta() {
         ],
 
         gestion:
-          gestionActiva?._id
-            ? [
-                gestionActiva._id,
-              ]
+          (tokenValidado?.gestion?._id || gestionActiva?._id)
+            ? [tokenValidado?.gestion?._id || gestionActiva._id]
             : [],
       };
 
@@ -410,11 +434,19 @@ export default function CrearCuenta() {
       }
     };
 
+  const cambiarToken = () => {
+    limpiarTokenBorrador();
+    setCodigoToken("");
+    setTokenValidado(null);
+    setErrorRegistro(null);
+  };
+
   /* =========================================
      ESTADOS DE CARGA
   ========================================= */
 
-  if (!tokenValidado) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><section className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl"><div className="text-center text-5xl">🔐</div><h1 className="mt-4 text-center text-2xl font-black text-[#841534]">Token de invitación</h1><p className="mt-2 text-center text-sm text-slate-600">Ingresa el token único entregado por un administrador para habilitar la creación de tu cuenta.</p><form className="mt-6 space-y-4" onSubmit={async e=>{e.preventDefault();setErrorRegistro(null);try{await validarMutation.mutateAsync(codigoToken)}catch{}}}><input autoFocus value={codigoToken} onChange={e=>setCodigoToken(e.target.value.toUpperCase())} placeholder="FRA-XXXXXXXX" className="w-full rounded-xl border px-4 py-3 text-center font-mono text-lg uppercase tracking-widest"/><button disabled={validarMutation.isPending||!codigoToken.trim()} className="w-full rounded-xl bg-[#841534] px-4 py-3 font-bold text-white disabled:opacity-50">{validarMutation.isPending?"Validando...":"Continuar al registro"}</button></form><Link to="/auth/login" className="mt-5 block text-center text-sm font-bold text-[#841534]">Volver al inicio de sesión</Link>{errorRegistro&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-center text-sm text-red-700">{errorRegistro}</div>}</section></main>;
+  if (restaurandoToken || accesoQuery.isLoading) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><p className="rounded-2xl bg-white p-7 font-bold text-[#841534] shadow">Recuperando tu registro...</p></main>;
+  if (!tokenValidado) return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><section className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl"><div className="text-center text-5xl">🔐</div><h1 className="mt-4 text-center text-2xl font-black text-[#841534]">Token de invitación</h1><p className="mt-2 text-center text-sm text-slate-600">Escribe el código o escanea el QR entregado por administración. Una vez validado quedará guardado en este dispositivo mientras completas el registro.</p><form className="mt-6 space-y-4" onSubmit={async e=>{e.preventDefault();setErrorRegistro(null);try{await validarMutation.mutateAsync(codigoToken)}catch{}}}><input autoFocus value={codigoToken} onChange={e=>setCodigoToken(e.target.value.toUpperCase())} placeholder="FRA-XXXXXXXX" className="w-full rounded-xl border px-4 py-3 text-center font-mono text-lg uppercase tracking-widest"/><button disabled={validarMutation.isPending||!codigoToken.trim()} className="w-full rounded-xl bg-[#841534] px-4 py-3 font-bold text-white disabled:opacity-50">{validarMutation.isPending?"Validando...":"Continuar al registro"}</button></form><div className="my-5 flex items-center gap-3 text-xs font-bold uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200"/>o escanea<span className="h-px flex-1 bg-slate-200"/></div><EscanerTokenRegistro alLeer={async token=>{setCodigoToken(token);setErrorRegistro(null);try{await validarMutation.mutateAsync(token)}catch{}}}/><Link to="/auth/login" className="mt-5 block text-center text-sm font-bold text-[#841534]">Volver al inicio de sesión</Link>{errorRegistro&&<div className="mt-4 rounded-xl bg-red-50 p-3 text-center text-sm text-red-700">{errorRegistro}</div>}</section></main>;
 
   if (
     gestionQuery.isLoading
@@ -484,6 +516,23 @@ export default function CrearCuenta() {
             </div>
           </div>
         </header>
+
+        {requiereToken && tokenValidado?.codigo && (
+          <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-emerald-700">Token de invitación activo</p>
+                <p className="mt-1 font-mono text-2xl font-black text-[#841534]">{tokenValidado.codigo}</p>
+                {tokenValidado.fechaExpiracion && <p className="mt-2 text-sm font-semibold text-slate-700">Válido hasta: {new Date(tokenValidado.fechaExpiracion).toLocaleString("es-BO")}</p>}
+                <p className="mt-1 text-sm text-emerald-800">Este código se utilizará al enviar tu solicitud y no podrá volver a usarse.</p>
+              </div>
+              <div className="grid shrink-0 gap-2">
+                <button type="button" onClick={() => validarMutation.mutate(tokenValidado.codigo)} disabled={validarMutation.isPending} className="rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:opacity-50">{validarMutation.isPending ? "Verificando..." : "Verificar token ahora"}</button>
+                <button type="button" onClick={cambiarToken} className="rounded-xl border-2 border-[#841534] bg-white px-5 py-3 font-bold text-[#841534]">Probar o escanear otro token</button>
+              </div>
+            </div>
+          </section>
+        )}
 
         <PerfilUsuarioForm
           modo="REGISTRO_PUBLICO"

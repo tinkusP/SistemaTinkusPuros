@@ -240,7 +240,14 @@ type PerfilUsuarioFormProps = {
 };
 
 const MAX_PDF_BYTES =
-  15 * 1024 * 1024;
+  30 * 1024 * 1024;
+
+const TIPOS_IMAGEN_ADMITIDOS = new Set([
+  "image/jpeg", "image/jfif", "image/png", "image/webp", "image/avif", "image/heic", "image/heif", "image/tiff", "image/gif", "image/bmp",
+]);
+const EXTENSIONES_IMAGEN_ADMITIDAS = new Set([
+  "jpg", "jpeg", "jfif", "png", "webp", "avif", "heic", "heif", "tif", "tiff", "gif", "bmp",
+]);
 
 const esArchivoPdf = (archivo?: File | null): boolean => Boolean(
   archivo && (archivo.type === "application/pdf" || archivo.name.toLowerCase().endsWith(".pdf")),
@@ -457,26 +464,26 @@ export default function PerfilUsuarioForm({
       return;
     }
 
+    if (archivoRecibido.size > MAX_PDF_BYTES) {
+      setErrores((actual) => ({ ...actual, fotoPerfil: "La fotografía no puede superar 30 MB" }));
+      return;
+    }
+
     const extension = archivoRecibido.name.split(".").pop()?.toLowerCase();
     const tipoInferido = archivoRecibido.type || (extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "");
     const archivo = archivoRecibido.type
       ? archivoRecibido
       : new File([archivoRecibido], archivoRecibido.name || `foto-camara-${Date.now()}.jpg`, { type: tipoInferido, lastModified: archivoRecibido.lastModified || Date.now() });
 
-    const tiposPermitidos = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
-
     if (
-      !tiposPermitidos.includes(tipoInferido)
+      !TIPOS_IMAGEN_ADMITIDOS.has(tipoInferido) &&
+      !EXTENSIONES_IMAGEN_ADMITIDAS.has(extension ?? "")
     ) {
       setErrores(
         (actual) => ({
           ...actual,
           fotoPerfil:
-            "Solo se permiten imágenes JPG, PNG o WebP",
+            "Selecciona una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP",
         }),
       );
 
@@ -543,11 +550,8 @@ export default function PerfilUsuarioForm({
 
       const esDocumentoPermitido =
         esArchivoPdf(archivo) ||
-        [
-          "image/jpeg",
-          "image/png",
-          "image/webp",
-        ].includes(archivo.type) ||
+        TIPOS_IMAGEN_ADMITIDOS.has(archivo.type) ||
+        EXTENSIONES_IMAGEN_ADMITIDAS.has(archivo.name.split(".").pop()?.toLowerCase() ?? "") ||
         archivo.name
           .toLowerCase()
           .endsWith(
@@ -559,7 +563,7 @@ export default function PerfilUsuarioForm({
           (actual) => ({
             ...actual,
             [campo]:
-              "Debe seleccionar un PDF o una imagen JPG, PNG o WebP",
+              "Debe seleccionar un PDF o una imagen compatible (JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP)",
           }),
         );
 
@@ -579,7 +583,7 @@ export default function PerfilUsuarioForm({
           (actual) => ({
             ...actual,
             [campo]:
-              "El PDF no puede superar 15 MB",
+              "Cada archivo no puede superar 30 MB",
           }),
         );
 
@@ -835,8 +839,7 @@ export default function PerfilUsuarioForm({
               {esModoCrear(modo) && <span className="ml-1 text-red-500">*</span>}
             </p>
             <p className="text-sm leading-6 text-slate-500">
-              Formatos permitidos: JPG, PNG y WebP. Utiliza una fotografía clara,
-              de frente, sin gorra ni lentes.
+              Aceptamos formatos comunes de cámara y los convertimos a WebP. Utiliza una fotografía clara, de frente, sin gorra ni lentes.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-3">
@@ -1817,7 +1820,7 @@ function SelectorArchivo({
       }`}>
         <input
           type="file"
-          accept="application/pdf,.pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          accept="application/pdf,.pdf,image/*,.jpg,.jpeg,.jfif,.png,.webp,.avif,.heic,.heif,.tif,.tiff,.gif,.bmp"
           onChange={
             onSeleccionar
           }
