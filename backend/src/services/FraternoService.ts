@@ -19,21 +19,21 @@ export async function promoverAFraternoSiCorresponde(cuotaId: string, usuarioCre
   });
   if (!tienePagoVerificado) return null;
 
-  const existente = await Fraterno.findOne({ preregistroId: cuota.preregistroId });
-  if (existente) return existente;
-
   const preregistro = await Preregistro.findOne({ _id: cuota.preregistroId, fechaEliminado: null });
   if (!preregistro) return null;
 
-  const correlativo = String((await Fraterno.countDocuments({ gestionId: preregistro.gestionId })) + 1).padStart(4, "0");
-  const numeroFraterno = `FRA-${new Date().getFullYear()}-${correlativo}`;
-  const fraterno = await Fraterno.create({
-    preregistroId: preregistro._id,
-    usuarioId: preregistro.usuarioId,
-    gestionId: preregistro.gestionId,
-    numeroFraterno,
-    usuarioCreador,
-  });
+  let fraterno = await Fraterno.findOne({ preregistroId: cuota.preregistroId });
+  if (!fraterno) {
+    const correlativo = String((await Fraterno.countDocuments({ gestionId: preregistro.gestionId })) + 1).padStart(4, "0");
+    const numeroFraterno = `FRA-${new Date().getFullYear()}-${correlativo}`;
+    fraterno = await Fraterno.create({
+      preregistroId: preregistro._id,
+      usuarioId: preregistro.usuarioId,
+      gestionId: preregistro.gestionId,
+      numeroFraterno,
+      usuarioCreador,
+    });
+  }
 
   const rol = await Rol.findOne({ codigo: "FRATERNO", estado: true, fechaEliminado: null }).select("_id");
   const rolPostulante = await Rol.findOne({ codigo: "POSTULANTE", estado: true, fechaEliminado: null }).select("_id");

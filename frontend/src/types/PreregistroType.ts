@@ -43,6 +43,7 @@ export interface Preregistro {
   observacion?: string;
   aprobado: boolean;
   postulanteGuia?: { _id: string; estado: string; habilitado: boolean; puntajeTotal: number } | null;
+  fraterno?: { _id: string; numeroFraterno: string; estado: string; fechaIngreso: string } | null;
   fechaAprobacion?: string;
   fechaRevision?: string;
   fechaCreado: string;

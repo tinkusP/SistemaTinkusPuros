@@ -4,6 +4,9 @@ const schema = new Schema({
   tallaPolera: { type: String, trim: true, uppercase: true, required: true },
   tallaChamarra: { type: String, trim: true, uppercase: true, required: true },
   observacion: { type: String, trim: true, maxlength: 500 },
+  edicionBloqueada: { type: Boolean, default: false },
+  fechaBloqueo: Date,
+  usuarioBloqueo: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
   fechaActualizado: { type: Date, default: Date.now },
   usuarioEditor: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
 }, { versionKey: false, collection: "tallas_fraterno" });

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { listarFraternos } from "@/api/FraternoApi";
-import { cambiarEntrega, crearEntrega, crearPrenda, guardarTalla, obtenerIndumentaria, type Entrega, type Prenda } from "@/api/IndumentariaApi";
+import { cambiarBloqueoTalla, cambiarEntrega, crearEntrega, crearPrenda, guardarTalla, obtenerIndumentaria, type Entrega, type Prenda } from "@/api/IndumentariaApi";
 import type { Fraterno } from "@/types/FraternoType";
 
 type Seccion = "POLERA" | "CHAMARRA" | "INDUMENTARIA";
@@ -94,11 +94,13 @@ export default function IndumentariaView() {
           const entregada = prendaPrincipal ? entregaActual(fraterno._id, prendaPrincipal._id) : undefined;
           const cuota = cuotaFraterno(fraterno);
           const pagoCompleto = Boolean(cuota && cuota.saldo <= 0 && cuota.estado === "PAGADA");
+          const tallaRegistrada = buscarTalla(fraterno._id);
+          const edicionBloqueada = tallaRegistrada?.edicionBloqueada === true;
           return <tr key={fraterno._id} className="border-b border-slate-100 align-top hover:bg-slate-50/70">
             <td className="p-4"><p className="font-black text-slate-800">{nombreFraterno(fraterno)}</p><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${fraterno.estado === "ACTIVO" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{fraterno.estado}</span><span className={`ml-1 mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${pagoCompleto ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{pagoCompleto ? "PAGO COMPLETO" : `SALDO Bs ${cuota?.saldo.toFixed(2) ?? "—"}`}</span></td>
             <td className="p-4 text-sm"><p>{usuario?.ci ?? "Sin CI"}</p><p className="text-slate-500">{fraterno.numeroFraterno}</p></td>
             {seccion !== "INDUMENTARIA" && <>
-              <td className="p-4"><input value={tallaCampo(fraterno._id, tipo)} onChange={(evento) => actualizarTalla(fraterno._id, tipo, evento.target.value)} placeholder="Sin talla" className="w-28 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534]" /><button type="button" onClick={() => guardarTallasFraterno(fraterno._id)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534]">Guardar talla</button></td>
+              <td className="p-4"><input value={tallaCampo(fraterno._id, tipo)==="SIN DEFINIR"?"":tallaCampo(fraterno._id, tipo)} onChange={(evento) => actualizarTalla(fraterno._id, tipo, evento.target.value)} placeholder="Sin talla" className="w-28 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534]" /><button type="button" onClick={() => guardarTallasFraterno(fraterno._id)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534]">Guardar talla</button><button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraterno._id, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button></td>
               <td className="p-4"><EstadoEntrega entrega={entregada} /></td>
               <td className="p-4 text-right"><button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && (!tallaCampo(fraterno._id, tipo) || !pagoCompleto))} onClick={() => prendaPrincipal && alternarEntrega(fraterno._id, prendaPrincipal, tallaCampo(fraterno._id, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : pagoCompleto ? "Marcar entregado" : "Pago pendiente"}</button></td>
             </>}

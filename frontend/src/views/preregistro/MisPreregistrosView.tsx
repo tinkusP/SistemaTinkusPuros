@@ -37,15 +37,17 @@ export default function MisPreregistrosView() {
             {data?.preregistros.map((p) => {
               const gestion = typeof p.gestionId === "object" ? p.gestionId : null;
               const observado = p.estado === "OBSERVADO" || p.estado === "RECHAZADO";
+              const esFraterno = Boolean(p.fraterno && p.fraterno.estado === "ACTIVO");
               return (
                 <article key={p._id} className="rounded-2xl border border-[#d3c9bb] border-t-4 border-t-[#74122A] bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div><p className="text-xs font-bold uppercase tracking-wider text-[#8F5F2A]">{p.numeroPreRegistro}</p><h2 className="mt-1 text-xl font-black">{gestion?.nombre ?? "Gestión"}</h2></div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${p.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : observado ? "bg-amber-100 text-amber-900" : "bg-[#74122A]/10 text-[#74122A]"}`}>{p.estado.replace("_", " ")}</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${esFraterno || p.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : observado ? "bg-amber-100 text-amber-900" : "bg-[#74122A]/10 text-[#74122A]"}`}>{esFraterno ? "FRATERNO" : p.estado.replace("_", " ")}</span>
                   </div>
-                  <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{mensajes[p.estado]}</p>
+                  <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{esFraterno ? `Ya eres fraterno activo con número ${p.fraterno?.numeroFraterno}. Puedes registrar tus tallas y continuar con tus cuotas.` : mensajes[p.estado]}</p>
                   <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-xs text-slate-500">Calificaciones</dt><dd className="font-bold">{p.promedioExamen ?? "Aún sin registrar"}</dd></div><div><dt className="text-xs text-slate-500">Fecha de registro</dt><dd className="font-bold">{new Date(p.fechaRegistro).toLocaleDateString("es-BO")}</dd></div></dl>
                   {p.observacion && <div className={`mt-4 rounded-xl border p-4 text-sm ${observado ? "border-amber-300 bg-amber-50 text-amber-950" : "border-blue-200 bg-blue-50 text-blue-900"}`}><strong className="block mb-1">Observación de administración</strong>{p.observacion}</div>}
+                  {esFraterno && <Link to="/mis-tallas" className="mt-4 block rounded-xl bg-[#841534] px-4 py-3 text-center text-sm font-bold text-white">Seleccionar tallas de polera y chamarra</Link>}
                 </article>
               );
             })}

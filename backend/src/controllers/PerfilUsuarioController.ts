@@ -1488,6 +1488,7 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import { consumirTokenRegistro } from "./TokenRegistroController";
 import TokenRegistro from "../models/TokenRegistro";
 import Cuota from "../models/Cuota";
+import Fraterno from "../models/Fraterno";
 import Rol from "../models/Rol";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import { eliminarArchivoAlmacenado, subirArchivoProcesado } from "../services/AlmacenamientoService";
@@ -2530,6 +2531,25 @@ export class PerfilUsuarioController {
       perfil.ultimoLogin = ahora;
 
       await perfil.save();
+
+      const fraternoActivo = await Fraterno.exists({
+        usuarioId: perfil._id,
+        estado: "ACTIVO",
+        fechaEliminado: null,
+      });
+      if (fraternoActivo) {
+        const [rolFraterno, rolPostulante] = await Promise.all([
+          Rol.findOne({ codigo: "FRATERNO", estado: true, fechaEliminado: null }).select("_id"),
+          Rol.findOne({ codigo: "POSTULANTE", estado: true, fechaEliminado: null }).select("_id"),
+        ]);
+        if (rolFraterno) {
+          await PerfilUsuario.updateOne({ _id: perfil._id }, { $addToSet: { roles: rolFraterno._id } });
+          if (rolPostulante) {
+            await PerfilUsuario.updateOne({ _id: perfil._id }, { $pull: { roles: rolPostulante._id } });
+          }
+          perfil.depopulate("roles");
+        }
+      }
       await perfil.populate(populatePerfil);
 
       const tokenjwt = generateJWT({

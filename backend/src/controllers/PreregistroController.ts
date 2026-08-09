@@ -4,6 +4,7 @@ import Gestion from "../models/Gestion";
 import PerfilUsuario from "../models/PerfilUsuario";
 import Preregistro, { type EstadoPreregistro } from "../models/Preregistro";
 import PostulanteGuia from "../models/PostulanteGuia";
+import Fraterno from "../models/Fraterno";
 
 const populate = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email sexo estado fotoPerfil fechaCreado" },
@@ -146,9 +147,18 @@ export const obtenerMisPreregistros = async (req: Request, res: Response) => {
         .sort({ fechaRegistro: -1 }),
       Preregistro.countDocuments(filtro),
     ]);
+    const fraternos = await Fraterno.find({
+      preregistroId: { $in: preregistros.map((item) => item._id) },
+      fechaEliminado: null,
+    }).select("preregistroId numeroFraterno estado fechaIngreso").lean();
+    const fraternoPorPreregistro = new Map(fraternos.map((item) => [String(item.preregistroId), item]));
+    const preregistrosConCalidad = preregistros.map((item) => ({
+      ...item.toObject(),
+      fraterno: fraternoPorPreregistro.get(String(item._id)) ?? null,
+    }));
 
     return res.json({
-      preregistros,
+      preregistros: preregistrosConCalidad,
       paginacion: {
         pagina: 1,
         limite: Math.max(total, 1),
