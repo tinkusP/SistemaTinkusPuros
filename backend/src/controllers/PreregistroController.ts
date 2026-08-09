@@ -138,7 +138,6 @@ export const obtenerMisPreregistros = async (req: Request, res: Response) => {
 
     const filtro = {
       usuarioId,
-      fechaEliminado: null,
     };
 
     const [preregistros, total] = await Promise.all([

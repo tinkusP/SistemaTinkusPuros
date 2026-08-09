@@ -1477,6 +1477,7 @@ import crypto from "node:crypto";
 
 import PerfilUsuario from "../models/PerfilUsuario";
 import DocumentoUsuario from "../models/DocumentoUsuario";
+import Preregistro from "../models/Preregistro";
 import {
   comprimirPdfOptimizado,
   verificarArchivoPdf,
@@ -1567,7 +1568,11 @@ type ArchivoRegistro = {
 };
 
 const esArchivoPdfRegistro = (archivo?: ArchivoRegistro): boolean => Boolean(
-  archivo && (archivo.mimetype === "application/pdf" || path.extname(archivo.filename).toLowerCase() === ".pdf"),
+  archivo && (
+    archivo.mimetype === "application/pdf" ||
+    path.extname(archivo.originalname).toLowerCase() === ".pdf" ||
+    path.extname(archivo.filename).toLowerCase() === ".pdf"
+  ),
 );
 
 type ArchivosRegistroCuenta = {
@@ -2534,6 +2539,14 @@ export class PerfilUsuarioController {
 
       const { password: _password, ...usuarioSeguro } = perfil.toObject();
 
+      // Una cuenta ACTIVA puede ingresar con cualquier estado normal del
+      // preregistro. La decisión se envía para informar al postulante.
+      const preregistroReciente = await Preregistro.findOne({
+        usuarioId: perfil._id,
+      })
+        .select("numeroPreRegistro estado observacion")
+        .sort({ fechaRegistro: -1, fechaCreado: -1 });
+
       await registrarAuditoria(req, {
         usuarioId: perfil._id,
         accion: "INICIAR_SESION",
@@ -2547,6 +2560,13 @@ export class PerfilUsuarioController {
         message: "Login correcto",
         tokenjwt,
         usuario: usuarioSeguro,
+        avisoPreregistro: preregistroReciente
+          ? {
+            numeroPreRegistro: preregistroReciente.numeroPreRegistro,
+            estado: preregistroReciente.estado,
+            observacion: preregistroReciente.observacion ?? null,
+          }
+          : null,
       });
     } catch (error) {
       return responderError(

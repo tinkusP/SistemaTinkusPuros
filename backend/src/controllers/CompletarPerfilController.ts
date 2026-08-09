@@ -117,6 +117,16 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
       if (fotoAnterior && fotoAnterior !== nuevaRuta) await eliminarArchivoPublico(fotoAnterior);
     }
     await guardarDocumento(files.carnetIdentidadPdf?.[0], "CI", "CARNET_IDENTIDAD");
+    if (ci && esPdf(ci) && !reverso) {
+      const reversoAnterior = await DocumentoUsuario.findOneAndUpdate(
+        { perfilUsuario: perfil._id, tipoDocumento: "CARNET_IDENTIDAD_REVERSO", fechaEliminado: null },
+        { estado: "ELIMINADO", fechaEliminado: new Date(), usuarioEliminador: perfil._id },
+        { new: true },
+      );
+      if (reversoAnterior?.ruta) {
+        await eliminarArchivoPublico(reversoAnterior.ruta);
+      }
+    }
     await guardarDocumento(files.carnetIdentidadReverso?.[0], "CI_REVERSO", "CARNET_IDENTIDAD_REVERSO");
     await guardarDocumento(files.registroUniversitarioPdf?.[0], "RU", "REGISTRO_UNIVERSITARIO");
     autorizacion.estado = "USADA"; autorizacion.fechaUso = new Date(); await autorizacion.save();

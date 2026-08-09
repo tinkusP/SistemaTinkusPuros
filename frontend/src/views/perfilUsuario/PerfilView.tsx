@@ -20,12 +20,13 @@ export default function PerfilView() {
   } = useAuth();
   const [errorImagen, setErrorImagen] =
     useState(false);
+  const [modalCambiosGuardados, setModalCambiosGuardados] = useState(false);
   const [fotoNueva,setFotoNueva]=useState<File|null>(null); const [carnetFrente,setCarnetFrente]=useState<File|null>(null); const [carnetReverso,setCarnetReverso]=useState<File|null>(null); const [ruNuevo,setRuNuevo]=useState<File|null>(null); const queryClient=useQueryClient();
   const [datosEditables,setDatosEditables]=useState({nombres:"",apellidoPaterno:"",apellidoMaterno:"",telefono:"",ci:"",fechaNacimiento:"",sexo:""});
   useEffect(()=>{if(perfil)setDatosEditables({nombres:perfil.nombres??"",apellidoPaterno:perfil.apellidoPaterno??"",apellidoMaterno:perfil.apellidoMaterno??"",telefono:perfil.telefono??"",ci:perfil.ci??"",fechaNacimiento:perfil.fechaNacimiento?String(perfil.fechaNacimiento).slice(0,10):"",sexo:perfil.sexo??""});},[perfil]);
   const autorizacionQuery=useQuery({queryKey:["mi-autorizacion-edicion"],queryFn:async()=> (await api.get("/perfilusuario/autorizacion-edicion/mia")).data});
   const indumentariaQuery=useQuery({queryKey:["mi-indumentaria"],queryFn:obtenerMiIndumentaria});
-  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
+  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setModalCambiosGuardados(true);setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
 
   const backendUrl = String(
   import.meta.env.VITE_API_URL || "",
@@ -433,7 +434,16 @@ export default function PerfilView() {
             />
           </div>
         </section>
+
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="w-full rounded-2xl border border-[#B7A7A0] bg-[#fffdf8] px-5 py-3.5 font-bold text-[#4d4145] shadow-sm transition hover:border-[#74122A] hover:text-[#74122A] dark:bg-[#262022] dark:text-[#F6F0E3]"
+        >
+          ← Volver
+        </button>
       </div>
+      {modalCambiosGuardados ? <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-cambios-guardados"><section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-2xl"><div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-3xl text-emerald-700">✓</div><h2 id="titulo-cambios-guardados" className="mt-4 text-2xl font-black text-[#841534]">Cambios realizados</h2><p className="mt-3 leading-6 text-slate-600">Tus datos y documentos nuevos se guardaron correctamente. Los documentos enviados quedaron pendientes de revisión administrativa.</p><button type="button" autoFocus onClick={() => setModalCambiosGuardados(false)} className="mt-6 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white">Entendido</button></section></div> : null}
     </div>
   );
 }

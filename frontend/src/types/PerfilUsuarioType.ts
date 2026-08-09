@@ -756,6 +756,11 @@ export const LoginResponseSchema = z
     message: z.string(),
     tokenjwt: z.string(),
     usuario: PerfilUsuarioSchema,
+    avisoPreregistro: z.object({
+      numeroPreRegistro: z.string(),
+      estado: z.enum(["PENDIENTE", "OBSERVADO", "APROBADO", "RECHAZADO", "LISTA_ESPERA", "CANCELADO"]),
+      observacion: z.string().nullable().optional(),
+    }).nullable().optional(),
   })
   .passthrough();
 

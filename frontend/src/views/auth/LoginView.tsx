@@ -80,6 +80,7 @@ export default function LoginView() {
   ] = useState("");
 
   const [modalRevision, setModalRevision] = useState<{ titulo: string; mensaje: string } | null>(null);
+  const [modalDecision, setModalDecision] = useState<{ estado: "RECHAZADO" | "CANCELADO"; numero: string; motivo: string } | null>(null);
   const [cuentaNoExiste, setCuentaNoExiste] = useState(false);
 
   const [
@@ -191,6 +192,16 @@ export default function LoginView() {
           .filter(Boolean)
           .join(" ")
           .trim();
+
+        const aviso = respuesta.avisoPreregistro;
+        if (aviso && (aviso.estado === "RECHAZADO" || aviso.estado === "CANCELADO")) {
+          setModalDecision({
+            estado: aviso.estado,
+            numero: aviso.numeroPreRegistro,
+            motivo: aviso.observacion?.trim() || "Administración no registró un motivo adicional.",
+          });
+          return;
+        }
 
         toast.success(
           `Bienvenido ${
@@ -333,6 +344,7 @@ export default function LoginView() {
     setMensajeLogin("");
     setCuentaNoExiste(false);
     setModalRevision(null);
+    setModalDecision(null);
 
     mutate({
       email: formData.email
@@ -696,6 +708,7 @@ export default function LoginView() {
         </div>
       </div>
       {modalRevision ? <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-cuenta-revision"><section className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-2xl"><div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-amber-100 text-amber-700"><AlarmClock className="h-9 w-9"/></div><h2 id="titulo-cuenta-revision" className="mt-4 text-2xl font-black text-[#841534]">{modalRevision.titulo}</h2><p className="mt-3 leading-6 text-slate-600">{modalRevision.mensaje}</p><div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">No necesitas volver a registrarte. Administración debe revisar y habilitar tu cuenta.</div><button type="button" autoFocus onClick={() => setModalRevision(null)} className="mt-6 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white">Entendido, esperaré</button></section></div> : null}
+      {modalDecision ? <div className="fixed inset-0 z-[210] grid place-items-center bg-slate-950/75 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-decision-preregistro"><section className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><header className="bg-gradient-to-r from-[#841534] to-[#C59A3A] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[.2em]">Decisión del preregistro</p><h2 id="titulo-decision-preregistro" className="mt-2 text-2xl font-black">Preregistro {modalDecision.estado === "RECHAZADO" ? "rechazado" : "cancelado"}</h2></header><div className="p-6"><p className="text-sm font-bold text-[#841534]">{modalDecision.numero}</p><p className="mt-3 text-slate-600">Tu cuenta está activa y puedes ingresar, pero administración marcó tu preregistro como <strong>{modalDecision.estado.replace("_", " ")}</strong>.</p><div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><strong className="mb-1 block">Motivo u observación</strong>{modalDecision.motivo}</div><button type="button" autoFocus onClick={() => navigate("/mis-preregistros", { replace: true })} className="mt-6 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white">Ingresar y ver mi preregistro</button></div></section></div> : null}
     </section>
   );
 }
