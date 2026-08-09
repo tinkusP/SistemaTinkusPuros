@@ -30,6 +30,28 @@ export async function descargarRespaldoCompleto(): Promise<void> {
   }
 }
 
+export async function descargarRespaldoOrganizado(): Promise<void> {
+  try {
+    const respuesta = await api.get<ArrayBuffer>("/respaldo/exportar-organizado", {
+      responseType: "arraybuffer",
+      timeout: 15 * 60 * 1000,
+    });
+    const disposicion = String(respuesta.headers["content-disposition"] ?? "");
+    const nombre = disposicion.match(/filename="?([^";]+)"?/i)?.[1]
+      ?? `tinkus-completo-${new Date().toISOString().slice(0, 10)}.zip`;
+    const url = URL.createObjectURL(new Blob([respuesta.data], { type: "application/zip" }));
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.download = nombre;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    throw new Error(obtenerMensajeError(error, "No se pudo descargar el ZIP organizado"));
+  }
+}
+
 export async function importarRespaldoCompleto(
   archivo: File,
   progreso?: (porcentaje: number) => void,

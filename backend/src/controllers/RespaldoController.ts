@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import { EJSON } from "bson";
 import { gzipSync, gunzipSync } from "node:zlib";
+import archiver from "archiver";
 import {
   descargarArchivoAlmacenado,
   listarArchivosAlmacenados,
@@ -92,6 +93,50 @@ export async function exportarRespaldo(_req: Request, res: Response) {
   } catch (error) {
     console.error("Error exportando respaldo completo", error);
     return res.status(500).json({ error: "No se pudo generar el respaldo completo" });
+  }
+}
+
+export async function exportarRespaldoOrganizado(_req: Request, res: Response) {
+  try {
+    const db = dbActual();
+    const nombres = (await db.listCollections({}, { nameOnly: true }).toArray())
+      .map((item) => item.name)
+      .filter((nombre) => !nombre.startsWith("system."))
+      .sort();
+    const listado = await listarArchivosAlmacenados();
+    const fecha = new Date().toISOString().replace(/[:.]/g, "-");
+    res.setHeader("content-type", "application/zip");
+    res.setHeader("content-disposition", `attachment; filename="tinkus-completo-${fecha}.zip"`);
+
+    const zip = archiver("zip", { zlib: { level: 6 } });
+    zip.on("warning", (error) => console.warn("Advertencia creando ZIP de respaldo", error));
+    zip.on("error", (error) => { throw error; });
+    zip.pipe(res);
+    zip.append(JSON.stringify({
+      sistema: "SISTEMA_TINKUS_PUROS",
+      creadoEn: new Date(),
+      baseDatos: db.databaseName,
+      colecciones: nombres.length,
+      archivos: listado.length,
+      nota: "Esta copia es legible. Para restaurar el sistema use el archivo .tinkus.gz.",
+    }, null, 2), { name: "LEEME-manifiesto.json" });
+
+    for (const nombre of nombres) {
+      const coleccion = db.collection(nombre);
+      const [documentos, indices] = await Promise.all([coleccion.find({}).toArray(), coleccion.indexes()]);
+      zip.append(EJSON.stringify(documentos, null, 2), { name: `base-de-datos/colecciones/${nombre}.json` });
+      zip.append(EJSON.stringify(indices, null, 2), { name: `base-de-datos/indices/${nombre}.json` });
+    }
+    for (const { key } of listado) {
+      if (!key.startsWith("uploads/") || key.includes("..")) continue;
+      const archivo = await descargarArchivoAlmacenado(key);
+      zip.append(archivo.contenido, { name: `documentos/${key.slice("uploads/".length)}` });
+    }
+    await zip.finalize();
+  } catch (error) {
+    console.error("Error exportando ZIP organizado", error);
+    if (!res.headersSent) return res.status(500).json({ error: "No se pudo generar el ZIP organizado" });
+    res.destroy(error instanceof Error ? error : undefined);
   }
 }
 
