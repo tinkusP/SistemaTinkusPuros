@@ -2463,25 +2463,29 @@ export class PerfilUsuarioController {
         .populate(populatePerfil);
 
       if (!perfil) {
-        return res.status(401).json({
-          error: "Correo o contraseña incorrectos",
+        return res.status(404).json({
+          codigo: "CUENTA_NO_EXISTE",
+          error: "No tienes una cuenta registrada. Crea una cuenta para continuar",
         });
       }
 
       if (perfil.estado === "PENDIENTE") {
         return res.status(403).json({
-          error: "La cuenta todavía está pendiente de aprobación",
+          codigo: "CUENTA_EN_REVISION",
+          error: "Tu cuenta está en revisión. Aún no te dieron de alta; espera a que administración revise y apruebe tu registro",
         });
       }
 
       if (perfil.estado === "INACTIVO") {
         return res.status(403).json({
-          error: "La cuenta se encuentra inactiva",
+          codigo: "CUENTA_SIN_ALTA",
+          error: "Tu cuenta está registrada, pero todavía no está habilitada. Espera a que administración te dé de alta",
         });
       }
 
       if (perfil.estado === "BLOQUEADO") {
         return res.status(403).json({
+          codigo: "CUENTA_BLOQUEADA",
           error: "La cuenta se encuentra bloqueada",
         });
       }
@@ -2490,6 +2494,7 @@ export class PerfilUsuarioController {
 
       if (perfil.bloqueadoHasta && perfil.bloqueadoHasta > ahora) {
         return res.status(403).json({
+          codigo: "BLOQUEO_TEMPORAL",
           error: "La cuenta está bloqueada temporalmente",
           bloqueadoHasta: perfil.bloqueadoHasta,
         });
@@ -2510,7 +2515,8 @@ export class PerfilUsuarioController {
         await perfil.save();
 
         return res.status(401).json({
-          error: "Correo o contraseña incorrectos",
+          codigo: "PASSWORD_INCORRECTO",
+          error: "La contraseña es incorrecta",
         });
       }
 
