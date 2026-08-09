@@ -19,29 +19,25 @@ export const verificarArchivoPdf =
   async (
     rutaArchivo: string,
   ): Promise<boolean> => {
-    const archivo =
-      await fs.open(
-        rutaArchivo,
-        "r",
-      );
+    const archivo = await fs.open(rutaArchivo, "r");
 
     try {
-      const encabezado =
-        Buffer.alloc(5);
+      const estado = await archivo.stat();
+      if (estado.size < 8) return false;
 
-      await archivo.read(
-        encabezado,
-        0,
-        encabezado.length,
-        0,
-      );
+      // Algunos escáneres móviles agregan BOM, saltos de línea o metadatos
+      // antes de la cabecera. La especificación permite encontrar %PDF- en
+      // los primeros 1024 bytes; usamos 4096 para tolerar exportadores reales.
+      const inicio = Buffer.alloc(Math.min(4096, estado.size));
+      await archivo.read(inicio, 0, inicio.length, 0);
+      if (!inicio.includes(Buffer.from("%PDF-"))) return false;
 
-      return (
-        encabezado.toString(
-          "utf8",
-        ) ===
-        "%PDF-"
-      );
+      // Comprobar también el cierre evita aceptar una imagen renombrada o un
+      // PDF que quedó truncado durante la selección/carga desde el teléfono.
+      const longitudFinal = Math.min(8192, estado.size);
+      const final = Buffer.alloc(longitudFinal);
+      await archivo.read(final, 0, longitudFinal, estado.size - longitudFinal);
+      return final.includes(Buffer.from("%%EOF"));
     } finally {
       await archivo.close();
     }
@@ -178,6 +174,14 @@ export const comprimirPdfOptimizado =
           force: true,
         },
       );
+
+      // Si Ghostscript no está instalado en el contenedor o no puede
+      // optimizar un PDF que ya verificamos, conservar el original. La
+      // compresión es una mejora, no debe impedir el registro del usuario.
+      if (await verificarArchivoPdf(rutaEntrada)) {
+        await fs.copyFile(rutaEntrada, rutaSalida);
+        return;
+      }
 
       throw error;
     }

@@ -1,22 +1,29 @@
 import type { Request, Response } from "express";
 import path from "node:path";
+import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import sharp from "sharp";
 import PerfilUsuario from "../models/PerfilUsuario";
 import DocumentoUsuario, { type TipoDocumentoUsuario } from "../models/DocumentoUsuario";
 import Autorizacion from "../models/AutorizacionEdicionPerfil";
-import { comprimirPdfOptimizado } from "../services/pdfService";
+import { comprimirPdfOptimizado, verificarArchivoPdf } from "../services/pdfService";
 import {
   eliminarArchivoAlmacenado,
   subirArchivoProcesado,
 } from "../services/AlmacenamientoService";
 
-type Archivo = { path: string; mimetype: string };
+type Archivo = { path: string; mimetype: string; originalname?: string; fieldname?: string };
 type CampoAutorizado = "DATOS_PERSONALES" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
 
 const eliminarArchivoPublico = async (ruta?: string | null) => {
   await eliminarArchivoAlmacenado(ruta);
 };
+
+const esPdf = (archivo: Archivo) =>
+  archivo.mimetype === "application/pdf" ||
+  path.extname(archivo.originalname ?? "").toLowerCase() === ".pdf";
+
+const versionArchivo = () => `${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
 export const completarPerfilAutorizado = async (req: Request, res: Response) => {
   const autorizacion = await Autorizacion.findOne({ perfilUsuarioId: req.usuario?._id, estado: "ACTIVA", fechaVencimiento: { $gt: new Date() } });
@@ -41,8 +48,8 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
 
   const ci = files.carnetIdentidadPdf?.[0];
   const reverso = files.carnetIdentidadReverso?.[0];
-  if (ci && ci.mimetype !== "application/pdf" && autorizacion.campos.includes("CARNET_REVERSO") && !reverso) return res.status(400).json({ error: "Debe subir también el reverso del carnet" });
-  if (reverso?.mimetype === "application/pdf") return res.status(400).json({ error: "El reverso debe ser una imagen" });
+  if (ci && !esPdf(ci) && autorizacion.campos.includes("CARNET_REVERSO") && !reverso) return res.status(400).json({ error: "Debe subir también el reverso del carnet" });
+  if (reverso && esPdf(reverso)) return res.status(400).json({ error: "El reverso debe ser una imagen" });
 
   const seguro = String(hayDatosPersonales ? req.body.ci : perfil.ci).replace(/[^a-zA-Z0-9_-]/g, "_");
   const carpeta = path.resolve(process.cwd(), "public", "uploads", "cuentas-perfil", seguro);
@@ -51,19 +58,29 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
   const guardarDocumento = async (archivo: Archivo | undefined, prefijo: string, tipo: TipoDocumentoUsuario) => {
     if (!archivo) return;
     const anterior = await DocumentoUsuario.findOne({ perfilUsuario: perfil._id, tipoDocumento: tipo, fechaEliminado: null });
-    const esPdf = archivo.mimetype === "application/pdf";
-    const nombre = `${prefijo}_${seguro}.${esPdf ? "pdf" : "webp"}`;
+    const archivoEsPdf = esPdf(archivo);
+    const nombre = `${prefijo}_${seguro}_${versionArchivo()}.${archivoEsPdf ? "pdf" : "webp"}`;
     const salida = path.join(carpeta, nombre);
-    if (esPdf) await comprimirPdfOptimizado({ rutaEntrada: archivo.path, rutaSalida: salida });
+    if (archivoEsPdf) {
+      if (!(await verificarArchivoPdf(archivo.path))) {
+        throw new Error(`El ${prefijo === "RU" ? "registro universitario" : "carnet de identidad"} no es un PDF completo o válido`);
+      }
+      await comprimirPdfOptimizado({ rutaEntrada: archivo.path, rutaSalida: salida });
+    }
     else await sharp(archivo.path).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).webp({ quality: 78 }).toFile(salida);
     const nuevaRuta = `/uploads/cuentas-perfil/${seguro}/${nombre}`;
-    await subirArchivoProcesado(
-      nuevaRuta,
-      salida,
-      esPdf ? "application/pdf" : "image/webp",
-    );
+    await subirArchivoProcesado(nuevaRuta, salida, archivoEsPdf ? "application/pdf" : "image/webp");
+    try {
+      await DocumentoUsuario.findOneAndUpdate(
+        { perfilUsuario: perfil._id, tipoDocumento: tipo, fechaEliminado: null },
+        { ruta: nuevaRuta, estado: "PENDIENTE", observacion: null, usuarioEdit: perfil._id, fechaEdit: new Date() },
+        { upsert: true, new: true },
+      );
+    } catch (error) {
+      await eliminarArchivoPublico(nuevaRuta);
+      throw error;
+    }
     if (anterior?.ruta && anterior.ruta !== nuevaRuta) await eliminarArchivoPublico(anterior.ruta);
-    await DocumentoUsuario.findOneAndUpdate({ perfilUsuario: perfil._id, tipoDocumento: tipo, fechaEliminado: null }, { ruta: nuevaRuta, estado: "PENDIENTE", observacion: null, usuarioEdit: perfil._id, fechaEdit: new Date() }, { upsert: true, new: true });
   };
 
   try {
@@ -84,20 +101,33 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
     }
     const foto = files.fotoPerfil?.[0];
     if (foto) {
-      const nombre = `FOTO_${seguro}.webp`;
+      const nombre = `FOTO_${seguro}_${versionArchivo()}.webp`;
       const nuevaRuta = `/uploads/cuentas-perfil/${seguro}/${nombre}`;
       const salida = path.join(carpeta, nombre);
       await sharp(foto.path).rotate().resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).webp({ quality: 80 }).toFile(salida);
       await subirArchivoProcesado(nuevaRuta, salida, "image/webp");
-      if (perfil.fotoPerfil && perfil.fotoPerfil !== nuevaRuta) await eliminarArchivoPublico(perfil.fotoPerfil);
+      const fotoAnterior = perfil.fotoPerfil;
       perfil.fotoPerfil = nuevaRuta;
-      await perfil.save();
+      try {
+        await perfil.save();
+      } catch (error) {
+        await eliminarArchivoPublico(nuevaRuta);
+        throw error;
+      }
+      if (fotoAnterior && fotoAnterior !== nuevaRuta) await eliminarArchivoPublico(fotoAnterior);
     }
     await guardarDocumento(files.carnetIdentidadPdf?.[0], "CI", "CARNET_IDENTIDAD");
     await guardarDocumento(files.carnetIdentidadReverso?.[0], "CI_REVERSO", "CARNET_IDENTIDAD_REVERSO");
     await guardarDocumento(files.registroUniversitarioPdf?.[0], "RU", "REGISTRO_UNIVERSITARIO");
     autorizacion.estado = "USADA"; autorizacion.fechaUso = new Date(); await autorizacion.save();
-    return res.json({ message: "Archivos reemplazados correctamente y pendientes de revisión" });
+    return res.json({ message: "Documentos reemplazados en la nube correctamente y enviados nuevamente a revisión" });
+  } catch (error) {
+    console.error("Error reemplazando documentos autorizados", error);
+    return res.status(400).json({
+      error: error instanceof Error
+        ? error.message
+        : "No se pudieron reemplazar los documentos. Intenta nuevamente.",
+    });
   } finally {
     await Promise.all(Object.values(files).flat().map((archivo) => fs.rm(archivo.path, { force: true })));
   }

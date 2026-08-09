@@ -253,10 +253,10 @@ export default function PerfilView() {
               </div></div>
             )}
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {autorizacionQuery.data.autorizacion.campos.includes("FOTO_PERFIL") && <label className="text-sm font-bold">Foto de perfil<input className="mt-1 block w-full text-xs" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setFotoNueva(e.target.files?.[0]??null)}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_ANVERSO") && <label className="text-sm font-bold">Carnet PDF o anverso<input className="mt-1 block w-full text-xs" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e=>setCarnetFrente(e.target.files?.[0]??null)}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_REVERSO") && <label className="text-sm font-bold">Reverso del carnet<input className="mt-1 block w-full text-xs" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setCarnetReverso(e.target.files?.[0]??null)}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("REGISTRO_UNIVERSITARIO") && <label className="text-sm font-bold">Registro universitario PDF o imagen<input className="mt-1 block w-full text-xs" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={e=>setRuNuevo(e.target.files?.[0]??null)}/></label>}
+              {autorizacionQuery.data.autorizacion.campos.includes("FOTO_PERFIL") && <label className="text-sm font-bold">Foto de perfil<input className="mt-1 block w-full text-xs" type="file" accept="image/*" onChange={e=>setFotoNueva(e.target.files?.[0]??null)}/></label>}
+              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_ANVERSO") && <label className="text-sm font-bold">Carnet PDF o anverso<input className="mt-1 block w-full text-xs" type="file" accept=".pdf,application/pdf,image/*" onChange={e=>setCarnetFrente(e.target.files?.[0]??null)}/></label>}
+              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_REVERSO") && <label className="text-sm font-bold">Reverso del carnet<input className="mt-1 block w-full text-xs" type="file" accept="image/*" onChange={e=>setCarnetReverso(e.target.files?.[0]??null)}/></label>}
+              {autorizacionQuery.data.autorizacion.campos.includes("REGISTRO_UNIVERSITARIO") && <label className="text-sm font-bold">Registro universitario PDF o imagen<input className="mt-1 block w-full text-xs" type="file" accept=".pdf,application/pdf,image/*" onChange={e=>setRuNuevo(e.target.files?.[0]??null)}/></label>}
             </div>
             {(fotoNueva || carnetFrente || carnetReverso || ruNuevo) && (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
