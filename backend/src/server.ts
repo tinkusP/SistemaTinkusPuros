@@ -94,6 +94,7 @@ import configuracionPagoRoutes from "./routes/ConfiguracionPagoRoutes";
 import credencialQrRoutes from "./routes/CredencialQrRoutes";
 import reporteRoutes from "./routes/ReporteRoutes";
 import tokenRegistroRoutes from "./routes/TokenRegistroRoutes";
+import respaldoRoutes from "./routes/RespaldoRoutes";
 import { servirArchivoR2 } from "./services/AlmacenamientoService";
 
 
@@ -201,19 +202,31 @@ app.use("/api/configuracion-pagos", configuracionPagoRoutes);
 app.use("/api/credenciales-qr", credencialQrRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/tokens-registro", tokenRegistroRoutes);
+app.use("/api/respaldo", respaldoRoutes);
 app.use("/api/indumentaria", indumentariaRoutes);
 app.use("/api/guias", guiaRoutes);
 
 // Multer falla antes de entrar al controlador. Convertimos esos fallos en
 // respuestas claras para que el formulario indique qué archivo debe cambiar.
 app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const nombresArchivo: Record<string, string> = {
+    fotoPerfil: "Foto de perfil",
+    carnetIdentidadPdf: "Carnet de identidad (anverso)",
+    carnetIdentidadReverso: "Carnet de identidad (reverso)",
+    registroUniversitarioPdf: "Registro universitario",
+    respaldo: "Archivo de respaldo",
+  };
   if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Uno de los archivos supera 30 MB. Reduce su tamaño o selecciona otro archivo." });
-    if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") return res.status(400).json({ error: "Se enviaron demasiados archivos o un campo de archivo no permitido." });
-    return res.status(400).json({ error: `No se pudo recibir el archivo: ${error.message}` });
+    const campo = typeof error.field === "string" ? error.field : undefined;
+    const archivo = campo ? nombresArchivo[campo] ?? campo : "Archivo seleccionado";
+    if (error.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: `${archivo}: supera el tamaño máximo permitido`, tipo: "ARCHIVO", campo, archivo, accion: "Reduce su tamaño o selecciona otro archivo" });
+    if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") return res.status(400).json({ error: `${archivo}: se enviaron demasiados archivos o el campo no está permitido`, tipo: "ARCHIVO", campo, archivo, accion: "Elimina el archivo repetido y vuelve a intentarlo" });
+    return res.status(400).json({ error: `${archivo}: ${error.message}`, tipo: "ARCHIVO", campo, archivo, accion: "Reemplaza este archivo y vuelve a intentarlo" });
   }
   if (error instanceof Error && /foto|imagen|archivo|carnet|universitario|pdf/i.test(error.message)) {
-    return res.status(400).json({ error: error.message });
+    const detalle = error as Error & { campoArchivo?: string; tipoError?: string };
+    const campo = detalle.campoArchivo;
+    return res.status(400).json({ error: error.message, tipo: detalle.tipoError ?? "ARCHIVO", campo, archivo: campo ? nombresArchivo[campo] ?? campo : undefined, accion: "Reemplaza el archivo indicado y vuelve a intentarlo" });
   }
   next(error);
 });

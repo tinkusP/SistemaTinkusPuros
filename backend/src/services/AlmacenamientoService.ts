@@ -21,6 +21,105 @@ const endpoint = (ruta: string) =>
 
 const headersAutorizacion = () => ({ authorization: `Bearer ${token()}` });
 
+const contentTypeDesdeRuta = (ruta: string): string => {
+  const extension = path.extname(ruta).toLowerCase();
+  return ({
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".avif": "image/avif",
+    ".pdf": "application/pdf",
+    ".json": "application/json",
+  } as Record<string, string>)[extension] ?? "application/octet-stream";
+};
+
+export type ArchivoAlmacenado = {
+  key: string;
+  size: number;
+  contentType?: string;
+};
+
+const rutaPublicaDesdeClave = (key: string) => `/${claveDesdeRuta(key)}`;
+
+async function listarArchivosLocales(): Promise<ArchivoAlmacenado[]> {
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  const encontrados: ArchivoAlmacenado[] = [];
+  const recorrer = async (directorio: string): Promise<void> => {
+    let entradas: import("node:fs").Dirent[] = [];
+    try {
+      entradas = await fs.readdir(directorio, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    for (const entrada of entradas) {
+      const absoluta = path.join(directorio, entrada.name);
+      if (entrada.isDirectory()) await recorrer(absoluta);
+      if (entrada.isFile()) {
+        const estado = await fs.stat(absoluta);
+        encontrados.push({
+          key: path.relative(path.resolve(process.cwd(), "public"), absoluta).split(path.sep).join("/"),
+          size: estado.size,
+        });
+      }
+    }
+  };
+  await recorrer(raiz);
+  return encontrados.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+export async function listarArchivosAlmacenados(): Promise<ArchivoAlmacenado[]> {
+  if (!almacenamientoR2Activo()) return listarArchivosLocales();
+  const encontrados: ArchivoAlmacenado[] = [];
+  let cursor = "";
+  do {
+    const url = new URL(`${urlBase()}/list`);
+    url.searchParams.set("prefix", "uploads/");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const respuesta = await fetch(url, { headers: headersAutorizacion() });
+    if (!respuesta.ok) throw new Error(`R2 rechazó el listado (${respuesta.status})`);
+    const pagina = await respuesta.json() as {
+      objects?: ArchivoAlmacenado[];
+      truncated?: boolean;
+      cursor?: string;
+    };
+    encontrados.push(...(pagina.objects ?? []));
+    cursor = pagina.truncated && pagina.cursor ? pagina.cursor : "";
+  } while (cursor);
+  return encontrados.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+export async function descargarArchivoAlmacenado(key: string): Promise<{ contenido: Buffer; contentType: string }> {
+  const rutaPublica = rutaPublicaDesdeClave(key);
+  if (almacenamientoR2Activo()) {
+    const respuesta = await fetch(endpoint(rutaPublica), { headers: headersAutorizacion() });
+    if (!respuesta.ok) throw new Error(`No se pudo descargar ${key} desde R2 (${respuesta.status})`);
+    return {
+      contenido: Buffer.from(await respuesta.arrayBuffer()),
+      contentType: respuesta.headers.get("content-type") || "application/octet-stream",
+    };
+  }
+  const absoluta = path.resolve(process.cwd(), "public", claveDesdeRuta(key));
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  if (!absoluta.startsWith(`${raiz}${path.sep}`)) throw new Error("Ruta local inválida");
+  return { contenido: await fs.readFile(absoluta), contentType: contentTypeDesdeRuta(key) };
+}
+
+export async function restaurarArchivoAlmacenado(key: string, contenido: Buffer, contentType: string): Promise<void> {
+  const rutaPublica = rutaPublicaDesdeClave(key);
+  if (almacenamientoR2Activo()) {
+    await subirBuffer(rutaPublica, contenido, contentType);
+    return;
+  }
+  const absoluta = path.resolve(process.cwd(), "public", claveDesdeRuta(key));
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  if (!absoluta.startsWith(`${raiz}${path.sep}`)) throw new Error("Ruta local inválida");
+  await fs.mkdir(path.dirname(absoluta), { recursive: true });
+  await fs.writeFile(absoluta, contenido);
+}
+
 export async function subirArchivoProcesado(
   rutaPublica: string,
   rutaLocal: string,

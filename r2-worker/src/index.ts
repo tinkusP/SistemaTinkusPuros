@@ -39,6 +39,7 @@ export default {
       const listado = await env.ARCHIVOS.list({
         prefix: url.searchParams.get("prefix") ?? "",
         limit: 100,
+        cursor: url.searchParams.get("cursor") || undefined,
       });
       return json({
         objects: listado.objects.map((objeto) => ({
@@ -46,6 +47,7 @@ export default {
           size: objeto.size,
         })),
         truncated: listado.truncated,
+        cursor: listado.truncated ? listado.cursor : undefined,
       });
     }
 

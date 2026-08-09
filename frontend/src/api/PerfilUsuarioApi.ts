@@ -545,6 +545,7 @@
 //   }
 // }
 import api from "@/lib/axios";
+import { isAxiosError } from "axios";
 
 import {
   ActualizarPerfilResponseSchema,
@@ -578,6 +579,13 @@ import {
 
 const PERFIL_URL =
   "/perfilusuario";
+
+export type ErrorRegistroCuenta = Error & {
+  tipo?: "DUPLICADO" | "ARCHIVO" | "DATO" | "TOKEN";
+  campo?: string;
+  archivo?: string;
+  accion?: string;
+};
 
 /* =========================================
    HELPERS DE FORMDATA
@@ -944,12 +952,17 @@ export async function createCuentaPerfil(
       data,
     );
   } catch (error) {
-    throw new Error(
-      obtenerMensajeError(
-        error,
-        "No se pudo registrar la cuenta",
-      ),
-    );
+    const resultado = new Error(
+      obtenerMensajeError(error, "No se pudo registrar la cuenta"),
+    ) as ErrorRegistroCuenta;
+    if (isAxiosError(error) && error.response?.data && typeof error.response.data === "object") {
+      const detalle = error.response.data as Partial<ErrorRegistroCuenta>;
+      resultado.tipo = detalle.tipo;
+      resultado.campo = detalle.campo;
+      resultado.archivo = detalle.archivo;
+      resultado.accion = detalle.accion;
+    }
+    throw resultado;
   }
 }
 
