@@ -22,10 +22,6 @@ import {
   loginPerfilUsuario,
 } from "@/api/PerfilUsuarioApi";
 
-import {
-  obtenerRolPorId,
-} from "@/api/RolApi";
-
 import type {
   LoginForm,
 } from "@/types/PerfilUsuarioType";
@@ -172,43 +168,13 @@ export default function LoginView() {
           );
         }
 
-        /*
-         * Tomamos el primer rol como rol principal.
-         */
-        const rolId =
-          usuario.roles[0]?._id;
-
-        if (!rolId) {
-          throw new Error(
-            "No se pudo obtener el ID del rol",
-          );
-        }
-
-        /*
-         * Segunda consulta:
-         * obtenemos los datos completos del rol.
-         */
-        const rol =
-          await obtenerRolPorId(
-            rolId,
-          );
-
-        const codigoRol =
-          rol.codigo
-            .trim()
-            .toUpperCase();
         const codigosRoles = usuario.roles.map((rolUsuario) =>
           String(rolUsuario?.codigo ?? rolUsuario?.nombre ?? "").trim().toUpperCase(),
         );
-
-        console.log(
-          "Rol consultado:",
-          rol,
-        );
-
-        console.log(
-          "Código del rol:",
-          codigoRol,
+        const esAdministrador = codigosRoles.some((codigo) =>
+          ["ADMIN", "ADMINISTRADOR", "SUPERADMIN", "SUPERADMINISTRADOR"].includes(
+            codigo.replace(/[\s_-]/g, ""),
+          ),
         );
 
         const nombreCompleto = [
@@ -236,8 +202,9 @@ export default function LoginView() {
           return;
         }
         if (
-          codigoRol ===
-          "POSTULANTE"
+          !esAdministrador &&
+          (codigosRoles.includes("POSTULANTE") ||
+            codigosRoles.includes("FRATERNO"))
         ) {
           navigate(
             "/comunicados",
@@ -250,8 +217,7 @@ export default function LoginView() {
         }
 
         if (
-          codigoRol ===
-          "ADMINISTRADOR"
+          esAdministrador
         ) {
           navigate(
             "/dashboard",

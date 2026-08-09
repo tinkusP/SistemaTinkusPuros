@@ -118,8 +118,18 @@ fs.mkdirSync(carpetaTemporal, {
 
 const TIPOS_IMAGEN_PERMITIDOS = new Set([
   "image/jpeg",
+  "image/jfif",
   "image/png",
   "image/webp",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+  "image/tiff",
+  "image/gif",
+  "image/bmp",
+]);
+const EXTENSIONES_IMAGEN_PERMITIDAS = new Set([
+  ".jpg", ".jpeg", ".jfif", ".png", ".webp", ".avif", ".heic", ".heif", ".tif", ".tiff", ".gif", ".bmp",
 ]);
 
 const CAMPOS_DOCUMENTO = new Set([
@@ -194,13 +204,12 @@ const fileFilter: multer.Options["fileFilter"] = (
     "fotoPerfil"
   ) {
     if (
-      !TIPOS_IMAGEN_PERMITIDOS.has(
-        file.mimetype,
-      )
+      !TIPOS_IMAGEN_PERMITIDOS.has(file.mimetype) &&
+      !EXTENSIONES_IMAGEN_PERMITIDAS.has(extension)
     ) {
       callback(
         new Error(
-          "La foto de perfil debe ser JPG, PNG o WebP",
+          "La foto debe ser una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP",
         ),
       );
 
@@ -223,12 +232,13 @@ const fileFilter: multer.Options["fileFilter"] = (
     if (
       !(
         (extension === ".pdf" && ["application/pdf", "application/octet-stream"].includes(file.mimetype)) ||
-        TIPOS_IMAGEN_PERMITIDOS.has(file.mimetype)
+        TIPOS_IMAGEN_PERMITIDOS.has(file.mimetype) ||
+        EXTENSIONES_IMAGEN_PERMITIDAS.has(extension)
       )
     ) {
       callback(
         new Error(
-          "El carnet de identidad y el registro universitario deben ser PDF, JPG, PNG o WebP",
+          "El documento debe ser PDF o una imagen JPG, PNG, WebP, AVIF, HEIC, TIFF, GIF o BMP",
         ),
       );
 
@@ -269,10 +279,10 @@ export const uploadRegistroCuenta =
       files: 4,
 
       /*
-       * Máximo de 15 MB por archivo temporal.
+       * Máximo de 30 MB por archivo temporal. Después se convierte y comprime.
        */
       fileSize:
-        15 *
+        30 *
         1024 *
         1024,
 

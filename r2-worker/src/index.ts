@@ -35,6 +35,20 @@ export default {
       return json({ ok: true, storage: "R2" });
     }
 
+    if (url.pathname === "/list" && request.method === "GET") {
+      const listado = await env.ARCHIVOS.list({
+        prefix: url.searchParams.get("prefix") ?? "",
+        limit: 100,
+      });
+      return json({
+        objects: listado.objects.map((objeto) => ({
+          key: objeto.key,
+          size: objeto.size,
+        })),
+        truncated: listado.truncated,
+      });
+    }
+
     const clave = claveDesdeUrl(url);
     if (!clave) return json({ error: "Ruta de objeto inválida" }, 400);
 
