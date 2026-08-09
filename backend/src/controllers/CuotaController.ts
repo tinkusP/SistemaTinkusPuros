@@ -15,6 +15,23 @@ const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuari
 const esAdministrador = (req: Request) => (req.usuario?.roles as unknown as { codigo?: string; nombre?: string }[] | undefined)?.some((r) => [r.codigo, r.nombre].some((v) => String(v ?? "").toUpperCase() === "ADMINISTRADOR")) ?? false;
 const rutaComprobante = (archivo?: Express.Multer.File) => (archivo as (Express.Multer.File & { rutaPublica?: string }) | undefined)?.rutaPublica;
 async function recalcular(cuotaId: string) { const cuota = await Cuota.findById(cuotaId); if (!cuota) return; const pagos = await DetalleCuota.aggregate([{ $match: { cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null } }, { $group: { _id: null, total: { $sum: "$monto" } } }]); cuota.montoPagado = pagos[0]?.total ?? 0; await cuota.save(); await promoverAFraternoSiCorresponde(cuotaId); }
+async function programarSiguientePago(cuotaId: string) {
+  const cuota = await Cuota.findById(cuotaId);
+  if (!cuota || cuota.saldo <= 0 || !cuota.numeroCuotasElegidas || cuota.numeroCuotasElegidas === 1) return;
+  const pagosVerificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
+  if (pagosVerificados >= cuota.numeroCuotasElegidas) return;
+  const dias = cuota.numeroCuotasElegidas === 3 ? 7 : 14;
+  cuota.fechaVencimiento = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
+  await cuota.save();
+  const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
+  if (preregistro?.usuarioId) await Notificacion.create({
+    usuarioId: preregistro.usuarioId,
+    titulo: `Cuota ${pagosVerificados + 1} habilitada`,
+    mensaje: `Tu pago fue aprobado. Tienes ${dias} días para pagar la cuota ${pagosVerificados + 1}. Debes completar la totalidad para recibir la polera de preentrada y la chamarra.`,
+    tipo: "ADVERTENCIA",
+    enlace: "/mis-pagos",
+  });
+}
 async function cuotaPerteneceAlUsuario(cuotaId: string, usuarioId: unknown) { const cuota = await Cuota.findOne({ _id: cuotaId, fechaEliminado: null }).populate<{ preregistroId: { usuarioId: { toString(): string } } }>("preregistroId", "usuarioId"); return cuota && String(cuota.preregistroId.usuarioId) === String(usuarioId); }
 const redondear = (valor: number) => Number(valor.toFixed(2));
 const distribucionPlan = (montoTotal: number, numeroCuotas: number) => {
@@ -92,7 +109,8 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
     listaEspera = true;
   }
   const prorrogaActiva = listaEspera && Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento > new Date());
-  return res.json({ cuota, pagos, listaEspera, prorrogaActiva });
+  const pagoSiguienteVencido = tienePrimerPagoValido && cuota.saldo > 0 && Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento < new Date());
+  return res.json({ cuota, pagos, listaEspera, prorrogaActiva, pagoSiguienteVencido });
 };
 export const elegirPlanCuotas = async (req: Request, res: Response) => {
   const numeroCuotas = Number(req.body.numeroCuotas);
@@ -201,6 +219,7 @@ export const revisarPago = async (req: Request, res: Response) => {
   }
   const pago = await DetalleCuota.findByIdAndUpdate(antes._id, { $set: { estadoRevision: req.body.estadoRevision, observacionRevision: req.body.observacionRevision, respaldoAdminImagen: respaldo, fechaRevision: new Date(), usuarioRevisor: req.usuario?._id } }, { new: true, runValidators: true });
   await recalcular(String(req.params.id));
+  if (req.body.estadoRevision === "VERIFICADO" && antes.estadoRevision !== "VERIFICADO") await programarSiguientePago(String(req.params.id));
   if (pago) await registrarAuditoria(req, { accion: "REVISAR_PAGO", modulo: "CUOTAS", entidad: "DetalleCuota", entidadId: pago._id, descripcion: `Pago marcado como ${pago.estadoRevision}`, datosAntes: antes, datosDespues: pago.toObject() });
   return res.json({ message: "Pago revisado", pago });
 };
