@@ -48,7 +48,7 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
 
   const ci = files.carnetIdentidadPdf?.[0];
   const reverso = files.carnetIdentidadReverso?.[0];
-  if (ci && !esPdf(ci) && autorizacion.campos.includes("CARNET_REVERSO") && !reverso) return res.status(400).json({ error: "Debe subir también el reverso del carnet" });
+  if (ci && !esPdf(ci) && !reverso) return res.status(400).json({ error: "Cuando el carnet se sube como imagen debe adjuntar también el reverso. Si utiliza un PDF, el reverso no es necesario." });
   if (reverso && esPdf(reverso)) return res.status(400).json({ error: "El reverso debe ser una imagen" });
 
   const seguro = String(hayDatosPersonales ? req.body.ci : perfil.ci).replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -91,8 +91,11 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
       if (!["HOMBRE", "MUJER"].includes(sexo)) return res.status(400).json({ error: "El género debe ser HOMBRE o MUJER" });
       const requerido = (campo: string, etiqueta: string) => { const valor = String(req.body[campo] ?? "").trim(); if (!valor) throw new Error(`${etiqueta} es obligatorio`); return valor.toLocaleUpperCase("es-BO"); };
       perfil.nombres = requerido("nombres", "El nombre");
-      perfil.apellidoPaterno = requerido("apellidoPaterno", "El apellido paterno");
-      perfil.apellidoMaterno = String(req.body.apellidoMaterno ?? "").trim().toLocaleUpperCase("es-BO") || undefined;
+      const apellidoPaterno = String(req.body.apellidoPaterno ?? "").trim().toLocaleUpperCase("es-BO");
+      const apellidoMaterno = String(req.body.apellidoMaterno ?? "").trim().toLocaleUpperCase("es-BO");
+      if (!apellidoPaterno && !apellidoMaterno) throw new Error("Debe ingresar al menos un apellido");
+      perfil.apellidoPaterno = apellidoPaterno;
+      perfil.apellidoMaterno = apellidoMaterno || undefined;
       perfil.telefono = requerido("telefono", "El celular");
       perfil.ci = ciNuevo;
       perfil.sexo = sexo;
