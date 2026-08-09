@@ -17,10 +17,29 @@ const rutaComprobante = (archivo?: Express.Multer.File) => (archivo as (Express.
 async function recalcular(cuotaId: string) { const cuota = await Cuota.findById(cuotaId); if (!cuota) return; const pagos = await DetalleCuota.aggregate([{ $match: { cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null } }, { $group: { _id: null, total: { $sum: "$monto" } } }]); cuota.montoPagado = pagos[0]?.total ?? 0; await cuota.save(); await promoverAFraternoSiCorresponde(cuotaId); }
 async function cuotaPerteneceAlUsuario(cuotaId: string, usuarioId: unknown) { const cuota = await Cuota.findOne({ _id: cuotaId, fechaEliminado: null }).populate<{ preregistroId: { usuarioId: { toString(): string } } }>("preregistroId", "usuarioId"); return cuota && String(cuota.preregistroId.usuarioId) === String(usuarioId); }
 const redondear = (valor: number) => Number(valor.toFixed(2));
-const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: number, pagosVerificados: number) => {
-  if (numeroCuotas <= 1 || pagosVerificados >= numeroCuotas - 1) return redondear(saldo);
-  return Math.min(redondear(montoTotal / numeroCuotas), redondear(saldo));
+const distribucionPlan = (montoTotal: number, numeroCuotas: number) => {
+  const total = redondear(montoTotal);
+  if (numeroCuotas === 1) return [total];
+  if (numeroCuotas === 2) {
+    const primera = redondear(total / 2);
+    return [primera, redondear(total - primera)];
+  }
+  const primera = Math.min(300, total);
+  const segunda = redondear((total - primera) / 2);
+  return [primera, segunda, redondear(total - primera - segunda)];
 };
+const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: number, pagosVerificados: number) => {
+  const importes = distribucionPlan(montoTotal, numeroCuotas);
+  return Math.min(importes[pagosVerificados] ?? redondear(saldo), redondear(saldo));
+};
+
+async function pasarAListaEspera(cuota: InstanceType<typeof Cuota>, observacion = "Plazo vencido sin pago de primera cuota verificado") {
+  if (!cuota.cupoLiberado) cuota.fechaLiberacionCupo = new Date();
+  cuota.cupoLiberado = true;
+  cuota.estado = "VENCIDA";
+  await cuota.save();
+  await Preregistro.updateOne({ _id: cuota.preregistroId }, { $set: { estado: "LISTA_ESPERA", aprobado: false, observacion } });
+}
 
 async function asegurarCuotaPostulante(usuarioId: unknown) {
   const preregistro = await Preregistro.findOne({ usuarioId, estado: "APROBADO", aprobado: true, fechaEliminado: null })
@@ -67,13 +86,13 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
   const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).sort({ fechaPago: -1 });
   const tienePrimerPagoValido = pagos.some((p) => p.estadoRevision === "VERIFICADO");
   const tienePagoEnRevision = pagos.some((p) => p.estadoRevision === "PENDIENTE");
-  let listaEspera = false;
+  let listaEspera = cuota.cupoLiberado || preregistros.some((p) => p.estado === "LISTA_ESPERA");
   if (!tienePrimerPagoValido && !tienePagoEnRevision && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) {
-    cuota.estado = "VENCIDA"; await cuota.save();
-    await Preregistro.updateOne({ _id: cuota.preregistroId }, { $set: { estado: "LISTA_ESPERA", aprobado: false, observacion: "Plazo vencido sin pago de primera cuota verificado" } });
+    await pasarAListaEspera(cuota);
     listaEspera = true;
   }
-  return res.json({ cuota, pagos, listaEspera });
+  const prorrogaActiva = listaEspera && Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento > new Date());
+  return res.json({ cuota, pagos, listaEspera, prorrogaActiva });
 };
 export const elegirPlanCuotas = async (req: Request, res: Response) => {
   const numeroCuotas = Number(req.body.numeroCuotas);
@@ -92,17 +111,38 @@ export const solicitarQrPago = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate<{ preregistroId: { numeroPreRegistro?: string; usuarioId?: { nombres?: string; apellidoPaterno?: string; ci?: string } } }>({ path: "preregistroId", select: "numeroPreRegistro usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno ci" } });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
   if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes solicitar un QR para una cuota ajena" });
-  const tipoQr = String(req.body.tipoQr ?? "").toUpperCase();
-  if (!["TOTAL", "PRIMERA", "SEGUNDA"].includes(tipoQr)) return res.status(400).json({ error: "Tipo de QR inválido" });
+  const numeroCuotas = Number(req.body.numeroCuotas || cuota.numeroCuotasElegidas);
+  const numeroPago = Number(req.body.numeroPago);
+  if (![1, 2, 3].includes(numeroCuotas) || numeroPago < 1 || numeroPago > numeroCuotas) return res.status(400).json({ error: "Plan o número de pago inválido" });
   const roles = await Rol.find({ $or: [{ codigo: { $in: ["ADMINISTRADOR", "COORDINADOR", "CORDINADOR"] } }, { nombre: { $in: [/^administrador$/i, /^coordinador$/i, /^cordinador$/i] } }], estado: true, fechaEliminado: null }).select("_id");
   const destinatarios = await PerfilUsuario.find({ roles: { $in: roles.map((rol) => rol._id) }, estado: "ACTIVO", fechaEliminado: null }).select("_id");
   const usuario = cuota.preregistroId?.usuarioId;
   const nombre = [usuario?.nombres, usuario?.apellidoPaterno].filter(Boolean).join(" ") || "Un usuario";
   const titulo = "Solicitud de QR de pago";
-  const mensaje = `${nombre}${usuario?.ci ? ` (CI ${usuario.ci})` : ""} necesita el QR ${tipoQr.toLowerCase()} para su cuota de Bs ${cuota.montoTotal.toFixed(2)}.`;
+  const mensaje = `${nombre}${usuario?.ci ? ` (CI ${usuario.ci})` : ""} necesita el QR de la cuota ${numeroPago} de su plan de ${numeroCuotas} pago(s), tarifa ${cuota.tipoOrigenTarifa ?? "sin clasificar"}.`;
   await Notificacion.insertMany(destinatarios.map((destinatario) => ({ usuarioId: destinatario._id, titulo, mensaje, tipo: "ADVERTENCIA", enlace: "/tokens-registro" })), { ordered: false });
   await registrarAuditoria(req, { accion: "SOLICITAR_QR", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: mensaje });
   return res.json({ message: destinatarios.length ? "Administración recibió tu solicitud de QR" : "La solicitud quedó registrada; no hay administradores activos para notificar" });
+};
+export const prorrogarPrimeraCuota = async (req: Request, res: Response) => {
+  const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
+  if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
+  if (cuota.montoPagado > 0 || await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null })) {
+    return res.status(409).json({ error: "La prórroga solo corresponde a usuarios que todavía no aprobaron su primera cuota" });
+  }
+  const horas = Number(req.body.horas);
+  const motivo = String(req.body.motivo ?? "").trim();
+  await pasarAListaEspera(cuota, `Cupo liberado. Prórroga administrativa de ${horas} horas: ${motivo}`);
+  cuota.fechaVencimiento = new Date(Date.now() + horas * 3600000);
+  cuota.fechaProrroga = new Date();
+  cuota.horasProrrogaAcumuladas = (cuota.horasProrrogaAcumuladas || 0) + horas;
+  cuota.motivoProrroga = motivo;
+  cuota.usuarioProrroga = req.usuario?._id;
+  await cuota.save();
+  const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
+  if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Nuevo plazo para pagar", mensaje: `Administración habilitó ${horas} horas para que envíes tu primera cuota. Permaneces en lista de espera y este plazo no reserva un cupo.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" });
+  await registrarAuditoria(req, { accion: "PRORROGAR_PRIMERA_CUOTA", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `Se habilitó una prórroga de ${horas} horas sin restaurar el cupo. Motivo: ${motivo}` });
+  return res.json({ message: `Nuevo plazo de ${horas} horas habilitado; el usuario continúa en lista de espera`, cuota });
 };
 export const detalleCuota = async (req: Request, res: Response) => { const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate(poblar); if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" }); if (!esAdministrador(req) && !(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes consultar una cuota que no te pertenece" }); const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).populate("usuarioRevisor", "nombres apellidoPaterno").sort({ fechaPago: -1 }); return res.json({ cuota, pagos }); };
 export const registrarPago = async (req: Request, res: Response) => {
@@ -121,7 +161,7 @@ export const registrarPago = async (req: Request, res: Response) => {
       if (!aceptacion) { if (req.file) await fs.unlink(req.file.path).catch(() => undefined); return res.status(409).json({ error: "Debes aceptar los términos y condiciones antes de registrar el pago" }); }
     }
 
-    if (cuota.montoPagado <= 0 && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) { await Preregistro.updateOne({ _id: cuota.preregistroId }, { $set: { estado: "LISTA_ESPERA", aprobado: false, observacion: "Plazo vencido sin pago verificado" } }); if (req.file) await fs.unlink(req.file.path).catch(() => undefined); return res.status(409).json({ error: "Tu plazo venció y pasaste a lista de espera" }); }
+    if (cuota.montoPagado <= 0 && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) { await pasarAListaEspera(cuota, "Plazo vencido sin pago verificado"); if (req.file) await fs.unlink(req.file.path).catch(() => undefined); return res.status(409).json({ error: "Tu plazo venció y pasaste a lista de espera" }); }
     const montoSolicitado = Number(req.body.monto);
     const pagoPendiente = await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "PENDIENTE", fechaEliminado: null });
     if (pagoPendiente) return res.status(409).json({ error: "Ya existe un pago pendiente de revisión" });

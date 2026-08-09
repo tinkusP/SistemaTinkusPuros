@@ -6,6 +6,10 @@ export interface ConfiguracionPagoType extends Document {
   qrPagoTotal?: string;
   qrPrimeraCuota?: string;
   qrSegundaCuota?: string;
+  qrPlanes?: {
+    INTERNO?: Partial<Record<"1" | "2" | "3", string[]>>;
+    EXTERNO?: Partial<Record<"1" | "2" | "3", string[]>>;
+  };
   tarifaInterno: number;
   tarifaExterno: number;
   primeraCuota: number;
@@ -25,6 +29,7 @@ const schema = new Schema<ConfiguracionPagoType>({
   qrPagoTotal: String,
   qrPrimeraCuota: String,
   qrSegundaCuota: String,
+  qrPlanes: { type: Schema.Types.Mixed, default: {} },
   tarifaInterno: { type: Number, min: .01, default: 770 },
   tarifaExterno: { type: Number, min: .01, default: 850 },
   primeraCuota: { type: Number, min: .01, default: 300 },
