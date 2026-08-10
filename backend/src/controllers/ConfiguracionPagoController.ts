@@ -87,7 +87,7 @@ export async function aceptarTerminos(req: Request, res: Response) {
   config = await actualizarTerminosBase(config);
   const aceptacion = await Aceptacion.findOneAndUpdate(
     { usuarioId: req.usuario?._id, gestionId, versionTerminos: config.versionTerminos },
-    { $setOnInsert: { fechaAceptacion: new Date(), ip: req.ip } },
+    { $setOnInsert: { fechaAceptacion: new Date(), ip: req.ip, userAgent: req.get("user-agent"), contenidoTerminos: config.terminos } },
     { upsert: true, new: true },
   );
   const preregistro = await Preregistro.findOne({ usuarioId: req.usuario?._id, gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
