@@ -5,6 +5,8 @@ import Cuota from "../models/Cuota";
 import DetalleCuota from "../models/DetalleCuota";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import AceptacionTerminosPago from "../models/AceptacionTerminosPago";
+import Preregistro from "../models/Preregistro";
+import { registrarAuditoria } from "../services/AuditoriaService";
 
 const poblar = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email fotoPerfil" },
@@ -48,6 +50,20 @@ export async function listarFraternos(_req: Request, res: Response) {
     };
   }));
   res.json({ fraternos: enriquecidos });
+}
+
+export async function enviarAListaEspera(req: Request, res: Response) {
+  const motivo = String(req.body.motivo ?? "").trim();
+  if (motivo.length < 3 || motivo.length > 500) return res.status(400).json({ error: "Debe indicar un motivo válido" });
+  const fraterno = await Fraterno.findOne({ _id: req.params.id, fechaEliminado: null });
+  if (!fraterno) return res.status(404).json({ error: "Fraterno no encontrado" });
+  if (fraterno.estado === "LISTA_ESPERA") return res.status(409).json({ error: "El fraterno ya está en lista de espera" });
+  const estadoAnterior = fraterno.estado;
+  fraterno.estado = "LISTA_ESPERA"; fraterno.fechaEditado = new Date(); fraterno.usuarioEditor = req.usuario?._id; await fraterno.save();
+  const cuota = await Cuota.findOneAndUpdate({ preregistroId: fraterno.preregistroId, fechaEliminado: null }, { $set: { cupoLiberado: true, fechaLiberacionCupo: new Date(), observacion: `Cupo liberado por lista de espera: ${motivo}`, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } }, { new: true });
+  await Preregistro.findByIdAndUpdate(fraterno.preregistroId, { $set: { estado: "LISTA_ESPERA", aprobado: false, observacion: motivo, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } });
+  await registrarAuditoria(req, { accion: "MOVER_LISTA_ESPERA", modulo: "FRATERNOS", entidad: "Fraterno", entidadId: fraterno._id, descripcion: `${fraterno.numeroFraterno} pasó de ${estadoAnterior} a LISTA_ESPERA. Motivo: ${motivo}`, datosAntes: { estado: estadoAnterior }, datosDespues: { estado: fraterno.estado, ocupaCupo: false, cuotaId: cuota?._id } });
+  return res.json({ message: "Fraterno enviado a lista de espera y cupo liberado", fraterno });
 }
 
 export async function miFraternidad(req: Request, res: Response) {
