@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { aceptarTerminosPago, miConfiguracionPago, type ConfigPago } from "@/api/ConfiguracionPagoApi";
-import { elegirPlanCuotas, obtenerMiCuota, registrarPago, solicitarQrPago } from "@/api/CuotaApi";
+import { elegirPlanCuotas, obtenerMiCuota, registrarPago, solicitarProrrogaPago, solicitarQrPago } from "@/api/CuotaApi";
 import { fechaActualBoliviaParaInput, formatearFechaCivilCorta } from "@/utils/fechaCivil";
 
 const API = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
@@ -47,6 +47,7 @@ export default function MisPagosView() {
     onSuccess: async (actualizada) => {
       toast.success(`Elegiste pagar en ${actualizada.numeroCuotasElegidas} cuota(s)`);
       await qc.invalidateQueries({ queryKey: ["mi-cuota"] });
+      await qc.invalidateQueries({ queryKey: ["mi-configuracion-pago"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -59,6 +60,7 @@ export default function MisPagosView() {
       toast.success(respuesta.message);
       setModalTerminos(false);
       await qc.invalidateQueries({ queryKey: ["mi-configuracion-pago"] });
+      await qc.invalidateQueries({ queryKey: ["mi-cuota"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -68,6 +70,7 @@ export default function MisPagosView() {
       toast.success("Comprobante enviado. Administración revisará el pago.");
       setForm(formInicial());
       await qc.invalidateQueries({ queryKey: ["mi-cuota"] });
+      await qc.invalidateQueries({ queryKey: ["mi-configuracion-pago"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -79,6 +82,7 @@ export default function MisPagosView() {
     onSuccess: (respuesta) => toast.success(respuesta.message),
     onError: (error: Error) => toast.error(error.message),
   });
+  const solicitarProrroga = useMutation({ mutationFn: () => solicitarProrrogaPago(cuota!._id), onSuccess: (respuesta) => toast.success(respuesta.message), onError: (error: Error) => toast.error(error.message) });
 
   if (q.isLoading) return <div className="min-h-screen bg-[#eee8dc] p-8 text-center">Cargando tu cuota...</div>;
   if (!q.data || !cuota) return <Mensaje titulo="Todavía no tienes una cuota asignada" texto="Tu preregistro debe estar aprobado y administración debe configurar las tarifas de la gestión." />;
@@ -91,14 +95,14 @@ export default function MisPagosView() {
     <header className="rounded-3xl bg-[#74122A] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[.25em] text-[#e9cf91]">Tinkus Puros · Estado financiero</p><h1 className="mt-2 text-3xl font-black">Mi cuota</h1><div className="mt-5 grid gap-3 sm:grid-cols-3"><Resumen titulo="Total" valor={cuota.montoTotal}/><Resumen titulo="Pagado verificado" valor={cuota.montoPagado}/><Resumen titulo="Saldo" valor={cuota.saldo}/></div><Link to="/comunicados" className="mt-5 inline-block text-sm font-bold">← Volver a comunicados</Link></header>
     {q.data.listaEspera && q.data.prorrogaActiva ? <div className="rounded-xl border border-red-300 bg-red-50 p-4 font-bold text-red-800">Administración te dio un nuevo plazo para pagar, pero tu cupo ya fue liberado y permaneces en lista de espera. El pago no recupera automáticamente el cupo.</div> : null}
     {cuota.saldo > 0 ? <div className="rounded-xl border border-orange-300 bg-orange-50 p-4 text-orange-900"><strong>Indumentaria pendiente:</strong> debes completar el pago total para recibir la polera de preentrada y la chamarra. Saldo actual: Bs {cuota.saldo.toFixed(2)}.</div> : <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 font-bold text-emerald-800">Pago total completado. Ya cumples el requisito económico para recibir la polera y chamarra.</div>}
-    {q.data.pagoSiguienteVencido ? <div className="rounded-xl border border-red-300 bg-red-50 p-4 font-bold text-red-800">El plazo estimado de tu siguiente cuota venció. Realiza el pago cuanto antes o comunícate con administración.</div> : null}
+    {q.data.plazoVencido ? <section className="rounded-2xl border border-red-300 bg-red-50 p-5 text-center text-red-900"><h2 className="text-xl font-black">Tu plazo de pago terminó</h2><p className="mt-2">Por seguridad ya no puedes ver el QR ni subir un comprobante. No realices transferencias con capturas antiguas: solicita una habilitación o acércate a administración.</p><button type="button" onClick={() => solicitarProrroga.mutate()} disabled={solicitarProrroga.isPending} className="mt-4 rounded-xl bg-[#74122A] px-6 py-3 font-bold text-white disabled:opacity-50">{solicitarProrroga.isPending ? "Enviando solicitud..." : "Solicitar nuevo plazo"}</button></section> : null}
     <PagoLimite limite={limite} horas={horasRestantes} monto={montoActual} saldo={cuota.saldo}/>
-    <PlanCuotas total={cuota.montoTotal} seleccionado={numeroCuotas} bloqueado={pagoPendiente || pagosVerificados > 0} guardando={plan.isPending} elegir={(cantidad) => plan.mutate(cantidad)}/>
+    {pagosVerificados > 0 && numeroCuotas ? <section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="text-xl font-black text-[#74122A]">Plan confirmado: {numeroCuotas} cuota{numeroCuotas > 1 ? "s" : ""}</h2><p className="mt-1 text-slate-600">Ya no puedes cambiar de plan. Corresponde únicamente la cuota {numeroPagoActual} de {numeroCuotas}.</p></section> : <PlanCuotas total={cuota.montoTotal} seleccionado={numeroCuotas} bloqueado={pagoPendiente} guardando={plan.isPending} elegir={(cantidad) => plan.mutate(cantidad)}/>}
     {pagosVerificados > 0 && cuota.saldo > 0 && !habilitarSiguientePago ? <section className="rounded-2xl border border-blue-300 bg-blue-50 p-5 text-center"><h2 className="text-xl font-black text-[#74122A]">Tu siguiente cuota está disponible</h2><p className="mt-2 text-blue-900">Cuota {numeroPagoActual} de {numeroCuotas}. Cuando estés listo, habilita el QR correspondiente.</p><button type="button" onClick={() => setHabilitarSiguientePago(true)} className="mt-4 rounded-xl bg-[#74122A] px-6 py-3 font-bold text-white">Quiero pagar la siguiente cuota</button></section> : null}
-    {habilitarSiguientePago || cuota.saldo <= 0 ? <QrPago configuracion={configuracion} aceptados={aceptados} ruta={rutaQr} numeroCuotas={numeroCuotas} numeroPago={numeroPagoActual} monto={montoActual} abrirTerminos={() => setModalTerminos(true)} modal={modalTerminos} cerrar={() => setModalTerminos(false)} aceptar={() => aceptar.mutate()} procesando={aceptar.isPending} solicitar={() => solicitarQr.mutate()} solicitando={solicitarQr.isPending}/> : null}
+    {!q.data.plazoVencido && (habilitarSiguientePago || cuota.saldo <= 0) ? <QrPago configuracion={configuracion} aceptados={aceptados} ruta={rutaQr} numeroCuotas={numeroCuotas} numeroPago={numeroPagoActual} monto={montoActual} abrirTerminos={() => setModalTerminos(true)} modal={modalTerminos} cerrar={() => setModalTerminos(false)} aceptar={() => aceptar.mutate()} procesando={aceptar.isPending} solicitar={() => solicitarQr.mutate()} solicitando={solicitarQr.isPending}/> : null}
     {!aceptados && cuota.saldo > 0 && <p className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center font-bold text-amber-900">Acepta los términos y condiciones para habilitar el QR y el formulario de pago.</p>}
     {aceptados && cuota.saldo > 0 && pagoPendiente && <p className="rounded-2xl border border-blue-300 bg-blue-50 p-5 text-center font-bold text-blue-900">Tu comprobante está en revisión. Podrás registrar el siguiente pago cuando administración lo revise.</p>}
-    {habilitarSiguientePago && aceptados && numeroCuotas && rutaQr && cuota.saldo > 0 && !pagoPendiente && <form onSubmit={(evento) => { evento.preventDefault(); pagar.mutate(); }} className="grid gap-4 rounded-2xl bg-white p-5 shadow-sm sm:grid-cols-2">
+    {!q.data.plazoVencido && habilitarSiguientePago && aceptados && numeroCuotas && rutaQr && cuota.saldo > 0 && !pagoPendiente && <form onSubmit={(evento) => { evento.preventDefault(); pagar.mutate(); }} className="grid gap-4 rounded-2xl bg-white p-5 shadow-sm sm:grid-cols-2">
       <div className="sm:col-span-2"><h2 className="text-xl font-black text-[#74122A]">Registrar pago de la cuota</h2><p className="text-sm text-slate-500">Este pago corresponde a la cuota {Math.min(pagosVerificados + 1, numeroCuotas)} de {numeroCuotas}.</p></div>
       <label><Titulo>Monto calculado</Titulo><input readOnly value={`Bs ${form.monto.toFixed(2)}`} className="input-preregistro bg-slate-100"/></label>
       <label><Titulo>Medio de pago</Titulo><input readOnly value="QR o depósito" className="input-preregistro bg-slate-100"/></label>

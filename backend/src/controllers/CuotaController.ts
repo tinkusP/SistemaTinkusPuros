@@ -10,6 +10,7 @@ import Rol from "../models/Rol";
 import Notificacion from "../models/Notificacion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
+import Fraterno from "../models/Fraterno";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }] };
 const esAdministrador = (req: Request) => (req.usuario?.roles as unknown as { codigo?: string; nombre?: string }[] | undefined)?.some((r) => [r.codigo, r.nombre].some((v) => String(v ?? "").toUpperCase() === "ADMINISTRADOR")) ?? false;
@@ -51,11 +52,13 @@ const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: numbe
 };
 
 async function pasarAListaEspera(cuota: InstanceType<typeof Cuota>, observacion = "Plazo vencido sin pago de primera cuota verificado") {
+  if (await Fraterno.exists({ preregistroId: cuota.preregistroId, fechaEliminado: null })) return false;
   if (!cuota.cupoLiberado) cuota.fechaLiberacionCupo = new Date();
   cuota.cupoLiberado = true;
   cuota.estado = "VENCIDA";
   await cuota.save();
   await Preregistro.updateOne({ _id: cuota.preregistroId }, { $set: { estado: "LISTA_ESPERA", aprobado: false, observacion } });
+  return true;
 }
 
 async function asegurarCuotaPostulante(usuarioId: unknown) {
@@ -71,7 +74,6 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
   if (!usuario || !configuracion) return null;
   const esExterno = ["EXTERNO", "EXTERNO_UMSA", "EXTERNO_NO_UMSA"].includes(String(usuario.tipoOrigen));
   const montoTotal = esExterno ? configuracion.tarifaExterno : configuracion.tarifaInterno;
-  const plazoHoras = configuracion.plazoPrimeraCuotaHoras || 72;
   try {
     return await Cuota.create({
       preregistroId: preregistro._id,
@@ -81,8 +83,7 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
       primeraCuotaMonto: Math.min(configuracion.primeraCuota || 300, montoTotal),
       montoPagado: 0,
       saldo: montoTotal,
-      fechaVencimiento: new Date(Date.now() + plazoHoras * 60 * 60 * 1000),
-      observacion: `Cuota habilitada para cuenta anterior. Plazo inicial: ${plazoHoras} horas.`,
+      observacion: "Cuota habilitada. El plazo comenzará al aceptar los términos y condiciones.",
     });
   } catch (error) {
     if ((error as { code?: number }).code === 11000) return Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null });
@@ -109,8 +110,10 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
     listaEspera = true;
   }
   const prorrogaActiva = listaEspera && Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento > new Date());
-  const pagoSiguienteVencido = tienePrimerPagoValido && cuota.saldo > 0 && Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento < new Date());
-  return res.json({ cuota, pagos, listaEspera, prorrogaActiva, pagoSiguienteVencido });
+  const plazoVencido = Boolean(cuota.fechaVencimiento && cuota.fechaVencimiento < new Date());
+  const pagoSiguienteVencido = tienePrimerPagoValido && cuota.saldo > 0 && plazoVencido;
+  const pagoHabilitado = cuota.saldo > 0 && Boolean(cuota.fechaInicioPlazo) && !plazoVencido && !tienePagoEnRevision;
+  return res.json({ cuota, pagos, listaEspera, prorrogaActiva, pagoSiguienteVencido, plazoVencido, pagoHabilitado, numeroPagoActual: pagos.filter((p) => p.estadoRevision === "VERIFICADO").length + 1 });
 };
 export const elegirPlanCuotas = async (req: Request, res: Response) => {
   const numeroCuotas = Number(req.body.numeroCuotas);
@@ -142,27 +145,60 @@ export const solicitarQrPago = async (req: Request, res: Response) => {
   await registrarAuditoria(req, { accion: "SOLICITAR_QR", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: mensaje });
   return res.json({ message: destinatarios.length ? "Administración recibió tu solicitud de QR" : "La solicitud quedó registrada; no hay administradores activos para notificar" });
 };
+export const solicitarProrrogaPago = async (req: Request, res: Response) => {
+  const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, saldo: { $gt: 0 } }).populate<{ preregistroId: { usuarioId?: { nombres?: string; apellidoPaterno?: string; ci?: string } } }>({ path: "preregistroId", select: "usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno ci" } });
+  if (!cuota) return res.status(404).json({ error: "Cuota pendiente no encontrada" });
+  if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes solicitar plazo para una cuota ajena" });
+  if (!cuota.fechaVencimiento || cuota.fechaVencimiento >= new Date()) return res.status(409).json({ error: "Tu plazo todavía está vigente" });
+  cuota.fechaSolicitudProrroga = new Date(); await cuota.save();
+  const roles = await Rol.find({ codigo: { $in: ["ADMINISTRADOR", "COORDINADOR", "CORDINADOR"] }, estado: true, fechaEliminado: null }).select("_id");
+  const destinatarios = await PerfilUsuario.find({ roles: { $in: roles.map((r) => r._id) }, estado: "ACTIVO", fechaEliminado: null }).select("_id");
+  const usuario = cuota.preregistroId.usuarioId; const nombre = [usuario?.nombres, usuario?.apellidoPaterno].filter(Boolean).join(" ") || "Un usuario";
+  await Notificacion.insertMany(destinatarios.map((d) => ({ usuarioId: d._id, titulo: "Solicitud de nuevo plazo", mensaje: `${nombre}${usuario?.ci ? ` (CI ${usuario.ci})` : ""} solicita habilitación para continuar pagando su cuota.`, tipo: "ADVERTENCIA", enlace: `/cuotas/${cuota._id}` })), { ordered: false });
+  return res.json({ message: "Administración recibió tu solicitud de un nuevo plazo" });
+};
 export const prorrogarPrimeraCuota = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
-  if (cuota.montoPagado > 0 || await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null })) {
-    return res.status(409).json({ error: "La prórroga solo corresponde a usuarios que todavía no aprobaron su primera cuota" });
-  }
+  const tienePrimerPago = Boolean(cuota.montoPagado > 0 || await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }));
   const horas = Number(req.body.horas);
   const motivo = String(req.body.motivo ?? "").trim();
-  await pasarAListaEspera(cuota, `Cupo liberado. Prórroga administrativa de ${horas} horas: ${motivo}`);
+  if (!tienePrimerPago) await pasarAListaEspera(cuota, `Cupo liberado. Prórroga administrativa de ${horas} horas: ${motivo}`);
   cuota.fechaVencimiento = new Date(Date.now() + horas * 3600000);
+  cuota.fechaInicioPlazo = new Date();
   cuota.fechaProrroga = new Date();
   cuota.horasProrrogaAcumuladas = (cuota.horasProrrogaAcumuladas || 0) + horas;
   cuota.motivoProrroga = motivo;
   cuota.usuarioProrroga = req.usuario?._id;
   await cuota.save();
   const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
-  if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Nuevo plazo para pagar", mensaje: `Administración habilitó ${horas} horas para que envíes tu primera cuota. Permaneces en lista de espera y este plazo no reserva un cupo.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" });
+  if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Nuevo plazo para pagar", mensaje: tienePrimerPago ? `Administración habilitó ${horas} horas para que pagues tu siguiente cuota. Tu cupo como fraterno permanece protegido.` : `Administración habilitó ${horas} horas para tu primera cuota. Permaneces en lista de espera y este plazo no reserva un cupo.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" });
   await registrarAuditoria(req, { accion: "PRORROGAR_PRIMERA_CUOTA", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `Se habilitó una prórroga de ${horas} horas sin restaurar el cupo. Motivo: ${motivo}` });
-  return res.json({ message: `Nuevo plazo de ${horas} horas habilitado; el usuario continúa en lista de espera`, cuota });
+  return res.json({ message: tienePrimerPago ? `Siguiente cuota habilitada por ${horas} horas` : `Nuevo plazo de ${horas} horas habilitado; el usuario continúa en lista de espera`, cuota });
+};
+export const prorrogarCuotasVencidas = async (req: Request, res: Response) => {
+  const horas = Number(req.body.horas); const motivo = String(req.body.motivo ?? "").trim(); const ahora = new Date();
+  const cuotas = await Cuota.find({ saldo: { $gt: 0 }, fechaVencimiento: { $lt: ahora }, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
+  for (const cuota of cuotas) {
+    const tienePrimerPago = await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
+    if (!tienePrimerPago) await pasarAListaEspera(cuota, `Cupo liberado. Habilitación general de ${horas} horas: ${motivo}`);
+    cuota.fechaInicioPlazo = ahora; cuota.fechaVencimiento = new Date(ahora.getTime() + horas * 3600000); cuota.fechaProrroga = ahora; cuota.horasProrrogaAcumuladas = (cuota.horasProrrogaAcumuladas || 0) + horas; cuota.motivoProrroga = motivo; cuota.usuarioProrroga = req.usuario?._id; await cuota.save();
+    const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
+    if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Plazo general de pago habilitado", mensaje: `Administración habilitó ${horas} horas para registrar tu próximo pago.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" });
+  }
+  await registrarAuditoria(req, { accion: "PRORROGA_MASIVA", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se ampliaron ${cuotas.length} cuotas vencidas por ${horas} horas. Motivo: ${motivo}` });
+  return res.json({ message: `${cuotas.length} cuenta(s) vencida(s) fueron habilitadas`, actualizadas: cuotas.length });
 };
 export const detalleCuota = async (req: Request, res: Response) => { const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate(poblar); if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" }); if (!esAdministrador(req) && !(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes consultar una cuota que no te pertenece" }); const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).populate("usuarioRevisor", "nombres apellidoPaterno").sort({ fechaPago: -1 }); return res.json({ cuota, pagos }); };
+export const validarPlazoAntesDeSubir = async (req: Request, res: Response, next: () => void) => {
+  if (esAdministrador(req)) return next();
+  const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null });
+  if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
+  if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes registrar pagos en una cuota ajena" });
+  if (!cuota.fechaInicioPlazo || !cuota.fechaVencimiento) return res.status(409).json({ error: "Acepta los términos y condiciones para iniciar tu plazo de pago" });
+  if (cuota.fechaVencimiento < new Date()) return res.status(409).json({ error: "El plazo venció. El QR y la carga de comprobantes están bloqueados hasta que administración te habilite nuevamente." });
+  return next();
+};
 export const registrarPago = async (req: Request, res: Response) => {
   try {
     const metodoPago = String(req.body.metodoPago ?? "").toUpperCase();
@@ -179,7 +215,8 @@ export const registrarPago = async (req: Request, res: Response) => {
       if (!aceptacion) { if (req.file) await fs.unlink(req.file.path).catch(() => undefined); return res.status(409).json({ error: "Debes aceptar los términos y condiciones antes de registrar el pago" }); }
     }
 
-    if (cuota.montoPagado <= 0 && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) { await pasarAListaEspera(cuota, "Plazo vencido sin pago verificado"); if (req.file) await fs.unlink(req.file.path).catch(() => undefined); return res.status(409).json({ error: "Tu plazo venció y pasaste a lista de espera" }); }
+    if (!esAdministrador(req) && (!cuota.fechaInicioPlazo || !cuota.fechaVencimiento)) return res.status(409).json({ error: "Acepta los términos y condiciones para iniciar tu plazo de pago" });
+    if (!esAdministrador(req) && cuota.fechaVencimiento! < new Date()) { if (cuota.montoPagado <= 0) await pasarAListaEspera(cuota, "Plazo vencido sin pago verificado"); return res.status(409).json({ error: cuota.montoPagado > 0 ? "El plazo de esta cuota venció. Solicita a administración una nueva habilitación antes de pagar." : "Tu plazo venció y pasaste a lista de espera. Solicita un nuevo plazo a administración." }); }
     const montoSolicitado = Number(req.body.monto);
     const pagoPendiente = await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "PENDIENTE", fechaEliminado: null });
     if (pagoPendiente) return res.status(409).json({ error: "Ya existe un pago pendiente de revisión" });

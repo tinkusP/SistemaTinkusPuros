@@ -11,9 +11,11 @@ export interface CuotaType extends Document {
   saldo: number;
   estado: EstadoCuota;
   fechaVencimiento?: Date;
+  fechaInicioPlazo?: Date;
   cupoLiberado: boolean;
   fechaLiberacionCupo?: Date;
   fechaProrroga?: Date;
+  fechaSolicitudProrroga?: Date;
   horasProrrogaAcumuladas: number;
   motivoProrroga?: string;
   usuarioProrroga?: mongoose.Types.ObjectId;
@@ -36,9 +38,11 @@ const schema = new Schema<CuotaType>({
   saldo: { type: Number, min: 0, required: true },
   estado: { type: String, enum: ["PENDIENTE", "PAGO_PARCIAL", "PAGADA", "VENCIDA", "CANCELADA"], default: "PENDIENTE" },
   fechaVencimiento: Date,
+  fechaInicioPlazo: Date,
   cupoLiberado: { type: Boolean, default: false },
   fechaLiberacionCupo: Date,
   fechaProrroga: Date,
+  fechaSolicitudProrroga: Date,
   horasProrrogaAcumuladas: { type: Number, min: 0, default: 0 },
   motivoProrroga: { type: String, trim: true, maxlength: 500 },
   usuarioProrroga: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },

@@ -3,7 +3,7 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarQrPago } from "../controllers/CuotaController";
+import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
 import type { NextFunction, Request, Response } from "express";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 const router = Router(); const id = param("id").isMongoId();
@@ -34,6 +34,7 @@ router.get("/", authenticate, soloAdministracion, listarCuotas);
  *       200: { description: Resumen de cuotas creadas y existentes }
  */
 router.post("/habilitar-masivo", authenticate, soloAdministracion, body("tarifaInterno").optional().isFloat({ min: 0.01 }).toFloat(), body("tarifaExterno").optional().isFloat({ min: 0.01 }).toFloat(), body("fechaVencimiento").optional({ checkFalsy: true }).isISO8601(), handleInputErrors, habilitarCuotasMasivas);
+router.patch("/prorroga/vencidas", authenticate, soloAdministracion, body("horas").isInt({ min: 1, max: 8760 }).toInt(), body("motivo").trim().isLength({ min: 3, max: 500 }), handleInputErrors, prorrogarCuotasVencidas);
 router.post("/", authenticate, soloAdministracion, body("preregistroId").isMongoId(), body("montoTotal").isFloat({ min: 0.01 }).toFloat(), body("fechaVencimiento").optional({ checkFalsy: true }).isISO8601(), handleInputErrors, crearCuota);
 router.get("/mia", authenticate, obtenerMiCuota);
 /** @openapi
@@ -43,6 +44,7 @@ router.get("/mia", authenticate, obtenerMiCuota);
 router.get("/:id", authenticate, id, handleInputErrors, detalleCuota);
 router.patch("/:id/plan", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, elegirPlanCuotas);
 router.post("/:id/solicitar-qr", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), body("numeroPago").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, solicitarQrPago);
+router.post("/:id/solicitar-prorroga", authenticate, id, handleInputErrors, solicitarProrrogaPago);
 router.patch("/:id/prorroga-primera-cuota", authenticate, soloAdministracion, id, body("horas").isInt({ min: 1, max: 8760 }).toInt(), body("motivo").trim().isLength({ min: 3, max: 500 }), handleInputErrors, prorrogarPrimeraCuota);
 /** @openapi
  * /api/cuotas/{id}/pagos:
@@ -53,7 +55,7 @@ router.patch("/:id/prorroga-primera-cuota", authenticate, soloAdministracion, id
  *     requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, required: [monto, nombrePagador, fechaPago, baucher], properties: { monto: { type: number }, nombrePagador: { type: string }, fechaPago: { type: string, format: date }, baucher: { type: string, format: binary } } } } } }
  *     responses: { 201: { description: Pendiente de revisión } }
  */
-router.post("/:id/pagos", authenticate, id, uploadBaucher.single("baucher"), convertirBaucherAWebp, body("monto").isFloat({ min: 0.01 }).toFloat(), body("metodoPago").equals("QR").withMessage("Los pagos de cuotas solo se registran mediante QR o depósito"), body("nombrePagador").trim().notEmpty().withMessage("Debe indicar a nombre de quién está el comprobante"), body("fechaPago").isISO8601(), handleInputErrors, registrarPago);
+router.post("/:id/pagos", authenticate, id, validarPlazoAntesDeSubir, uploadBaucher.single("baucher"), convertirBaucherAWebp, body("monto").isFloat({ min: 0.01 }).toFloat(), body("metodoPago").equals("QR").withMessage("Los pagos de cuotas solo se registran mediante QR o depósito"), body("nombrePagador").trim().notEmpty().withMessage("Debe indicar a nombre de quién está el comprobante"), body("fechaPago").isISO8601(), handleInputErrors, registrarPago);
 router.patch("/:id/pagos/:pagoId/revision", authenticate, soloAdministracion, id, param("pagoId").isMongoId(), uploadBaucher.single("respaldoAdmin"), convertirBaucherAWebp, body("estadoRevision").isIn(["PENDIENTE", "VERIFICADO", "OBSERVADO", "RECHAZADO"]), body("observacionRevision").optional().isLength({ max: 1000 }), handleInputErrors, revisarPago);
 router.delete("/:id/pagos/:pagoId", authenticate, soloAdministracion, id, param("pagoId").isMongoId(), handleInputErrors, eliminarPago);
 export default router;

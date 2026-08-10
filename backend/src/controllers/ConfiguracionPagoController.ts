@@ -4,7 +4,9 @@ import fs from "node:fs/promises";
 import sharp from "sharp";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import Aceptacion from "../models/AceptacionTerminosPago";
+import Cuota from "../models/Cuota";
 import Preregistro from "../models/Preregistro";
+import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
@@ -47,6 +49,22 @@ export async function obtenerConfiguracion(req: Request, res: Response) {
     objeto.qrPrimeraCuota = undefined;
     objeto.qrSegundaCuota = undefined;
     objeto.qrPlanes = undefined;
+  } else {
+    const preregistro = await Preregistro.findOne({ usuarioId: req.usuario?._id, gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
+    const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }) : null;
+    if (cuota && !cuota.fechaInicioPlazo && cuota.saldo > 0) {
+      cuota.fechaInicioPlazo = new Date();
+      cuota.fechaVencimiento = new Date(Date.now() + (config.plazoPrimeraCuotaHoras || 72) * 3600000);
+      await cuota.save();
+    }
+    const vencida = Boolean(cuota?.fechaVencimiento && cuota.fechaVencimiento < new Date());
+    if (!cuota?.numeroCuotasElegidas || vencida || cuota.saldo <= 0) objeto.qrPlanes = undefined;
+    else {
+      const verificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
+      const origen = cuota.tipoOrigenTarifa || "INTERNO"; const plan = String(cuota.numeroCuotasElegidas) as Plan;
+      const actual = objeto.qrPlanes?.[origen]?.[plan]?.[verificados];
+      objeto.qrPlanes = actual ? { [origen]: { [plan]: Array.from({ length: verificados + 1 }, (_, i) => i === verificados ? actual : undefined) } } : {};
+    }
   }
   return res.json({ configuracion: objeto, terminosAceptados: Boolean(aceptada), aceptacion: aceptada });
 }
@@ -60,6 +78,17 @@ export async function aceptarTerminos(req: Request, res: Response) {
     { $setOnInsert: { fechaAceptacion: new Date(), ip: req.ip } },
     { upsert: true, new: true },
   );
+  const preregistro = await Preregistro.findOne({ usuarioId: req.usuario?._id, gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
+  if (preregistro) {
+    const cuota = await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null, saldo: { $gt: 0 } });
+    if (cuota && !cuota.fechaInicioPlazo) {
+      const inicio = aceptacion.fechaAceptacion || new Date();
+      cuota.fechaInicioPlazo = inicio;
+      cuota.fechaVencimiento = new Date(inicio.getTime() + (config.plazoPrimeraCuotaHoras || 72) * 3600000);
+      cuota.observacion = `${cuota.observacion ?? ""} Plazo iniciado al aceptar términos.`.trim();
+      await cuota.save();
+    }
+  }
   await registrarAuditoria(req, { accion: "ACEPTAR_TERMINOS", modulo: "CUOTAS", entidad: "AceptacionTerminosPago", entidadId: aceptacion._id, descripcion: `Se aceptaron términos de pago versión ${config.versionTerminos}` });
   return res.json({ message: "Términos y condiciones aceptados", aceptacion });
 }

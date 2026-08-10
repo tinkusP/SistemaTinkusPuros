@@ -3071,29 +3071,11 @@ static getPerfilUsuarioById = async (
           }
         }
 
-        // En las cuentas creadas mediante invitación, el plazo de pago
-        // empieza exactamente cuando administración da de alta al usuario.
-        const invitacion = await TokenRegistro.findOne({
-          utilizadoPor: perfil._id,
-          estado: "UTILIZADO",
-        }).sort({ fechaUtilizado: -1 });
-
-        if (invitacion?.cuotaId) {
-          const cuotaInvitacion = await Cuota.findById(invitacion.cuotaId);
-          if (cuotaInvitacion && !cuotaInvitacion.fechaVencimiento) {
-            const horas = invitacion.plazoPagoHoras || 72;
-            cuotaInvitacion.fechaVencimiento = new Date(Date.now() + horas * 60 * 60 * 1000);
-            cuotaInvitacion.observacion = `${cuotaInvitacion.observacion ?? ""} Cuenta dada de alta; plazo de pago iniciado.`.trim();
-            cuotaInvitacion.usuarioEditor = req.usuario?._id;
-            cuotaInvitacion.fechaEditado = new Date();
-            await cuotaInvitacion.save();
-          }
-        }
       }
 
       return res.status(200).json({
         message: req.body.estado === "ACTIVO"
-          ? "Perfil dado de alta correctamente. El usuario ya puede ingresar y comenzó su plazo de pago"
+          ? "Perfil dado de alta correctamente. El usuario ya puede ingresar; su plazo de pago comenzará cuando acepte los términos"
           : "Perfil usuario actualizado correctamente",
         perfil,
       });
