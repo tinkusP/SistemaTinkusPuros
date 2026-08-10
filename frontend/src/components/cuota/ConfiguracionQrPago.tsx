@@ -9,13 +9,27 @@ const planes = {
   EXTERNO: { "1": [850], "2": [425, 425], "3": [300, 275, 275] },
 } as const;
 const campoQr = (origen: OrigenPago, plan: PlanPago, indice: number) => `qr${origen === "INTERNO" ? "Interno" : "Externo"}${plan}Cuota${indice + 1}` as CampoQr;
+const TERMINOS_PREDETERMINADOS = `Al aceptar estos términos y condiciones, declaro que:
+
+1. Me comprometo a asistir regularmente a los ensayos y actividades de la Fraternidad.
+2. Me comprometo a no consumir bebidas alcohólicas durante los ensayos ni en las actividades en las que esté prohibido.
+3. Mantendré buena conducta y un trato respetuoso con los guías, la Directiva y los demás integrantes.
+4. Actuaré con respeto, puntualidad y tolerancia.
+5. La información y el comprobante que presente para cada pago serán verdaderos y podrán ser revisados por Administración.
+6. Si la Entrada Universitaria no se lleva a cabo, acepto que los gastos ya realizados por la Fraternidad sean descontados de las cuotas aportadas.
+7. El QR de pago es de uso personal e intransferible. Si lo comparto con una persona que no esté habilitada en el sistema o no esté autorizada para pagar, dicho pago será considerado una donación a la Fraternidad y no será imputado a mi cuota.`;
 
 export default function ConfiguracionQrPago() {
   const cliente = useQueryClient();
   const consulta = useQuery({ queryKey: ["configuracion-pago-admin"], queryFn: configuracionPagoAdmin });
-  const [terminos, setTerminos] = useState("Al realizar el pago declaro que los datos y el comprobante enviados son verdaderos. Comprendo que el pago será revisado por administración y que un comprobante inválido podrá ser observado o rechazado.");
+  const [terminos, setTerminos] = useState(TERMINOS_PREDETERMINADOS);
   const [archivos, setArchivos] = useState<Partial<Record<CampoQr, File | null>>>({});
-  useEffect(() => { if (consulta.data?.configuracion?.terminos) setTerminos(consulta.data.configuracion.terminos); }, [consulta.data?.configuracion?.terminos]);
+  useEffect(() => {
+    const actuales = consulta.data?.configuracion?.terminos?.trim();
+    if (!actuales) return;
+    const textoAnterior = actuales.startsWith("Al realizar el pago declaro") || actuales === "Al enviar un pago declaro que los datos y el comprobante son verdaderos.";
+    setTerminos(textoAnterior ? TERMINOS_PREDETERMINADOS : actuales);
+  }, [consulta.data?.configuracion?.terminos]);
   const guardar = useMutation({
     mutationFn: () => guardarConfiguracionPago({ gestionId: consulta.data!.gestion._id, terminos, archivos }),
     onSuccess: async (respuesta: { message: string }) => { toast.success(respuesta.message); setArchivos({}); await cliente.invalidateQueries({ queryKey: ["configuracion-pago-admin"] }); },

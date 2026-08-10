@@ -15,6 +15,7 @@ import {
   FileImage,
   FileText,
   GraduationCap,
+  Images,
   LoaderCircle,
   Save,
   ShieldCheck,
@@ -341,6 +342,7 @@ export default function PerfilUsuarioForm({
     useState(false);
 
   const [borradorCargado, setBorradorCargado] = useState(false);
+  const [tipoCargaCarnet, setTipoCargaCarnet] = useState<"PDF" | "IMAGENES" | "">("");
 
   const [
     preview,
@@ -377,6 +379,11 @@ export default function PerfilUsuarioForm({
     }, 350);
     return () => window.clearTimeout(temporizador);
   }, [formData, modo, borradorCargado]);
+
+  useEffect(() => {
+    if (!formData.carnetIdentidadPdf) return;
+    setTipoCargaCarnet(esArchivoPdf(formData.carnetIdentidadPdf) ? "PDF" : "IMAGENES");
+  }, [formData.carnetIdentidadPdf]);
 
   useEffect(() => {
     if (!formData.fotoPerfil) {
@@ -1126,7 +1133,7 @@ export default function PerfilUsuarioForm({
 
       <SeccionFormulario
         titulo="Documento de identidad"
-        descripcion="Información escrita y archivo PDF del carnet."
+        descripcion="Datos y archivos de tu carnet de identidad."
         icono={
           <FileText />
         }
@@ -1156,31 +1163,20 @@ export default function PerfilUsuarioForm({
         {esModoCrear(
           modo,
         ) && (
-          <div className="mt-5">
-            <SelectorArchivo
-              titulo="Carnet de identidad"
-              descripcion="Obligatorio. PDF o imagen (JPG, PNG o WebP). Máximo 15 MB."
-              archivo={
-                formData.carnetIdentidadPdf
-              }
-              onSeleccionar={
-                seleccionarDocumento(
-                  "carnetIdentidadPdf",
-                )
-              }
-              onQuitar={() =>
-                actualizarCampo(
-                  "carnetIdentidadPdf",
-                  null,
-                )
-              }
-              error={
-                errores.carnetIdentidadPdf
-              }
-            />
-            {formData.carnetIdentidadPdf && !esArchivoPdf(formData.carnetIdentidadPdf) && (
-              <div className="mt-4"><SelectorArchivo titulo="Reverso del carnet" descripcion="Obligatorio cuando el carnet se sube como imagen." archivo={formData.carnetIdentidadReverso} onSeleccionar={seleccionarDocumento("carnetIdentidadReverso")} onQuitar={() => actualizarCampo("carnetIdentidadReverso", null)} error={errores.carnetIdentidadReverso} /></div>
-            )}
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            <h3 className="text-lg font-black text-[#74122A]">¿Cómo subirás tu carnet?</h3>
+            <p className="mt-1 text-sm text-slate-600">Elige una opción. No necesitas usar las dos.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => { if (tipoCargaCarnet !== "PDF") { actualizarCampo("carnetIdentidadPdf", null); actualizarCampo("carnetIdentidadReverso", null); } setTipoCargaCarnet("PDF"); }} className={`rounded-2xl border-2 p-4 text-left transition ${tipoCargaCarnet === "PDF" ? "border-[#74122A] bg-[#74122A]/5 shadow-sm" : "border-slate-200 bg-white hover:border-[#C59A3A]"}`}>
+                <FileText className="h-7 w-7 text-[#74122A]"/><strong className="mt-2 block">PDF completo</strong><span className="mt-1 block text-xs text-slate-600">Un solo PDF que contenga anverso y reverso. No se pedirá otro archivo.</span>
+              </button>
+              <button type="button" onClick={() => { if (tipoCargaCarnet !== "IMAGENES") { actualizarCampo("carnetIdentidadPdf", null); actualizarCampo("carnetIdentidadReverso", null); } setTipoCargaCarnet("IMAGENES"); }} className={`rounded-2xl border-2 p-4 text-left transition ${tipoCargaCarnet === "IMAGENES" ? "border-[#74122A] bg-[#74122A]/5 shadow-sm" : "border-slate-200 bg-white hover:border-[#C59A3A]"}`}>
+                <Images className="h-7 w-7 text-[#74122A]"/><strong className="mt-2 block">Dos imágenes</strong><span className="mt-1 block text-xs text-slate-600">Una foto del anverso y otra del reverso, ambas claras y completas.</span>
+              </button>
+            </div>
+            {tipoCargaCarnet === "PDF" && <div className="mt-4"><SelectorArchivo titulo="PDF completo del carnet" descripcion="Archivo PDF de hasta 30 MB con las dos caras." archivo={formData.carnetIdentidadPdf} onSeleccionar={seleccionarDocumento("carnetIdentidadPdf")} onQuitar={() => actualizarCampo("carnetIdentidadPdf", null)} error={errores.carnetIdentidadPdf} accept="application/pdf,.pdf" textoBoton="Seleccionar PDF" /></div>}
+            {tipoCargaCarnet === "IMAGENES" && <div className="mt-4 grid gap-4 sm:grid-cols-2"><SelectorArchivo titulo="Imagen del anverso" descripcion="La cara frontal debe verse completa." archivo={formData.carnetIdentidadPdf} onSeleccionar={seleccionarDocumento("carnetIdentidadPdf")} onQuitar={() => actualizarCampo("carnetIdentidadPdf", null)} error={errores.carnetIdentidadPdf} accept="image/*" textoBoton="Seleccionar imagen"/><SelectorArchivo titulo="Imagen del reverso" descripcion="La parte posterior debe verse completa." archivo={formData.carnetIdentidadReverso} onSeleccionar={seleccionarDocumento("carnetIdentidadReverso")} onQuitar={() => actualizarCampo("carnetIdentidadReverso", null)} error={errores.carnetIdentidadReverso} accept="image/*" textoBoton="Seleccionar imagen"/></div>}
+            {!tipoCargaCarnet && <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">Selecciona <strong>PDF completo</strong> o <strong>Dos imágenes</strong> para mostrar los archivos necesarios.</p>}
           </div>
         )}
       </SeccionFormulario>
@@ -1801,6 +1797,8 @@ function SelectorArchivo({
   onSeleccionar,
   onQuitar,
   error,
+  accept = "application/pdf,.pdf,image/*,.jpg,.jpeg,.jfif,.png,.webp,.avif,.heic,.heif,.tif,.tiff,.gif,.bmp",
+  textoBoton = "Seleccionar archivo",
 }: {
   titulo: string;
   descripcion: string;
@@ -1810,6 +1808,8 @@ function SelectorArchivo({
   ) => void;
   onQuitar: () => void;
   error?: string;
+  accept?: string;
+  textoBoton?: string;
 }) {
   return (
     <div>
@@ -1820,7 +1820,7 @@ function SelectorArchivo({
       }`}>
         <input
           type="file"
-          accept="application/pdf,.pdf,image/*,.jpg,.jpeg,.jfif,.png,.webp,.avif,.heic,.heif,.tif,.tiff,.gif,.bmp"
+          accept={accept}
           onChange={
             onSeleccionar
           }
@@ -1843,7 +1843,7 @@ function SelectorArchivo({
           </div>
 
           <span className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#841534] shadow-sm">
-            Seleccionar archivo
+            {textoBoton}
           </span>
         </div>
       </label>
