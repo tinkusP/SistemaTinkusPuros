@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import api from "@/lib/axios";
 import { obtenerMiIndumentaria } from "@/api/IndumentariaApi";
 import { formatearFechaCivil } from "@/utils/fechaCivil";
+import { FileText, Images, UploadCloud } from "lucide-react";
 
 export default function PerfilView() {
   const navigate = useNavigate();
@@ -21,12 +22,31 @@ export default function PerfilView() {
   const [errorImagen, setErrorImagen] =
     useState(false);
   const [modalCambiosGuardados, setModalCambiosGuardados] = useState(false);
+  const [tipoCarnet, setTipoCarnet] = useState<"PDF" | "IMAGENES" | "">("");
   const [fotoNueva,setFotoNueva]=useState<File|null>(null); const [carnetFrente,setCarnetFrente]=useState<File|null>(null); const [carnetReverso,setCarnetReverso]=useState<File|null>(null); const [ruNuevo,setRuNuevo]=useState<File|null>(null); const queryClient=useQueryClient();
   const [datosEditables,setDatosEditables]=useState({nombres:"",apellidoPaterno:"",apellidoMaterno:"",telefono:"",ci:"",fechaNacimiento:"",sexo:""});
   useEffect(()=>{if(perfil)setDatosEditables({nombres:perfil.nombres??"",apellidoPaterno:perfil.apellidoPaterno??"",apellidoMaterno:perfil.apellidoMaterno??"",telefono:perfil.telefono??"",ci:perfil.ci??"",fechaNacimiento:perfil.fechaNacimiento?String(perfil.fechaNacimiento).slice(0,10):"",sexo:perfil.sexo??""});},[perfil]);
   const autorizacionQuery=useQuery({queryKey:["mi-autorizacion-edicion"],queryFn:async()=> (await api.get("/perfilusuario/autorizacion-edicion/mia")).data});
   const indumentariaQuery=useQuery({queryKey:["mi-indumentaria"],queryFn:obtenerMiIndumentaria});
-  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setModalCambiosGuardados(true);setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
+  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setModalCambiosGuardados(true);setTipoCarnet("");setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
+
+  const cambiarTipoCarnet = (tipo: "PDF" | "IMAGENES") => {
+    setTipoCarnet(tipo);
+    setCarnetFrente(null);
+    setCarnetReverso(null);
+  };
+
+  const guardarCambiosAutorizados = () => {
+    if (tipoCarnet && !carnetFrente) {
+      toast.info(tipoCarnet === "PDF" ? "Selecciona el PDF completo de tu carnet." : "Selecciona la imagen del anverso de tu carnet.");
+      return;
+    }
+    if (tipoCarnet === "IMAGENES" && carnetFrente && !carnetReverso) {
+      toast.info("Falta la imagen del reverso de tu carnet.");
+      return;
+    }
+    completarMutation.mutate();
+  };
 
   const backendUrl = String(
   import.meta.env.VITE_API_URL || "",
@@ -243,22 +263,21 @@ export default function PerfilView() {
         </section>
 
         {autorizacionQuery.data?.autorizacion && (
-          <section className="rounded-3xl border border-emerald-300 bg-emerald-50 p-5 text-slate-800 shadow-sm">
-            <h2 className="text-lg font-black text-emerald-800">Edición habilitada por administración</h2>
-            <p className="mt-1 text-sm">Motivo: {autorizacionQuery.data.autorizacion.motivo}. Vigente hasta {new Date(autorizacionQuery.data.autorizacion.fechaVencimiento).toLocaleString()}.</p>
+          <section className="overflow-hidden rounded-3xl border border-emerald-200 bg-white text-slate-800 shadow-lg shadow-emerald-900/5">
+            <header className="bg-gradient-to-r from-emerald-800 to-emerald-600 px-5 py-5 text-white sm:px-7"><p className="text-xs font-bold uppercase tracking-[.2em] text-emerald-100">Permiso temporal</p><h2 className="mt-1 text-xl font-black">Edición habilitada por administración</h2><p className="mt-2 text-sm text-emerald-50"><strong>Motivo:</strong> {autorizacionQuery.data.autorizacion.motivo}</p><p className="mt-1 text-xs text-emerald-100">Disponible hasta {new Date(autorizacionQuery.data.autorizacion.fechaVencimiento).toLocaleString("es-BO")}.</p></header>
+            <div className="p-5 sm:p-7">
             {autorizacionQuery.data.autorizacion.campos.includes("DATOS_PERSONALES") && (
-              <div className="mt-5 rounded-2xl border border-emerald-200 bg-white p-4"><h3 className="font-black text-emerald-800">Información personal autorizada</h3><div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><h3 className="font-black text-emerald-900">Información personal autorizada</h3><p className="mt-1 text-xs text-slate-600">Corrige únicamente los datos necesarios y revisa que estén escritos correctamente.</p><div className="mt-3 grid gap-3 md:grid-cols-2">
                 {[['nombres','Nombres'],['apellidoPaterno','Apellido paterno'],['apellidoMaterno','Apellido materno'],['telefono','Celular con WhatsApp'],['ci','Carnet de identidad']].map(([campo,label])=><label key={campo} className="text-sm font-bold">{label}<input value={datosEditables[campo as keyof typeof datosEditables]} onChange={e=>setDatosEditables(actual=>({...actual,[campo]:campo==='ci'?e.target.value.replace(/\D/g,''):e.target.value.toLocaleUpperCase('es-BO')}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label>)}
                 <label className="text-sm font-bold">Fecha de nacimiento<input type="date" value={datosEditables.fechaNacimiento} onChange={e=>setDatosEditables(actual=>({...actual,fechaNacimiento:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5" /></label>
                 <label className="text-sm font-bold">Género<select value={datosEditables.sexo} onChange={e=>setDatosEditables(actual=>({...actual,sexo:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"><option value="">Seleccionar</option><option value="HOMBRE">Hombre</option><option value="MUJER">Mujer</option></select></label>
               </div></div>
             )}
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {autorizacionQuery.data.autorizacion.campos.includes("FOTO_PERFIL") && <label className="text-sm font-bold">Foto de perfil<input className="mt-1 block w-full text-xs" type="file" accept="image/*" onChange={e=>setFotoNueva(e.target.files?.[0]??null)}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_ANVERSO") && <label className="text-sm font-bold">Carnet completo: PDF o anverso<input className="mt-1 block w-full text-xs" type="file" accept=".pdf,application/pdf,image/*" onChange={e=>{const archivo=e.target.files?.[0]??null;setCarnetFrente(archivo);if(archivo&&(archivo.type==="application/pdf"||archivo.name.toLowerCase().endsWith(".pdf")))setCarnetReverso(null)}}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("CARNET_REVERSO") && !(carnetFrente&&(carnetFrente.type==="application/pdf"||carnetFrente.name.toLowerCase().endsWith(".pdf"))) && <label className="text-sm font-bold">Reverso del carnet (obligatorio si eliges imagen)<input className="mt-1 block w-full text-xs" type="file" accept="image/*" onChange={e=>setCarnetReverso(e.target.files?.[0]??null)}/></label>}
-              {autorizacionQuery.data.autorizacion.campos.includes("REGISTRO_UNIVERSITARIO") && <label className="text-sm font-bold">Registro universitario PDF o imagen<input className="mt-1 block w-full text-xs" type="file" accept=".pdf,application/pdf,image/*" onChange={e=>setRuNuevo(e.target.files?.[0]??null)}/></label>}
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {autorizacionQuery.data.autorizacion.campos.includes("FOTO_PERFIL") && <CampoArchivoElegante id="foto-perfil-edicion" titulo="Nueva foto de perfil" descripcion="Selecciona una fotografía clara y de frente." archivo={fotoNueva} accept="image/*" seleccionar={setFotoNueva}/>}
+              {autorizacionQuery.data.autorizacion.campos.includes("REGISTRO_UNIVERSITARIO") && <CampoArchivoElegante id="ru-edicion" titulo="Registro universitario" descripcion="Puedes subir una imagen legible o un PDF." archivo={ruNuevo} accept=".pdf,application/pdf,image/*" seleccionar={setRuNuevo}/>}
             </div>
+            {autorizacionQuery.data.autorizacion.campos.includes("CARNET_ANVERSO") && <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5"><div><h3 className="text-lg font-black text-[#74122A]">¿Cómo subirás tu carnet?</h3><p className="mt-1 text-sm text-slate-600">Elige una opción. No necesitas usar las dos.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><button type="button" onClick={()=>cambiarTipoCarnet("PDF")} className={`rounded-2xl border-2 p-4 text-left transition ${tipoCarnet==="PDF"?"border-[#74122A] bg-[#74122A]/5 shadow-sm":"border-slate-200 bg-white hover:border-[#C59A3A]"}`}><FileText className="h-7 w-7 text-[#74122A]"/><strong className="mt-2 block">PDF completo</strong><span className="mt-1 block text-xs text-slate-600">Un solo PDF que contenga anverso y reverso. No se pedirá otro archivo.</span></button><button type="button" onClick={()=>cambiarTipoCarnet("IMAGENES")} className={`rounded-2xl border-2 p-4 text-left transition ${tipoCarnet==="IMAGENES"?"border-[#74122A] bg-[#74122A]/5 shadow-sm":"border-slate-200 bg-white hover:border-[#C59A3A]"}`}><Images className="h-7 w-7 text-[#74122A]"/><strong className="mt-2 block">Dos imágenes</strong><span className="mt-1 block text-xs text-slate-600">Una foto del anverso y otra del reverso, ambas claras y completas.</span></button></div>{tipoCarnet==="PDF"&&<div className="mt-4"><CampoArchivoElegante id="carnet-pdf-edicion" titulo="PDF completo del carnet" descripcion="Archivo PDF de hasta 30 MB con las dos caras." archivo={carnetFrente} accept=".pdf,application/pdf" seleccionar={archivo=>{setCarnetFrente(archivo);setCarnetReverso(null)}}/></div>}{tipoCarnet==="IMAGENES"&&<div className="mt-4 grid gap-4 sm:grid-cols-2"><CampoArchivoElegante id="carnet-anverso-edicion" titulo="Imagen del anverso" descripcion="La cara frontal debe verse completa." archivo={carnetFrente} accept="image/*" seleccionar={setCarnetFrente}/><CampoArchivoElegante id="carnet-reverso-edicion" titulo="Imagen del reverso" descripcion="La parte posterior debe verse completa." archivo={carnetReverso} accept="image/*" seleccionar={setCarnetReverso}/></div>}{!tipoCarnet&&<p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">Selecciona <strong>PDF completo</strong> o <strong>Dos imágenes</strong> para mostrar los archivos necesarios.</p>}</div>}
             {(fotoNueva || carnetFrente || carnetReverso || ruNuevo) && (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {fotoNueva && <VistaPreviaArchivo titulo="Nueva foto de perfil" archivo={fotoNueva} quitar={() => setFotoNueva(null)} />}
@@ -267,7 +286,8 @@ export default function PerfilView() {
                 {ruNuevo && <VistaPreviaArchivo titulo="Registro universitario" archivo={ruNuevo} quitar={() => setRuNuevo(null)} />}
               </div>
             )}
-            <button type="button" disabled={completarMutation.isPending||(!autorizacionQuery.data.autorizacion.campos.includes("DATOS_PERSONALES")&&!fotoNueva&&!carnetFrente&&!carnetReverso&&!ruNuevo)} onClick={()=>completarMutation.mutate()} className="mt-4 rounded-xl bg-emerald-700 px-5 py-2.5 font-bold text-white disabled:opacity-50">{completarMutation.isPending?"Guardando...":"Guardar cambios autorizados"}</button>
+            <button type="button" disabled={completarMutation.isPending||(!autorizacionQuery.data.autorizacion.campos.includes("DATOS_PERSONALES")&&!fotoNueva&&!carnetFrente&&!carnetReverso&&!ruNuevo)} onClick={guardarCambiosAutorizados} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3.5 font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><UploadCloud className="h-5 w-5"/>{completarMutation.isPending?"Guardando cambios...":"Guardar cambios autorizados"}</button>
+            </div>
           </section>
         )}
 
@@ -466,6 +486,15 @@ type DatoPerfilProps = {
   valor?: string | number | null;
   icono?: string;
 };
+
+function CampoArchivoElegante({ id, titulo, descripcion, archivo, accept, seleccionar }: { id: string; titulo: string; descripcion: string; archivo: File | null; accept: string; seleccionar: (archivo: File | null) => void }) {
+  const tamano = archivo
+    ? archivo.size < 1024 * 1024
+      ? `${(archivo.size / 1024).toFixed(1)} KB`
+      : `${(archivo.size / 1024 / 1024).toFixed(2)} MB`
+    : "";
+  return <div className={`rounded-2xl border-2 border-dashed p-4 transition ${archivo ? "border-emerald-400 bg-emerald-50" : "border-slate-300 bg-white"}`}><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#74122A]/10 text-[#74122A]"><UploadCloud className="h-5 w-5"/></span><div className="min-w-0"><p className="font-black text-slate-800">{titulo}</p><p className="mt-1 text-xs leading-5 text-slate-500">{descripcion}</p></div></div>{archivo?<div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3"><p className="truncate text-sm font-bold text-emerald-900">{archivo.name}</p><p className="mt-1 text-xs text-emerald-700">{tamano} · archivo listo</p><div className="mt-3 flex gap-2"><label htmlFor={id} className="cursor-pointer rounded-lg border border-emerald-300 px-3 py-2 text-xs font-bold text-emerald-800">Cambiar archivo</label><button type="button" onClick={()=>seleccionar(null)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">Quitar</button></div></div>:<label htmlFor={id} className="mt-4 flex cursor-pointer items-center justify-center rounded-xl bg-[#74122A] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#5E0E22]">Seleccionar archivo</label>}<input id={id} type="file" accept={accept} className="sr-only" onChange={evento=>{seleccionar(evento.target.files?.[0]??null);evento.target.value=""}}/></div>;
+}
 
 function VistaPreviaArchivo({ titulo, archivo, quitar }: { titulo: string; archivo: File; quitar: () => void }) {
   const [url, setUrl] = useState("");
