@@ -36,7 +36,7 @@ const schema = new Schema<ConfiguracionPagoType>({
   vigenciaTokenHoras: { type: Number, min: 1, max: 8760, default: 24 },
   plazoPrimeraCuotaHoras: { type: Number, min: 1, max: 8760, default: 72 },
   cantidadBloques: { type: Number, min: 1, max: 100, default: 1 },
-  terminos: { type: String, required: true, trim: true, maxlength: 5000 },
+  terminos: { type: String, required: true, trim: true, maxlength: 10000 },
   versionTerminos: { type: Number, min: 1, default: 1 },
   activo: { type: Boolean, default: true },
   fechaEditado: { type: Date, default: Date.now },

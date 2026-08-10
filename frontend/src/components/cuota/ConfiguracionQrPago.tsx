@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { configuracionPagoAdmin, guardarConfiguracionPago, type CampoQr, type OrigenPago, type PlanPago } from "@/api/ConfiguracionPagoApi";
+import { TERMINOS_PARTICIPACION, sonTerminosPredeterminadosAnteriores } from "@/constants/terminosParticipacion";
 
 const API = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
 const planes = {
@@ -9,26 +10,15 @@ const planes = {
   EXTERNO: { "1": [850], "2": [425, 425], "3": [300, 275, 275] },
 } as const;
 const campoQr = (origen: OrigenPago, plan: PlanPago, indice: number) => `qr${origen === "INTERNO" ? "Interno" : "Externo"}${plan}Cuota${indice + 1}` as CampoQr;
-const TERMINOS_PREDETERMINADOS = `Al aceptar estos términos y condiciones, declaro que:
-
-1. Me comprometo a asistir regularmente a los ensayos y actividades de la Fraternidad.
-2. Me comprometo a no consumir bebidas alcohólicas durante los ensayos ni en las actividades en las que esté prohibido.
-3. Mantendré buena conducta y un trato respetuoso con los guías, la Directiva y los demás integrantes.
-4. Actuaré con respeto, puntualidad y tolerancia.
-5. La información y el comprobante que presente para cada pago serán verdaderos y podrán ser revisados por Administración.
-6. Si la Entrada Universitaria no se lleva a cabo, acepto que los gastos ya realizados por la Fraternidad sean descontados de las cuotas aportadas.
-7. El QR de pago es de uso personal e intransferible. Si lo comparto con una persona que no esté habilitada en el sistema o no esté autorizada para pagar, dicho pago será considerado una donación a la Fraternidad y no será imputado a mi cuota.`;
-
 export default function ConfiguracionQrPago() {
   const cliente = useQueryClient();
   const consulta = useQuery({ queryKey: ["configuracion-pago-admin"], queryFn: configuracionPagoAdmin });
-  const [terminos, setTerminos] = useState(TERMINOS_PREDETERMINADOS);
+  const [terminos, setTerminos] = useState(TERMINOS_PARTICIPACION);
   const [archivos, setArchivos] = useState<Partial<Record<CampoQr, File | null>>>({});
   useEffect(() => {
     const actuales = consulta.data?.configuracion?.terminos?.trim();
     if (!actuales) return;
-    const textoAnterior = actuales.startsWith("Al realizar el pago declaro") || actuales === "Al enviar un pago declaro que los datos y el comprobante son verdaderos.";
-    setTerminos(textoAnterior ? TERMINOS_PREDETERMINADOS : actuales);
+    setTerminos(sonTerminosPredeterminadosAnteriores(actuales) ? TERMINOS_PARTICIPACION : actuales);
   }, [consulta.data?.configuracion?.terminos]);
   const guardar = useMutation({
     mutationFn: () => guardarConfiguracionPago({ gestionId: consulta.data!.gestion._id, terminos, archivos }),
@@ -51,7 +41,7 @@ export default function ConfiguracionQrPago() {
         </label>; })}</div>
       </article>)}</div>
     </div>)}
-    <label className="mt-6 block"><span className="mb-1 block text-sm font-black">Términos y condiciones</span><textarea value={terminos} onChange={(evento) => setTerminos(evento.target.value)} maxLength={5000} className="input-preregistro min-h-32" /></label>
+    <label className="mt-6 block"><span className="mb-1 block text-sm font-black">Términos y condiciones</span><textarea value={terminos} onChange={(evento) => setTerminos(evento.target.value)} maxLength={10000} className="input-preregistro min-h-64" /></label>
     <button type="button" disabled={guardar.isPending || !consulta.data?.gestion} onClick={() => guardar.mutate()} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white disabled:opacity-50">{guardar.isPending ? "Guardando y comprimiendo QR..." : "Guardar QR por plan y términos"}</button>
   </section>;
 }
