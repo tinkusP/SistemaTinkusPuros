@@ -7,6 +7,7 @@ import Preregistro from "../models/Preregistro";
 import Cuota from "../models/Cuota";
 import Fraterno from "../models/Fraterno";
 import ConfiguracionPago from "../models/ConfiguracionPago";
+import { TERMINOS_PARTICIPACION } from "../constants/terminosParticipacion";
 
 const normalizar = (v: unknown) => String(v ?? "").trim().toUpperCase().replace(/\s+/g, "");
 const codigoNuevo = () => `FRA-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
@@ -79,7 +80,7 @@ export async function obtenerConfiguracionPublica(_req: Request, res: Response) 
 export async function guardarConfiguracionTokens(req: Request, res: Response) {
   const gestion = await Gestion.findById(req.body.gestionId); if (!gestion) return res.status(404).json({ error: "Gestión no encontrada" });
   gestion.cupoMaximoHombres = Number(req.body.cupoMaximoHombres); gestion.cupoMaximoMujeres = Number(req.body.cupoMaximoMujeres); await gestion.save();
-  const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { requerirTokenRegistro: req.body.requerirTokenRegistro !== false, tarifaInterno: Number(req.body.tarifaInterno), tarifaExterno: Number(req.body.tarifaExterno), primeraCuota: 300, vigenciaTokenHoras: Number(req.body.vigenciaTokenHoras), plazoPrimeraCuotaHoras: Number(req.body.plazoPrimeraCuotaHoras), cantidadBloques: Number(req.body.cantidadBloques), fechaEditado: new Date(), usuarioEditor: req.usuario?._id, activo: true }, $setOnInsert: { terminos: "Al aceptar estos términos y condiciones, me comprometo a asistir regularmente a los ensayos y actividades; no consumir bebidas alcohólicas durante los ensayos ni en actividades donde esté prohibido; mantener buena conducta, respeto, puntualidad y tolerancia con los guías, la Directiva y los demás integrantes. Si la Entrada Universitaria no se lleva a cabo, acepto que los gastos ya realizados sean descontados de las cuotas aportadas. El QR de pago es personal e intransferible; si se comparte con una persona no habilitada o no autorizada, el pago será considerado una donación a la Fraternidad y no será imputado a mi cuota.", versionTerminos: 1 } }, { upsert: true, new: true, setDefaultsOnInsert: true });
+  const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { requerirTokenRegistro: req.body.requerirTokenRegistro !== false, tarifaInterno: Number(req.body.tarifaInterno), tarifaExterno: Number(req.body.tarifaExterno), primeraCuota: 300, vigenciaTokenHoras: Number(req.body.vigenciaTokenHoras), plazoPrimeraCuotaHoras: Number(req.body.plazoPrimeraCuotaHoras), cantidadBloques: Number(req.body.cantidadBloques), fechaEditado: new Date(), usuarioEditor: req.usuario?._id, activo: true }, $setOnInsert: { terminos: TERMINOS_PARTICIPACION, versionTerminos: 1 } }, { upsert: true, new: true, setDefaultsOnInsert: true });
   return res.json({ message: "Cupos, tarifas y plazos actualizados", gestion, configuracion, cupos: await ocupacion(gestion) });
 }
 

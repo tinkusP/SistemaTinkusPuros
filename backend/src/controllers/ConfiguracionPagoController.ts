@@ -10,6 +10,7 @@ import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
+import { TERMINOS_PARTICIPACION, sonTerminosPredeterminadosAnteriores } from "../constants/terminosParticipacion";
 
 const carpeta = path.resolve(process.cwd(), "public", "uploads", "qr-pagos");
 type Archivos = Record<string, Express.Multer.File[]>;
@@ -37,11 +38,21 @@ async function gestionUsuario(usuarioId: unknown) {
   return pre?.gestionId;
 }
 
+async function actualizarTerminosBase(config: InstanceType<typeof ConfiguracionPago>) {
+  if (!sonTerminosPredeterminadosAnteriores(config.terminos)) return config;
+  config.terminos = TERMINOS_PARTICIPACION;
+  config.versionTerminos += 1;
+  config.fechaEditado = new Date();
+  await config.save();
+  return config;
+}
+
 export async function obtenerConfiguracion(req: Request, res: Response) {
   const gestionId = String(req.query.gestionId || await gestionUsuario(req.usuario?._id) || "");
   if (!gestionId) return res.status(404).json({ error: "No se encontró una gestión relacionada" });
-  const config = await ConfiguracionPago.findOne({ gestionId, activo: true }).populate("gestionId", "nombre anio");
+  let config = await ConfiguracionPago.findOne({ gestionId, activo: true }).populate("gestionId", "nombre anio");
   if (!config) return res.status(404).json({ error: "Administración todavía no configuró los QR de pago" });
+  config = await actualizarTerminosBase(config);
   const aceptada = await Aceptacion.findOne({ usuarioId: req.usuario?._id, gestionId, versionTerminos: config.versionTerminos });
   const objeto = config.toObject();
   if (!aceptada) {
@@ -71,8 +82,9 @@ export async function obtenerConfiguracion(req: Request, res: Response) {
 
 export async function aceptarTerminos(req: Request, res: Response) {
   const gestionId = String(req.body.gestionId || await gestionUsuario(req.usuario?._id) || "");
-  const config = await ConfiguracionPago.findOne({ gestionId, activo: true });
+  let config = await ConfiguracionPago.findOne({ gestionId, activo: true });
   if (!config) return res.status(404).json({ error: "No existe configuración de pagos" });
+  config = await actualizarTerminosBase(config);
   const aceptacion = await Aceptacion.findOneAndUpdate(
     { usuarioId: req.usuario?._id, gestionId, versionTerminos: config.versionTerminos },
     { $setOnInsert: { fechaAceptacion: new Date(), ip: req.ip } },
@@ -136,6 +148,7 @@ export async function obtenerConfiguracionAdmin(req: Request, res: Response) {
   const gestion = req.query.gestionId
     ? await Gestion.findById(req.query.gestionId)
     : await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
-  const configuracion = gestion ? await ConfiguracionPago.findOne({ gestionId: gestion._id }) : null;
+  let configuracion = gestion ? await ConfiguracionPago.findOne({ gestionId: gestion._id }) : null;
+  if (configuracion) configuracion = await actualizarTerminosBase(configuracion);
   return res.json({ gestion, configuracion });
 }
