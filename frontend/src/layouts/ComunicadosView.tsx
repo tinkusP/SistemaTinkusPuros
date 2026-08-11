@@ -38,6 +38,7 @@ type RolUsuario = {
   _id?: string;
   nombre?: string;
   codigo?: string;
+  permisos?: string[];
 };
 
 
@@ -153,6 +154,8 @@ export default function ComunicadosView() {
       ),
     );
   });
+  const permisosOperativos = new Set(Array.isArray(usuario?.roles) ? usuario.roles.flatMap((rol) => typeof rol === "object" && rol !== null && Array.isArray((rol as RolUsuario).permisos) ? (rol as RolUsuario).permisos! : []) : []);
+  const tieneAccesoAdministrativo = esAdministrador || permisosOperativos.size > 0;
   const esGuia = Array.isArray(usuario?.roles) && usuario.roles.some((rol) => {
     if (typeof rol !== "object" || rol === null) return false;
     const datos = rol as RolUsuario;
@@ -401,9 +404,9 @@ export default function ComunicadosView() {
                       Mi bloque y posición
                     </Link>
                   )}
-                  {esAdministrador && (
+                  {tieneAccesoAdministrativo && (
                     <Link to="/dashboard" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg bg-[#841534] px-3 py-2.5 text-sm font-bold text-white transition hover:bg-[#641025]">
-                      Ir al dashboard
+                      Ir al panel administrativo
                     </Link>
                   )}
                   {/* <Link to="/mi-asistencia" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">
