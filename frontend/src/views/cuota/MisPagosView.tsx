@@ -24,6 +24,7 @@ export default function MisPagosView() {
   const q = useQuery({ queryKey: ["mi-cuota"], queryFn: obtenerMiCuota, retry: false });
   const configQr = useQuery({ queryKey: ["mi-configuracion-pago"], queryFn: miConfiguracionPago, retry: false, enabled: Boolean(q.data) });
   const [modalTerminos, setModalTerminos] = useState(false);
+  const [modalObservacion, setModalObservacion] = useState(true);
   const [habilitarSiguientePago, setHabilitarSiguientePago] = useState(false);
   const [form, setForm] = useState<FormPago>(formInicial);
   const cuota = q.data?.cuota;
@@ -85,7 +86,11 @@ export default function MisPagosView() {
   const solicitarProrroga = useMutation({ mutationFn: () => solicitarProrrogaPago(cuota!._id), onSuccess: (respuesta) => toast.success(respuesta.message), onError: (error: Error) => toast.error(error.message) });
 
   if (q.isLoading) return <div className="min-h-screen bg-[#eee8dc] p-8 text-center">Cargando tu cuota...</div>;
-  if (!q.data || !cuota) return <Mensaje titulo="Todavía no tienes una cuota asignada" texto="Tu preregistro debe estar aprobado y administración debe configurar las tarifas de la gestión." />;
+  if (!q.data || !cuota) {
+    const mensaje = q.error instanceof Error ? q.error.message : "Tu preregistro debe estar aprobado y Administración debe configurar las tarifas de la gestión.";
+    const observado = /observaci[oó]n|observado/i.test(mensaje);
+    return <><Mensaje titulo={observado ? "Pagos temporalmente bloqueados" : "Todavía no tienes una cuota asignada"} texto={mensaje} />{observado && modalObservacion ? <ModalObservacion cerrar={() => setModalObservacion(false)} /> : null}</>;
+  }
   if (q.data.listaEspera && !q.data.prorrogaActiva) return <Mensaje titulo="Estás en lista de espera" texto="El plazo para pagar tu primera cuota terminó sin un pago verificado. Tu cupo fue liberado; comunícate con administración para solicitar un nuevo plazo." espera />;
 
   const limite = cuota.fechaVencimiento ? new Date(cuota.fechaVencimiento) : null;
@@ -136,3 +141,7 @@ function Mensaje({ titulo, texto, espera = false }: { titulo: string; texto: str
 function Resumen({ titulo, valor }: { titulo: string; valor: number }) { return <div className="rounded-xl bg-white/10 p-4"><p className="text-xs text-white/70">{titulo}</p><strong className="text-2xl">Bs {valor.toFixed(2)}</strong></div>; }
 function PagoLimite({ limite, horas, monto, saldo }: { limite: Date | null; horas: number | null; monto: number; saldo: number }) { if (!limite || saldo <= 0) return null; return <div className={`rounded-xl p-4 font-bold ${horas === 0 ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900"}`}>{horas === 0 ? "El plazo de pago venció. Comunícate con administración." : `Tienes aproximadamente ${horas} horas para realizar tu próximo pago${monto > 0 ? ` de Bs ${monto.toFixed(2)}` : ""}. Fecha límite: ${limite.toLocaleString("es-BO")}`}</div>; }
 function Titulo({ children }: { children: React.ReactNode }) { return <span className="mb-1 block text-xs font-bold uppercase text-[#735f55]">{children}</span>; }
+
+function ModalObservacion({ cerrar }: { cerrar: () => void }) {
+  return <div className="fixed inset-0 z-[150] grid place-items-center bg-[#24181c]/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="titulo-observacion"><section className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="bg-[#74122A] px-6 py-5 text-white"><div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[#C59A3A] text-3xl" aria-hidden="true">!</div><h1 id="titulo-observacion" className="text-2xl font-black">Tienes una observación pendiente</h1></div><div className="p-6"><p className="leading-7 text-slate-700">Tu preregistro requiere una regularización. Comunícate con Administración para resolver la observación. Cuando tu preregistro sea aprobado, la opción de pagos se habilitará automáticamente.</p><div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">Mientras la observación continúe pendiente no podrás elegir un plan, ver el QR ni registrar comprobantes de pago.</div><div className="mt-6 grid gap-3 sm:grid-cols-2"><Link to="/mis-preregistros" className="rounded-xl bg-[#74122A] px-4 py-3 text-center font-bold text-white">Ver mi preregistro</Link><button type="button" onClick={cerrar} className="rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-700">Entendido</button></div></div></section></div>;
+}

@@ -63,6 +63,7 @@ import PasosVideoView from "./views/guia/PasosVideoView";
 import CancioneroView from "./views/guia/CancioneroView";
 import TokenRegistroView from "./views/tokens/TokenRegistroView";
 import RespaldoView from "./views/respaldo/RespaldoView";
+import PortalFormacionLayout from "./layouts/PortalFormacionLayout";
 const MiCredencialQrView=lazy(()=>import("./views/perfilUsuario/MiCredencialQrView"));
 const EscanerQrView=lazy(()=>import("./views/perfilUsuario/EscanerQrView"));
 
@@ -213,6 +214,10 @@ export default function Router() {
           <Route path="/mi-asistencia-guia" element={<MiAsistenciaPostulanteGuiaView />} />
           <Route path="/mi-bloque" element={<MiBloqueFraternoView />} />
           <Route path="/mi-credencial-qr" element={<Suspense fallback={<p className="p-8 text-center">Generando credencial...</p>}><MiCredencialQrView /></Suspense>} />
+          <Route element={<PortalFormacionLayout />}>
+            <Route path="/mis-pasos" element={<PasosVideoView />} />
+            <Route path="/mi-cancionero" element={<CancioneroView />} />
+          </Route>
 
           {/* =====================================
               REDIRECCIONES

@@ -57,6 +57,20 @@ const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: numbe
   return Math.min(importes[pagosVerificados] ?? redondear(saldo), redondear(saldo));
 };
 
+const MENSAJE_PREREGISTRO_OBSERVADO = "Tienes una observación pendiente en tu preregistro. Regularízala con Administración y espera su aprobación para acceder a la opción de pagos.";
+
+async function validarPreregistroAprobado(cuota: { preregistroId: unknown }) {
+  const referencia = cuota.preregistroId as { _id?: unknown } | null;
+  const preregistroId = referencia && typeof referencia === "object" && "_id" in referencia ? referencia._id : cuota.preregistroId;
+  const preregistro = await Preregistro.findOne({ _id: preregistroId, fechaEliminado: null }).select("estado aprobado observacion");
+  if (!preregistro) return { permitido: false, estado: "NO_ENCONTRADO", mensaje: "No se encontró el preregistro asociado a esta cuota." };
+  if (preregistro.estado === "APROBADO" && preregistro.aprobado) return { permitido: true, preregistro };
+  const mensaje = preregistro.estado === "OBSERVADO"
+    ? MENSAJE_PREREGISTRO_OBSERVADO
+    : "Tu preregistro todavía no está aprobado. La opción de pagos se habilitará cuando Administración complete la aprobación.";
+  return { permitido: false, estado: preregistro.estado, observacion: preregistro.observacion, mensaje };
+}
+
 async function pasarAListaEspera(cuota: InstanceType<typeof Cuota>, observacion = "Plazo vencido sin pago de primera cuota verificado") {
   if (await Fraterno.exists({ preregistroId: cuota.preregistroId, fechaEliminado: null })) return false;
   if (!cuota.cupoLiberado) cuota.fechaLiberacionCupo = new Date();
@@ -101,6 +115,15 @@ export const crearCuota = async (req: Request, res: Response) => { try { const p
 export const listarCuotas = async (_req: Request, res: Response) => res.json({ cuotas: await Cuota.find({ fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 }) });
 export const obtenerMiCuota = async (req: Request, res: Response) => {
   const preregistros = await Preregistro.find({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado");
+  const preregistroVigente = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("estado aprobado observacion").sort({ fechaRegistro: -1 });
+  if (preregistroVigente && (preregistroVigente.estado !== "APROBADO" || !preregistroVigente.aprobado)) {
+    return res.status(423).json({
+      error: preregistroVigente.estado === "OBSERVADO" ? MENSAJE_PREREGISTRO_OBSERVADO : "Tu preregistro todavía no está aprobado. La opción de pagos se habilitará después de la aprobación de Administración.",
+      codigo: "PREREGISTRO_NO_APROBADO",
+      estadoPreregistro: preregistroVigente.estado,
+      observacion: preregistroVigente.observacion,
+    });
+  }
   let cuota = await Cuota.findOne({ preregistroId: { $in: preregistros.map((p) => p._id) }, fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 });
   if (!cuota) {
     const creada = await asegurarCuotaPostulante(req.usuario?._id);
@@ -127,6 +150,8 @@ export const elegirPlanCuotas = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
   if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes modificar una cuota ajena" });
+  const habilitacion = await validarPreregistroAprobado(cuota);
+  if (!habilitacion.permitido) return res.status(423).json({ error: habilitacion.mensaje, codigo: "PREREGISTRO_NO_APROBADO", estadoPreregistro: habilitacion.estado, observacion: habilitacion.observacion });
   if (cuota.numeroCuotasElegidas) {
     if (cuota.numeroCuotasElegidas === numeroCuotas) return res.json({ message: `El plan de ${numeroCuotas} cuota(s) ya estaba confirmado`, cuota });
     return res.status(409).json({ error: "El plan de cuotas ya fue confirmado y no puede modificarse. Solicita el cambio a un administrador." });
@@ -153,6 +178,8 @@ export const solicitarQrPago = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate<{ preregistroId: { numeroPreRegistro?: string; usuarioId?: { nombres?: string; apellidoPaterno?: string; ci?: string } } }>({ path: "preregistroId", select: "numeroPreRegistro usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno ci" } });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
   if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes solicitar un QR para una cuota ajena" });
+  const habilitacion = await validarPreregistroAprobado(cuota);
+  if (!habilitacion.permitido) return res.status(423).json({ error: habilitacion.mensaje, codigo: "PREREGISTRO_NO_APROBADO", estadoPreregistro: habilitacion.estado, observacion: habilitacion.observacion });
   const numeroCuotas = Number(req.body.numeroCuotas || cuota.numeroCuotasElegidas);
   const numeroPago = Number(req.body.numeroPago);
   if (![1, 2, 3].includes(numeroCuotas) || numeroPago < 1 || numeroPago > numeroCuotas) return res.status(400).json({ error: "Plan o número de pago inválido" });
@@ -216,6 +243,8 @@ export const validarPlazoAntesDeSubir = async (req: Request, res: Response, next
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
   if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes registrar pagos en una cuota ajena" });
+  const habilitacion = await validarPreregistroAprobado(cuota);
+  if (!habilitacion.permitido) return res.status(423).json({ error: habilitacion.mensaje, codigo: "PREREGISTRO_NO_APROBADO", estadoPreregistro: habilitacion.estado, observacion: habilitacion.observacion });
   if (!cuota.fechaInicioPlazo || !cuota.fechaVencimiento) return res.status(409).json({ error: "Acepta los términos y condiciones para iniciar tu plazo de pago" });
   if (cuota.fechaVencimiento < new Date()) return res.status(409).json({ error: "El plazo venció. El QR y la carga de comprobantes están bloqueados hasta que administración te habilite nuevamente." });
   return next();
