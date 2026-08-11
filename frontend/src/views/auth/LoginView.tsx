@@ -19,6 +19,7 @@ import {
   AlarmClock,
   UserPlus,
 } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 import {
   ErrorLogin,
@@ -357,7 +358,8 @@ export default function LoginView() {
   };
 
   return (
-    <section className="relative min-h-screen overflow-hidden bg-slate-100">
+    <section className="relative min-h-screen overflow-hidden bg-slate-100 transition-colors dark:bg-slate-950">
+      <ThemeToggle className="fixed right-4 top-4 z-50 sm:right-6 sm:top-6" />
       {/* FONDO DECORATIVO */}
 
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(236,72,153,0.22),transparent_30%),radial-gradient(circle_at_80%_15%,rgba(34,211,238,0.22),transparent_28%),radial-gradient(circle_at_75%_85%,rgba(250,204,21,0.20),transparent_30%)]" />
@@ -365,7 +367,7 @@ export default function LoginView() {
       <div className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(15,23,42,.5)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,.5)_1px,transparent_1px)] [background-size:42px_42px]" />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4 sm:p-6">
-        <div className="grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white bg-white shadow-2xl lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white bg-white shadow-2xl dark:border-white/10 dark:bg-[#262022] lg:grid-cols-[1.05fr_0.95fr]">
           {/* PANEL DE IDENTIDAD */}
 
           <aside className="relative hidden min-h-[700px] overflow-hidden lg:block">
@@ -424,7 +426,7 @@ export default function LoginView() {
 
           {/* FORMULARIO */}
 
-          <div className="relative flex min-h-[700px] items-center bg-white p-6 sm:p-10 lg:p-12">
+          <div className="relative flex min-h-[700px] items-center bg-white p-6 transition-colors dark:bg-[#262022] sm:p-10 lg:p-12">
             <div className="absolute right-0 top-0 h-40 w-40 rounded-bl-full bg-gradient-to-br from-fuchsia-100 via-yellow-50 to-cyan-100" />
 
             <div className="relative z-10 mx-auto w-full max-w-md">
@@ -447,7 +449,7 @@ export default function LoginView() {
                   Tinkus Puros y Naturales
                 </p>
 
-                <h2 className="mt-2 text-4xl font-black tracking-tight text-slate-950">
+                <h2 className="mt-2 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
                   Iniciar sesión
                 </h2>
 
@@ -471,7 +473,7 @@ export default function LoginView() {
                 <div className="space-y-2">
                   <label
                     htmlFor="email"
-                    className="text-sm font-black text-slate-700"
+                    className="text-sm font-black text-slate-700 dark:text-slate-200"
                   >
                     Correo electrónico
                   </label>
@@ -487,7 +489,7 @@ export default function LoginView() {
                       autoComplete="email"
                       placeholder="correo@ejemplo.com"
                       disabled={procesando}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-16 pr-4 text-sm font-bold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-fuchsia-500 focus:bg-white focus:ring-4 focus:ring-fuchsia-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-16 pr-4 text-sm font-bold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-fuchsia-500 focus:bg-white focus:ring-4 focus:ring-fuchsia-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#352d30] dark:text-white dark:focus:bg-[#3d3337]"
                       {...register(
                         "email",
                         {
@@ -521,7 +523,7 @@ export default function LoginView() {
                 <div className="space-y-2">
                   <label
                     htmlFor="password"
-                    className="text-sm font-black text-slate-700"
+                    className="text-sm font-black text-slate-700 dark:text-slate-200"
                   >
                     Contraseña
                   </label>
@@ -541,7 +543,7 @@ export default function LoginView() {
                       autoComplete="current-password"
                       placeholder="Ingresa tu contraseña"
                       disabled={procesando}
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-16 pr-14 text-sm font-bold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-4 pl-16 pr-14 text-sm font-bold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#352d30] dark:text-white dark:focus:bg-[#3d3337]"
                       {...register(
                         "password",
                         {

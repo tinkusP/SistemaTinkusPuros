@@ -18,6 +18,7 @@ import {
 
 import "react-toastify/dist/ReactToastify.css";
 import { registrarCierreSesion } from "@/api/GuiaApi";
+import ThemeToggle from "@/components/ThemeToggle";
 
 import {
   useAuth,
@@ -410,7 +411,9 @@ export default function AppLayout() {
               </div>
             </div>
 
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <div className="relative">
               <button
                 type="button"
                 onClick={() =>
@@ -490,6 +493,7 @@ export default function AppLayout() {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </header>

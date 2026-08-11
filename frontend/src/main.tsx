@@ -5,6 +5,10 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import './index.css'
 import Router from './router'
 
+const temaGuardado = localStorage.getItem('TINKUS_TEMA')
+const iniciarOscuro = temaGuardado === 'oscuro' || (temaGuardado === null && window.matchMedia('(prefers-color-scheme: dark)').matches)
+document.documentElement.classList.toggle('dark', iniciarOscuro)
+
 const queryClient = new QueryClient()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
