@@ -105,7 +105,10 @@ export const crearPreregistro = async (req: Request, res: Response) => {
 export const obtenerPreregistros = async (req: Request, res: Response) => {
   try {
     const pagina = Math.max(Number(req.query.pagina) || 1, 1);
-    const limite = Math.min(Math.max(Number(req.query.limite) || 20, 1), 100);
+    // La gestión unificada necesita relacionar todos los perfiles visibles con
+    // su preregistro. El límite anterior de 100 producía falsos "Sin
+    // preregistro" cuando existían más de cien registros en la gestión.
+    const limite = Math.min(Math.max(Number(req.query.limite) || 20, 1), 1000);
     const filtro: Record<string, unknown> = { fechaEliminado: null };
     if (req.query.estado) filtro.estado = req.query.estado;
     if (req.query.gestionId) filtro.gestionId = req.query.gestionId;

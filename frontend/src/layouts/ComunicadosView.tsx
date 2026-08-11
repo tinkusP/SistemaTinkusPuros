@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { registrarCierreSesion } from "@/api/GuiaApi";
 import { listarAnuncios, leerNotificacion, misNotificaciones } from "@/api/GuiaApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import ThemeToggle from "@/components/ThemeToggle";
 
 type TipoPublicacion =
   | "COMUNICADO"
@@ -230,10 +231,6 @@ export default function ComunicadosView() {
     );
   };
 
-  if (usuario?.requiereCambioPassword) {
-    return <Navigate to="/cambiar-password-obligatorio" replace />;
-  }
-
   const publicacionesFiltradas =
     useMemo(() => {
       const texto =
@@ -284,6 +281,10 @@ export default function ComunicadosView() {
       tipoSeleccionado,
     ]);
 
+  if (usuario?.requiereCambioPassword) {
+    return <Navigate to="/cambiar-password-obligatorio" replace />;
+  }
+
   return (
     <div className="min-h-screen w-full bg-[#eeeae2] text-[#262022] dark:bg-[#1f1a1c] dark:text-[#F6F0E3]">
       {/* Cabecera institucional */}
@@ -312,12 +313,15 @@ export default function ComunicadosView() {
             </div>
           </Link>
 
-          <div className="hidden text-right text-xs leading-5 text-slate-500 lg:block dark:text-[#B7A7A0]">
-            <p className="font-bold uppercase tracking-wider text-[#74122A] dark:text-[#C59A3A]">
-              Información oficial
-            </p>
-            <p>Comunicados de la directiva</p>
-            <p>La Paz, Bolivia</p>
+          <div className="flex items-center justify-between gap-4 lg:justify-end">
+            <div className="hidden text-right text-xs leading-5 text-slate-500 lg:block dark:text-[#B7A7A0]">
+              <p className="font-bold uppercase tracking-wider text-[#74122A] dark:text-[#C59A3A]">
+                Información oficial
+              </p>
+              <p>Comunicados de la directiva</p>
+              <p>La Paz, Bolivia</p>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
 

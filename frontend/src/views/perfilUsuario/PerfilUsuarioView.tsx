@@ -45,7 +45,7 @@ import {
 } from "@/types/PerfilUsuarioType";
 
 import PerfilUsuarioDetalleModal from "@/components/perfilUsuario/PerfilUsuarioDetalleModal";
-import { obtenerPreregistros } from "@/api/PreregistroApi";
+import { crearPreregistro, obtenerPreregistros } from "@/api/PreregistroApi";
 import { habilitarGuia, listarGuias } from "@/api/GuiaApi";
 import { listarFraternos } from "@/api/FraternoApi";
 import { GestionarFraternoModal } from "@/views/fraterno/FraternoView";
@@ -193,6 +193,15 @@ export default function PerfilUsuarioView() {
       await queryClient.invalidateQueries({ queryKey: ["postulantes-guia"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo enviar al proceso de guía"),
+  });
+
+  const crearPreregistroFaltante = useMutation({
+    mutationFn: (usuarioId: string) => crearPreregistro({ usuarioId }),
+    onSuccess: async (preregistro) => {
+      toast.success(`Preregistro ${preregistro.numeroPreRegistro} creado correctamente`);
+      await queryClient.invalidateQueries({ queryKey: ["preregistros"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo crear el preregistro"),
   });
 
   const perfilesFiltrados = useMemo(() => {
@@ -568,6 +577,7 @@ export default function PerfilUsuarioView() {
                     const fraterno = fraternoPorUsuario.get(perfil._id);
                     const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
                     const asignandoGuia = asignarGuia.isPending && asignarGuia.variables === preregistro?._id;
+                    const creandoPreregistro = crearPreregistroFaltante.isPending && crearPreregistroFaltante.variables === perfil._id;
 
                     return (
                       <tr
@@ -617,11 +627,11 @@ export default function PerfilUsuarioView() {
                         </td>
 
                         <td className="p-4">
-                          {preregistro ? <div className="space-y-2"><span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${preregistro.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : preregistro.estado === "OBSERVADO" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}`}>{preregistro.estado.replaceAll("_", " ")}</span><p className="text-xs font-semibold text-slate-500">{preregistro.numeroPreRegistro}</p><button type="button" onClick={() => navigate(`/preregistros/${preregistro._id}/editar`, { state: { returnTo: "/perfil-usuario" } })} className="text-xs font-black text-[#841534] underline underline-offset-2">Revisar preregistro</button></div> : <span className="text-xs text-slate-400">Sin preregistro</span>}
+                          {preregistro ? <div className="space-y-2"><span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${preregistro.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : preregistro.estado === "OBSERVADO" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}`}>{preregistro.estado.replaceAll("_", " ")}</span><p className="text-xs font-semibold text-slate-500">{preregistro.numeroPreRegistro}</p><button type="button" onClick={() => navigate(`/preregistros/${preregistro._id}/editar`, { state: { returnTo: "/perfil-usuario" } })} className="text-xs font-black text-[#841534] underline underline-offset-2">Revisar preregistro</button></div> : <div className="space-y-2"><span className="block text-xs font-bold text-amber-700">Sin preregistro</span><button type="button" disabled={creandoPreregistro} onClick={() => { if (window.confirm(`Se creará un preregistro en la gestión vigente para ${perfil.nombres}. ¿Deseas continuar?`)) crearPreregistroFaltante.mutate(perfil._id); }} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-900 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{creandoPreregistro ? "Creando..." : "+ Crear preregistro"}</button></div>}
                         </td>
 
                         <td className="p-4">
-                          {postulanteGuia ? <button type="button" onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-xl bg-purple-100 px-3 py-2 text-left text-xs font-black text-purple-800">{postulanteGuia.estado.replaceAll("_", " ")}<span className="mt-1 block font-medium">Abrir evaluación</span></button> : preregistro ? <button type="button" disabled={asignandoGuia || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(preregistro._id)} className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-xs font-black text-purple-800 disabled:opacity-50">{asignandoGuia ? "Enviando..." : "Enviar a postulante guía"}</button> : <span className="text-xs text-slate-400">Requiere preregistro</span>}
+                          {postulanteGuia ? <button type="button" onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-xl bg-purple-100 px-3 py-2 text-left text-xs font-black text-purple-800">{postulanteGuia.estado.replaceAll("_", " ")}<span className="mt-1 block font-medium">Abrir evaluación</span></button> : preregistro ? <button type="button" disabled={asignandoGuia || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(preregistro._id)} className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-xs font-black text-purple-800 disabled:opacity-50">{asignandoGuia ? "Enviando..." : "Enviar a postulante guía"}</button> : <span className="text-xs font-semibold text-slate-400">Primero crea el preregistro</span>}
                         </td>
 
                         <td className="p-4">{fraterno ? <button type="button" onClick={() => navigate(`/fraternos?buscar=${encodeURIComponent(perfil.ci)}`)} className="rounded-xl bg-emerald-100 px-3 py-2 text-left text-xs font-black text-emerald-800">{fraterno.numeroFraterno}<span className="mt-1 block font-medium">Gestionar</span></button> : <span className="text-xs text-slate-400">—</span>}</td>
