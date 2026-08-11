@@ -3,7 +3,8 @@ import Preregistro from "../models/Preregistro";
 import PostulanteGuia from "../models/PostulanteGuia";
 
 export async function puedePublicarFormacion(req:Request){
-  const roles=req.usuario?.roles as unknown as {codigo?:string;nombre?:string}[]|undefined;
+  const roles=req.usuario?.roles as unknown as {codigo?:string;nombre?:string;permisos?:string[]}[]|undefined;
+  if(roles?.some(rol=>rol.permisos?.includes("FORMACION_PUBLICAR")))return true;
   const autorizadoPorRol=roles?.some(r=>[r.codigo,r.nombre].some(v=>["ADMINISTRADOR","ADMIN","GUIA","GUÍA"].includes(String(v??"").trim().toUpperCase())));
   if(autorizadoPorRol)return true;
   const preregistros=await Preregistro.find({usuarioId:req.usuario?._id,fechaEliminado:null}).distinct("_id");
