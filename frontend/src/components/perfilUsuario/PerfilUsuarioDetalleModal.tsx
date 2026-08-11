@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { updatePerfilUsuario } from "@/api/PerfilUsuarioApi";
 import { habilitarGuiaPorUsuario } from "@/api/GuiaApi";
@@ -175,6 +176,7 @@ export default function PerfilUsuarioDetalleModal({
   actualizado,
 }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [
     errorFoto,
     setErrorFoto,
@@ -309,6 +311,8 @@ export default function PerfilUsuarioDetalleModal({
     perfil.documentos ??
     [];
   const preregistroVigente = preregistroConsulta.data?.preregistros[0];
+  const telefonoWhatsApp = String(perfil.telefono ?? "").replace(/\D/g, "");
+  const numeroWhatsApp = telefonoWhatsApp.startsWith("591") ? telefonoWhatsApp : telefonoWhatsApp.length === 8 ? `591${telefonoWhatsApp}` : telefonoWhatsApp;
   const preregistroEstaAprobado = preregistroAprobado || preregistroVigente?.estado === "APROBADO";
   const yaEsPostulanteGuia = Boolean(preregistroVigente?.postulanteGuia);
 
@@ -344,7 +348,7 @@ export default function PerfilUsuarioDetalleModal({
             </h2>
           </div>
 
-          <button
+          <div className="flex items-center gap-2"><button type="button" onClick={() => { cerrar(); navigate(`/perfilUsuario/${perfil._id}/editar`); }} className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold transition hover:bg-white/20">Editar usuario</button><button
             type="button"
             onClick={
               cerrar
@@ -353,7 +357,7 @@ export default function PerfilUsuarioDetalleModal({
             aria-label="Cerrar modal"
           >
             <X className="h-5 w-5" />
-          </button>
+          </button></div>
         </div>
 
         <div className="h-[calc(100dvh-76px)] overflow-x-hidden overflow-y-auto p-3 sm:max-h-[84vh] sm:p-6">
@@ -405,7 +409,7 @@ export default function PerfilUsuarioDetalleModal({
                       <span className={`rounded-full px-3 py-1 text-xs font-black ${preregistroVigente.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : preregistroVigente.estado === "OBSERVADO" ? "bg-orange-100 text-orange-800" : preregistroVigente.estado === "LISTA_ESPERA" ? "bg-blue-100 text-blue-800" : preregistroVigente.estado === "RECHAZADO" || preregistroVigente.estado === "CANCELADO" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"}`}>{preregistroVigente.estado.replaceAll("_", " ")}</span>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">Registrado: {new Date(preregistroVigente.fechaRegistro).toLocaleDateString("es-BO")}</p>
-                    {preregistroVigente.observacion && <div className="mt-3 rounded-lg bg-amber-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Observación</p><p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{preregistroVigente.observacion}</p></div>}
+                    {preregistroVigente.observacion && <div className="mt-3 rounded-lg bg-amber-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Observación</p><p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{preregistroVigente.observacion}</p>{numeroWhatsApp&&<a href={`https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Hola ${nombreCompleto(perfil)},\n\nTu preregistro tiene la siguiente observación:\n${preregistroVigente.observacion}\n\nPor favor corrige tus datos o documentos para continuar.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-lg bg-[#25D366] px-3 py-2 text-xs font-black text-white">Enviar observación por WhatsApp</a>}</div>}
                   </div>}
                   {!preregistroConsulta.isLoading && !preregistroVigente && <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-center text-sm text-slate-500">No existe un preregistro vigente.</p>}
                 </Bloque>
@@ -920,7 +924,7 @@ function DocumentoPdf({
   const esImagen = Boolean(url) && !/\.pdf(?:$|[?#])/i.test(url!);
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl border border-[#eadcc7] bg-white">
+    <article className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#eadcc7] bg-white">
       <div className="flex min-w-0 items-start justify-between gap-2 border-b border-[#eadcc7] p-3 sm:gap-3 sm:p-4">
         <div className="flex min-w-0 items-start gap-3">
           <div className="rounded-xl bg-red-100 p-2 text-red-600">
@@ -994,14 +998,15 @@ function DocumentoPdf({
                 className="block h-full w-full object-contain"
               />
             </a>
-          ) : (
+          ) : (<>
             <iframe
               src={url}
               title={`Vista previa de ${nombre}`}
               onError={() => setErrorPdf(true)}
-              className="h-full w-full border-0"
+              className="hidden h-full w-full max-w-full border-0 sm:block"
             />
-          )
+            <a href={url} target="_blank" rel="noreferrer" className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center font-bold text-[#841534] sm:hidden"><FileText className="h-12 w-12"/>Abrir documento PDF</a>
+          </>)
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-red-600">
             No se pudo cargar la vista previa del PDF.
