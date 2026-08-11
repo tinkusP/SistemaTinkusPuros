@@ -184,6 +184,7 @@ export default function LoginView() {
             codigo.replace(/[\s_-]/g, ""),
           ),
         );
+        const permisos = new Set(usuario.roles.flatMap((rolUsuario) => rolUsuario.permisos ?? []));
 
         const nombreCompleto = [
           usuario.nombres,
@@ -211,6 +212,18 @@ export default function LoginView() {
             "Usuario"
           }`,
         );
+
+        // Los roles operativos personalizados entran primero a la primera
+        // herramienta que realmente tienen autorizada. Esto evita que un
+        // fraterno que además es Ayudante sea enviado solamente a Comunicados.
+        if (!esAdministrador && permisos.has("TOKENS_GESTIONAR")) {
+          navigate("/tokens-registro", { replace: true });
+          return;
+        }
+        if (!esAdministrador && permisos.has("VISTA_POSTULANTES_GUIA")) {
+          navigate("/postulantes-guia", { replace: true });
+          return;
+        }
 
         /*
          * Redirección por código de rol.

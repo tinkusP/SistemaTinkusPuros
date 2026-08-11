@@ -3,11 +3,10 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { crearCuota, detalleCuota, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
-import type { NextFunction, Request, Response } from "express";
+import { crearCuota, detalleCuota, editarPlanCuotasAdmin, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
+import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 const router = Router(); const id = param("id").isMongoId();
-const soloAdministracion = (req: Request, res: Response, next: NextFunction) => { const roles = req.usuario?.roles as unknown as { codigo?: string; nombre?: string }[] | undefined; const permitido = roles?.some((rol) => [rol.codigo, rol.nombre].some((valor) => String(valor ?? "").toUpperCase() === "ADMINISTRADOR")); if (!permitido) { res.status(403).json({ error: "Esta operación requiere rol de administrador" }); return; } next(); };
 /** @openapi
  * /api/cuotas:
  *   get: { tags: [Cuotas], summary: Listar cuotas, security: [{ bearerAuth: [] }], responses: { 200: { description: Lista } } }
@@ -42,6 +41,7 @@ router.get("/mia", authenticate, obtenerMiCuota);
  *   get: { tags: [Cuotas], summary: Ver cuota y pagos parciales, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { 200: { description: Detalle } } }
  */
 router.get("/:id", authenticate, id, handleInputErrors, detalleCuota);
+router.patch("/:id/plan/admin", authenticate, soloAdministradorReal, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, editarPlanCuotasAdmin);
 router.patch("/:id/plan", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, elegirPlanCuotas);
 router.post("/:id/solicitar-qr", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), body("numeroPago").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, solicitarQrPago);
 router.post("/:id/solicitar-prorroga", authenticate, id, handleInputErrors, solicitarProrrogaPago);

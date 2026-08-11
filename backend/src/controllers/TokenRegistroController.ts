@@ -11,6 +11,12 @@ import { TERMINOS_PARTICIPACION } from "../constants/terminosParticipacion";
 
 const normalizar = (v: unknown) => String(v ?? "").trim().toUpperCase().replace(/\s+/g, "");
 const codigoNuevo = () => `FRA-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+const esAdministrador = (req: Request) => {
+  const roles = req.usuario?.roles as unknown as { codigo?: string; nombre?: string }[] | undefined;
+  return Boolean(roles?.some((rol) => [rol.codigo, rol.nombre].some((valor) =>
+    ["ADMINISTRADOR", "ADMIN", "SUPERADMIN", "SUPERADMINISTRADOR"].includes(normalizar(valor).replace(/[_-]/g, "")),
+  )));
+};
 
 async function ocupacion(gestion: any) {
   const [tokensDisponibles, fraternos, tokensUtilizados] = await Promise.all([
@@ -53,21 +59,29 @@ export async function generarToken(req: Request, res: Response) {
 
 export async function listarTokens(req: Request, res: Response) {
   await TokenRegistro.updateMany({ estado: "DISPONIBLE", fechaExpiracion: { $lte: new Date() } }, { estado: "VENCIDO" });
-  const filtro: any = {}; if (req.query.gestionId) filtro.gestionId = req.query.gestionId; if (req.query.estado) filtro.estado = req.query.estado;
-  const tokens = await TokenRegistro.find(filtro).populate("gestionId", "nombre anio").populate("generadoPor utilizadoPor", "nombres apellidoPaterno apellidoMaterno ci email").populate("cuotaId").sort({ fechaCreado: -1 });
+  const administrador = esAdministrador(req);
+  const filtro: any = administrador ? {} : { generadoPor: req.usuario?._id };
+  if (req.query.gestionId) filtro.gestionId = req.query.gestionId; if (req.query.estado) filtro.estado = req.query.estado;
+  let consulta = TokenRegistro.find(filtro).populate("gestionId", "nombre anio").populate("generadoPor utilizadoPor", "nombres apellidoPaterno apellidoMaterno ci email");
+  if (administrador) consulta = consulta.populate("cuotaId");
+  const tokens = await consulta.sort({ fechaCreado: -1 });
   return res.json({ tokens });
 }
 
 export async function anularToken(req: Request, res: Response) {
-  const token = await TokenRegistro.findOneAndUpdate({ _id: req.params.id, estado: "DISPONIBLE" }, { estado: "ANULADO" }, { new: true });
+  const filtro: any = { _id: req.params.id, estado: "DISPONIBLE" };
+  if (!esAdministrador(req)) filtro.generadoPor = req.usuario?._id;
+  const token = await TokenRegistro.findOneAndUpdate(filtro, { estado: "ANULADO" }, { new: true });
   if (!token) return res.status(404).json({ error: "El token no está disponible" });
   return res.json({ message: "Token anulado y cupo liberado", token });
 }
 
-export async function obtenerConfiguracionTokens(_req: Request, res: Response) {
+export async function obtenerConfiguracionTokens(req: Request, res: Response) {
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
   if (!gestion) return res.status(404).json({ error: "No existe gestión activa" });
-  return res.json({ gestion, configuracion: await ConfiguracionPago.findOne({ gestionId: gestion._id }), cupos: await ocupacion(gestion) });
+  const configuracion = await ConfiguracionPago.findOne({ gestionId: gestion._id })
+    .select("requerirTokenRegistro tarifaInterno tarifaExterno primeraCuota vigenciaTokenHoras plazoPrimeraCuotaHoras cantidadBloques");
+  return res.json({ gestion, configuracion, cupos: await ocupacion(gestion), puedeConfigurar: esAdministrador(req) });
 }
 
 export async function obtenerConfiguracionPublica(_req: Request, res: Response) {
@@ -78,6 +92,7 @@ export async function obtenerConfiguracionPublica(_req: Request, res: Response) 
 }
 
 export async function guardarConfiguracionTokens(req: Request, res: Response) {
+  if (!esAdministrador(req)) return res.status(403).json({ error: "Solo un administrador puede modificar cupos, tarifas, plazos o QR de pago" });
   const gestion = await Gestion.findById(req.body.gestionId); if (!gestion) return res.status(404).json({ error: "Gestión no encontrada" });
   gestion.cupoMaximoHombres = Number(req.body.cupoMaximoHombres); gestion.cupoMaximoMujeres = Number(req.body.cupoMaximoMujeres); await gestion.save();
   const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { requerirTokenRegistro: req.body.requerirTokenRegistro !== false, tarifaInterno: Number(req.body.tarifaInterno), tarifaExterno: Number(req.body.tarifaExterno), primeraCuota: 300, vigenciaTokenHoras: Number(req.body.vigenciaTokenHoras), plazoPrimeraCuotaHoras: Number(req.body.plazoPrimeraCuotaHoras), cantidadBloques: Number(req.body.cantidadBloques), fechaEditado: new Date(), usuarioEditor: req.usuario?._id, activo: true }, $setOnInsert: { terminos: TERMINOS_PARTICIPACION, versionTerminos: 1 } }, { upsert: true, new: true, setDefaultsOnInsert: true });

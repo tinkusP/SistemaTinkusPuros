@@ -16,6 +16,8 @@ export interface ConfiguracionPagoType extends Document {
   vigenciaTokenHoras: number;
   plazoPrimeraCuotaHoras: number;
   cantidadBloques: number;
+  registroTallasHabilitado: boolean;
+  fechaLimiteRegistroTallas?: Date;
   terminos: string;
   versionTerminos: number;
   activo: boolean;
@@ -36,6 +38,8 @@ const schema = new Schema<ConfiguracionPagoType>({
   vigenciaTokenHoras: { type: Number, min: 1, max: 8760, default: 24 },
   plazoPrimeraCuotaHoras: { type: Number, min: 1, max: 8760, default: 72 },
   cantidadBloques: { type: Number, min: 1, max: 100, default: 1 },
+  registroTallasHabilitado: { type: Boolean, default: false },
+  fechaLimiteRegistroTallas: Date,
   terminos: { type: String, required: true, trim: true, maxlength: 10000 },
   versionTerminos: { type: Number, min: 1, default: 1 },
   activo: { type: Boolean, default: true },

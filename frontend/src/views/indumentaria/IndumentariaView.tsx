@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { listarFraternos } from "@/api/FraternoApi";
-import { cambiarBloqueoTalla, cambiarEntrega, crearEntrega, crearPrenda, guardarTalla, obtenerIndumentaria, type Entrega, type Prenda } from "@/api/IndumentariaApi";
+import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, crearEntrega, crearPrenda, guardarTalla, obtenerIndumentaria, type Entrega, type Prenda } from "@/api/IndumentariaApi";
 import type { Fraterno } from "@/types/FraternoType";
 
 type Seccion = "POLERA" | "CHAMARRA" | "INDUMENTARIA";
@@ -20,6 +20,7 @@ export default function IndumentariaView() {
   const [busqueda, setBusqueda] = useState("");
   const [tallasLocales, setTallasLocales] = useState<TallasLocales>({});
   const [nuevaPrenda, setNuevaPrenda] = useState("");
+  const [configTallas, setConfigTallas] = useState<{ habilitado: boolean; sinFechaLimite: boolean; fechaLimite: string }>({ habilitado: false, sinFechaLimite: true, fechaLimite: "" });
 
   const resumen = useQuery({ queryKey: ["indumentaria"], queryFn: obtenerIndumentaria });
   const consultaFraternos = useQuery({ queryKey: ["fraternos"], queryFn: listarFraternos });
@@ -31,6 +32,18 @@ export default function IndumentariaView() {
     },
     onError: (error: any) => toast.error(error?.response?.data?.error ?? error?.message ?? "No se pudo guardar"),
   });
+  const guardarConfiguracionTallas = useMutation({
+    mutationFn: () => configurarRegistroTallas({ habilitado: configTallas.habilitado, sinFechaLimite: configTallas.sinFechaLimite, fechaLimite: configTallas.sinFechaLimite ? null : configTallas.fechaLimite || null }),
+    onSuccess: async (respuesta) => { toast.success(respuesta.message); await queryClient.invalidateQueries({ queryKey: ["indumentaria"] }); },
+    onError: (error: any) => toast.error(error?.response?.data?.error ?? error?.message ?? "No se pudo configurar el registro de tallas"),
+  });
+
+  const configuracionServidor = resumen.data?.configuracionTallas;
+  useEffect(() => {
+    if (!configuracionServidor) return;
+    const fecha = configuracionServidor.fechaLimite ? new Date(configuracionServidor.fechaLimite) : null;
+    setConfigTallas({ habilitado: configuracionServidor.habilitado, sinFechaLimite: !fecha, fechaLimite: fecha ? new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "" });
+  }, [configuracionServidor]);
 
   const fraternos = useMemo(() => {
     const texto = busqueda.trim().toLocaleUpperCase("es-BO");
@@ -75,6 +88,11 @@ export default function IndumentariaView() {
         </div>
         <label className="relative block w-full lg:max-w-md"><span className="pointer-events-none absolute left-4 top-3 text-slate-400">⌕</span><input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por nombre, CI o número de fraterno..." className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-[#841534]" /></label>
       </div>
+    </section>
+
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-amber-700">Periodo de registro</p><h2 className="text-xl font-black text-[#841534]">Habilitar registro de tallas</h2><p className="mt-1 text-sm text-slate-600">Decide cuándo los fraternos pueden registrar o modificar su polera y chamarra.</p></div><div className="grid flex-1 gap-3 sm:grid-cols-2 xl:max-w-3xl xl:grid-cols-[auto_auto_1fr_auto]"><label className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 font-bold"><input type="checkbox" checked={configTallas.habilitado} onChange={(e)=>setConfigTallas({...configTallas,habilitado:e.target.checked})}/> Habilitado</label><label className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 font-bold"><input type="checkbox" checked={configTallas.sinFechaLimite} onChange={(e)=>setConfigTallas({...configTallas,sinFechaLimite:e.target.checked})}/> Sin fecha límite</label><label className="text-sm font-bold text-slate-700">Fecha límite<input type="datetime-local" disabled={!configTallas.habilitado||configTallas.sinFechaLimite} value={configTallas.fechaLimite} onChange={(e)=>setConfigTallas({...configTallas,fechaLimite:e.target.value})} className="mt-1 w-full rounded-xl border bg-white px-4 py-2.5 disabled:bg-slate-100"/></label><button type="button" disabled={guardarConfiguracionTallas.isPending||(!configTallas.sinFechaLimite&&!configTallas.fechaLimite)} onClick={()=>guardarConfiguracionTallas.mutate()} className="rounded-xl bg-[#841534] px-5 py-3 font-black text-white disabled:opacity-50">{guardarConfiguracionTallas.isPending?"Guardando...":"Guardar periodo"}</button></div></div>
+      <p className={`mt-4 rounded-xl p-3 text-sm font-bold ${configTallas.habilitado?"bg-emerald-100 text-emerald-900":"bg-slate-200 text-slate-700"}`}>{configTallas.habilitado ? configTallas.sinFechaLimite ? "Los fraternos pueden registrar sus tallas de forma indefinida." : `El registro estará disponible hasta ${configTallas.fechaLimite ? new Date(configTallas.fechaLimite).toLocaleString("es-BO") : "definir fecha"}.` : "El registro de tallas está cerrado para los usuarios."}</p>
     </section>
 
     {seccion === "INDUMENTARIA" && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">

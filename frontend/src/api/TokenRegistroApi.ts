@@ -1,6 +1,6 @@
 import api from "@/lib/axios";import{obtenerMensajeError}from"./apiError";
 export type TokenRegistro={_id:string;codigo:string;sexoCupo?:"HOMBRE"|"MUJER";tipoTarifa?:"INTERNO"|"EXTERNO";montoCuota?:number;primeraCuota?:number;plazoPagoHoras:number;estado:"DISPONIBLE"|"UTILIZADO"|"ANULADO"|"VENCIDO";fechaExpiracion:string;fechaCreado:string;fechaUtilizado?:string;gestionId:any;generadoPor:any;utilizadoPor?:any;cuotaId?:any;observacion?:string};
-export type ConfigTokens={gestion:any;configuracion:any;cupos:{HOMBRE:{usados:number;reservados:number;disponibles:number;maximo:number};MUJER:{usados:number;reservados:number;disponibles:number;maximo:number};TOTAL:{usados:number;reservados:number;disponibles:number;maximo:number}}};
+export type ConfigTokens={gestion:any;configuracion:any;puedeConfigurar:boolean;cupos:{HOMBRE:{usados:number;reservados:number;disponibles:number;maximo:number};MUJER:{usados:number;reservados:number;disponibles:number;maximo:number};TOTAL:{usados:number;reservados:number;disponibles:number;maximo:number}}};
 const fallo=(e:unknown,m:string):never=>{throw new Error(obtenerMensajeError(e,m))};
 export async function validarToken(codigo:string){try{return(await api.post("/tokens-registro/validar",{codigo})).data as{valido:boolean;token:any}}catch(e){return fallo(e,"Token no válido")}}
 export async function obtenerConfiguracionPublicaToken(){try{return(await api.get("/tokens-registro/configuracion-publica")).data as{gestionId:string;requerirTokenRegistro:boolean}}catch(e){return fallo(e,"No se pudo consultar el acceso al registro")}}

@@ -11,9 +11,15 @@ import Notificacion from "../models/Notificacion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
 import Fraterno from "../models/Fraterno";
+import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }] };
-const esAdministrador = (req: Request) => (req.usuario?.roles as unknown as { codigo?: string; nombre?: string }[] | undefined)?.some((r) => [r.codigo, r.nombre].some((v) => String(v ?? "").toUpperCase() === "ADMINISTRADOR")) ?? false;
+const esAdministrador = usuarioEsAdministrador;
+const tienePermiso = (req: Request, ...permisos: string[]) => {
+  const roles = req.usuario?.roles as unknown as { permisos?: string[] }[] | undefined;
+  const asignados = new Set((roles ?? []).flatMap((rol) => rol.permisos ?? []).map((permiso) => permiso.toUpperCase()));
+  return permisos.some((permiso) => asignados.has(permiso));
+};
 const rutaComprobante = (archivo?: Express.Multer.File) => (archivo as (Express.Multer.File & { rutaPublica?: string }) | undefined)?.rutaPublica;
 async function recalcular(cuotaId: string) { const cuota = await Cuota.findById(cuotaId); if (!cuota) return; const pagos = await DetalleCuota.aggregate([{ $match: { cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null } }, { $group: { _id: null, total: { $sum: "$monto" } } }]); cuota.montoPagado = pagos[0]?.total ?? 0; await cuota.save(); await promoverAFraternoSiCorresponde(cuotaId); }
 async function programarSiguientePago(cuotaId: string) {
@@ -121,12 +127,27 @@ export const elegirPlanCuotas = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
   if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
   if (!(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes modificar una cuota ajena" });
-  const yaInicio = await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: { $in: ["PENDIENTE", "VERIFICADO"] }, fechaEliminado: null });
-  if (yaInicio && cuota.numeroCuotasElegidas && cuota.numeroCuotasElegidas !== numeroCuotas) return res.status(409).json({ error: "El plan de cuotas ya no puede cambiarse porque existe un pago enviado o aprobado" });
+  if (cuota.numeroCuotasElegidas) {
+    if (cuota.numeroCuotasElegidas === numeroCuotas) return res.json({ message: `El plan de ${numeroCuotas} cuota(s) ya estaba confirmado`, cuota });
+    return res.status(409).json({ error: "El plan de cuotas ya fue confirmado y no puede modificarse. Solicita el cambio a un administrador." });
+  }
   cuota.numeroCuotasElegidas = numeroCuotas as 1 | 2 | 3;
   await cuota.save();
   await registrarAuditoria(req, { accion: "ELEGIR_PLAN", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `El usuario eligió pagar en ${numeroCuotas} cuota(s)` });
   return res.json({ message: `Plan de ${numeroCuotas} cuota(s) guardado`, cuota });
+};
+export const editarPlanCuotasAdmin = async (req: Request, res: Response) => {
+  const numeroCuotas = Number(req.body.numeroCuotas);
+  if (![1, 2, 3].includes(numeroCuotas)) return res.status(400).json({ error: "El plan debe ser de 1, 2 o 3 cuotas" });
+  const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
+  if (!cuota) return res.status(404).json({ error: "Cuota editable no encontrada" });
+  const pagosVerificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
+  if (numeroCuotas < pagosVerificados) return res.status(409).json({ error: `El plan no puede tener menos de ${pagosVerificados} pago(s) ya verificado(s)` });
+  const anterior = cuota.numeroCuotasElegidas;
+  cuota.numeroCuotasElegidas = numeroCuotas as 1 | 2 | 3;
+  await cuota.save();
+  await registrarAuditoria(req, { accion: "EDITAR_PLAN_ADMIN", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `Administración cambió el plan de ${anterior ?? "sin definir"} a ${numeroCuotas} cuota(s)`, datosAntes: { numeroCuotasElegidas: anterior }, datosDespues: { numeroCuotasElegidas: numeroCuotas } });
+  return res.json({ message: `Plan actualizado a ${numeroCuotas} cuota(s)`, cuota });
 };
 export const solicitarQrPago = async (req: Request, res: Response) => {
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate<{ preregistroId: { numeroPreRegistro?: string; usuarioId?: { nombres?: string; apellidoPaterno?: string; ci?: string } } }>({ path: "preregistroId", select: "numeroPreRegistro usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno ci" } });
@@ -189,7 +210,7 @@ export const prorrogarCuotasVencidas = async (req: Request, res: Response) => {
   await registrarAuditoria(req, { accion: "PRORROGA_MASIVA", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se ampliaron ${cuotas.length} cuotas vencidas por ${horas} horas. Motivo: ${motivo}` });
   return res.json({ message: `${cuotas.length} cuenta(s) vencida(s) fueron habilitadas`, actualizadas: cuotas.length });
 };
-export const detalleCuota = async (req: Request, res: Response) => { const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate(poblar); if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" }); if (!esAdministrador(req) && !(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes consultar una cuota que no te pertenece" }); const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).populate("usuarioRevisor", "nombres apellidoPaterno").sort({ fechaPago: -1 }); return res.json({ cuota, pagos }); };
+export const detalleCuota = async (req: Request, res: Response) => { const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate(poblar); if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" }); if (!esAdministrador(req) && !tienePermiso(req, "PAGOS_VER", "PAGOS_REVISAR", "VISTA_PAGOS") && !(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes consultar una cuota que no te pertenece" }); const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).populate("usuarioRevisor", "nombres apellidoPaterno").sort({ fechaPago: -1 }); return res.json({ cuota, pagos }); };
 export const validarPlazoAntesDeSubir = async (req: Request, res: Response, next: () => void) => {
   if (esAdministrador(req)) return next();
   const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null });
