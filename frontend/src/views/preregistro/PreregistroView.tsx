@@ -68,8 +68,10 @@ export default function PreregistroView() {
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#8F5F2A]">Proceso de admisión</p><h1 className="mt-1 text-3xl font-black text-[#74122A]">Preregistros</h1><p className="mt-1 text-sm text-[#735f55]">Revisión de postulantes, calificaciones y cupos.</p></div>
-      <button onClick={() => navigate("/preregistros/crear")} className="rounded-xl bg-[#74122A] px-5 py-3 text-sm font-bold text-white">+ Nuevo preregistro</button>
+      <div className="flex flex-wrap gap-2"><button onClick={() => navigate("/reportes")} className="rounded-xl border border-[#74122A] bg-white px-5 py-3 text-sm font-bold text-[#74122A]">🖨 Crear planilla</button><button onClick={() => navigate("/preregistros/crear")} className="rounded-xl bg-[#74122A] px-5 py-3 text-sm font-bold text-white">+ Nuevo preregistro</button></div>
     </header>
+
+    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5"><h2 className="font-black text-[#74122A]">Flujo recomendado de aprobación</h2><div className="mt-3 grid gap-3 text-sm md:grid-cols-3"><p className="rounded-xl bg-white p-3"><b>1. Revisar usuario</b><br/>Comprueba datos personales y documentos; usa “Editar usuario” si necesita correcciones.</p><p className="rounded-xl bg-white p-3"><b>2. Decidir preregistro</b><br/>Aprueba, observa, rechaza o envía a lista de espera. Las observaciones pueden enviarse por WhatsApp.</p><p className="rounded-xl bg-white p-3"><b>3. Confirmar fraterno</b><br/>Gestiona cuota, términos, cupo y situación final desde el módulo Fraternos.</p></div></section>
 
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">Total</p><strong className="mt-2 block text-3xl text-[#74122A]">{Object.values(resumen).reduce((total, cantidad) => total + (cantidad ?? 0), 0)}</strong></div>
@@ -104,6 +106,7 @@ export default function PreregistroView() {
             <td className="px-4 py-4">{new Date(item.fechaRegistro).toLocaleDateString("es-BO")}</td>
             <td className="px-4 py-4"><div className="flex flex-wrap gap-2">
               <button onClick={() => setDetalle(item)} className="rounded-lg bg-blue-100 px-3 py-2 text-blue-700">Ver</button>
+              {usuario&&<button onClick={() => navigate(`/perfilUsuario/${usuario._id}/editar`)} className="rounded-lg bg-slate-100 px-3 py-2 font-semibold text-slate-700">Editar usuario</button>}
               <button onClick={() => navigate(`/preregistros/${item._id}/editar`)} className="rounded-lg bg-amber-100 px-3 py-2 text-amber-800">Editar</button>
               <button onClick={() => navigate(`/cuotas?preregistroId=${item._id}`)} className="rounded-lg bg-emerald-100 px-3 py-2 font-semibold text-emerald-800">💳 Crear cuota</button>
               {postulanteGuia ? <button onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-lg bg-purple-700 px-3 py-2 font-semibold text-white">✓ Postulante a guía · {postulanteGuia.estado.replaceAll("_", " ")}</button> : <button disabled={asignando || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(item._id)} className="rounded-lg bg-purple-100 px-3 py-2 font-semibold text-purple-800 disabled:opacity-50">{asignando ? "Asignando..." : "🪶 Designar postulante a guía"}</button>}
