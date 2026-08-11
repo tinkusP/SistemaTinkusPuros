@@ -224,7 +224,7 @@ export default function AppLayout() {
     : esGuia
       ? opcionesMenu.filter(opcion => ["/comunicados", "/mi-bloque-guia", "/pasos", "/cancionero"].includes(opcion.ruta))
       : opcionesMenu.filter(opcion => tienePermisosOperativos
-        ? opcion.ruta === "/dashboard" || permisosUsuario.has(permisoPorRuta[opcion.ruta])
+        ? opcion.ruta === "/dashboard" || permisosUsuario.has(permisoPorRuta[opcion.ruta]) || (opcion.ruta === "/tokens-registro" && permisosUsuario.has("VISTA_TOKENS"))
         : ["/comunicados", "/pasos", "/cancionero"].includes(opcion.ruta));
 
   const backendUrl = String(

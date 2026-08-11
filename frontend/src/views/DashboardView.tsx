@@ -48,7 +48,7 @@ const accesosRapidos = [
   { titulo: "Integrantes por facultad", descripcion: "Consultar la distribución universitaria.", ruta: "/facultades", icono: "🎓", permiso: "VISTA_FACULTADES" },
   { titulo: "Preregistros", descripcion: "Revisar postulantes, estados y cupos.", ruta: "/preregistros", icono: "📝", permiso: "VISTA_PREREGISTROS" },
   { titulo: "Pagos", descripcion: "Consultar cuotas y comprobantes.", ruta: "/cuotas", icono: "💰", permiso: "VISTA_PAGOS" },
-  { titulo: "Tokens", descripcion: "Generar y consultar tus tokens de registro.", ruta: "/tokens-registro", icono: "🔐", permiso: "TOKENS_GESTIONAR" },
+  { titulo: "Tokens", descripcion: "Consultar los tokens de registro autorizados.", ruta: "/tokens-registro", icono: "🔐", permiso: "VISTA_TOKENS" },
   { titulo: "Postulantes a guía", descripcion: "Consultar postulantes habilitados a guía.", ruta: "/postulantes-guia", icono: "🪶", permiso: "VISTA_POSTULANTES_GUIA" },
   { titulo: "Asistencia a guía", descripcion: "Consultar asistencia de postulantes a guía.", ruta: "/asistencias-postulantes-guia", icono: "📋", permiso: "VISTA_ASISTENCIA_GUIA" },
   { titulo: "Guías y bloques", descripcion: "Consultar guías, bloques y posiciones.", ruta: "/guias-bloques", icono: "🧭", permiso: "VISTA_GUIAS_BLOQUES" },
@@ -88,7 +88,7 @@ export default function DashboardView() {
   const puedeVerFraternos = esAdministrador || permisos.has("VISTA_FRATERNOS");
   const puedeVerAsistencias = esAdministrador || permisos.has("VISTA_ASISTENCIAS");
   const puedeVerPagos = esAdministrador || permisos.has("VISTA_PAGOS") || permisos.has("PAGOS_VER");
-  const accesosPermitidos = accesosRapidos.filter((acceso) => esAdministrador || permisos.has(acceso.permiso));
+  const accesosPermitidos = accesosRapidos.filter((acceso) => esAdministrador || permisos.has(acceso.permiso) || (acceso.ruta === "/tokens-registro" && permisos.has("TOKENS_GESTIONAR")));
   const reporteQuery = useQuery({
     queryKey: ["reporte-ejecutivo", "dashboard"],
     queryFn: obtenerReporteEjecutivo,

@@ -1,12 +1,12 @@
 import type { Request, Response } from "express"
 import Rol from "../models/Rol"
-import { PERMISOS_VALIDOS } from "../security/PermisosCatalogo"
+import { normalizarPermisosRol, PERMISOS_VALIDOS } from "../security/PermisosCatalogo"
 
 export class RolController {
 
     // Crear rol
     static createRol = async (req: Request, res: Response) => {
-        const permisos = Array.from(new Set<string>((req.body.permisos ?? []).map((p:string)=>String(p).trim().toUpperCase())));
+        const permisos = normalizarPermisosRol(req.body.permisos);
         if(permisos.some((p)=>!PERMISOS_VALIDOS.has(p))) return res.status(400).json({error:"Uno o más permisos no pertenecen al catálogo autorizado"});
         const rol = new Rol({
             nombre: req.body.nombre,
@@ -113,7 +113,7 @@ export class RolController {
             rol.codigo = req.body.codigo ?? rol.codigo
             rol.descripcion = req.body.descripcion ?? rol.descripcion
             rol.estado = req.body.estado ?? rol.estado
-            if(req.body.permisos){const permisos=Array.from(new Set<string>((req.body.permisos as string[]).map(p=>String(p).trim().toUpperCase())));if(permisos.some(p=>!PERMISOS_VALIDOS.has(p)))return res.status(400).json({error:"Uno o más permisos no pertenecen al catálogo autorizado"});rol.permisos=permisos;}
+            if(req.body.permisos){const permisos=normalizarPermisosRol(req.body.permisos);if(permisos.some(p=>!PERMISOS_VALIDOS.has(p)))return res.status(400).json({error:"Uno o más permisos no pertenecen al catálogo autorizado"});rol.permisos=permisos;}
             rol.esRolSistema =
                 req.body.esRolSistema ?? rol.esRolSistema
 

@@ -14,7 +14,7 @@ import {
 import {
   z,
 } from "zod";
-import { GRUPOS_PERMISOS } from "@/security/permisosCatalogo";
+import { GRUPOS_PERMISOS, VISTAS_REQUERIDAS_POR_ACCION } from "@/security/permisosCatalogo";
 
 export const RolFormularioSchema = z.object({
   nombre: z
@@ -209,6 +209,22 @@ export default function RolForm({
         shouldValidate: true,
       },
     );
+  };
+
+  const cambiarPermisoCatalogo = (codigo: string, seleccionado: boolean) => {
+    const siguientes = new Set(permisos);
+    if (seleccionado) {
+      siguientes.add(codigo);
+      for (const vista of VISTAS_REQUERIDAS_POR_ACCION[codigo] ?? []) siguientes.add(vista);
+    } else {
+      siguientes.delete(codigo);
+      if (codigo.startsWith("VISTA_")) {
+        for (const [accion, vistas] of Object.entries(VISTAS_REQUERIDAS_POR_ACCION)) {
+          if (vistas.includes(codigo)) siguientes.delete(accion);
+        }
+      }
+    }
+    setValue("permisos", Array.from(siguientes), { shouldDirty: true, shouldValidate: true });
   };
 
   const agregarPermisosPegados = (
@@ -536,7 +552,7 @@ POSTULACION_PROPIA_VER`}
         )}
       </section>
 
-      {modalPermisos&&<div className="fixed inset-0 z-[150] grid place-items-center overflow-y-auto bg-black/70 p-3"><section className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-5 text-[#262022] shadow-2xl sm:p-7"><button type="button" aria-label="Cerrar" onClick={()=>setModalPermisos(false)} className="sticky left-full top-0 z-10 grid h-10 w-10 place-items-center rounded-full bg-slate-100 font-black">✕</button><div className="-mt-10 pr-12"><p className="text-xs font-bold uppercase tracking-widest text-[#8F5F2A]">Seguridad del rol</p><h2 className="text-2xl font-black text-[#74122A]">Vistas y acciones permitidas</h2><p className="mt-1 text-sm text-slate-500">Marca únicamente lo necesario. Los permisos no seleccionados quedarán bloqueados.</p></div><div className="mt-6 space-y-5">{GRUPOS_PERMISOS.map(grupo=><fieldset key={grupo.grupo} className="rounded-2xl border p-4"><legend className="px-2 font-black text-[#74122A]">{grupo.grupo}</legend><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{grupo.items.map(([codigo,nombre])=><label key={codigo} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${permisos.includes(codigo)?"border-[#841534] bg-[#841534]/10":"bg-white"}`}><input type="checkbox" checked={permisos.includes(codigo)} onChange={e=>setValue("permisos",e.target.checked?[...permisos,codigo]:permisos.filter(p=>p!==codigo),{shouldDirty:true,shouldValidate:true})} className="mt-1 h-4 w-4 accent-[#841534]"/><span><b className="block text-sm">{nombre}</b><small className="text-[10px] text-slate-500">{codigo}</small></span></label>)}</div></fieldset>)}</div><div className="sticky bottom-0 mt-6 flex justify-end border-t bg-white pt-4"><button type="button" onClick={()=>setModalPermisos(false)} className="rounded-xl bg-[#74122A] px-6 py-3 font-bold text-white">Aplicar selección</button></div></section></div>}
+      {modalPermisos && <div className="fixed inset-0 z-[150] grid place-items-center overflow-y-auto bg-black/70 p-3"><section className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-5 text-[#262022] shadow-2xl sm:p-7"><button type="button" aria-label="Cerrar" onClick={() => setModalPermisos(false)} className="sticky left-full top-0 z-10 grid h-10 w-10 place-items-center rounded-full bg-slate-100 font-black">✕</button><div className="-mt-10 pr-12"><p className="text-xs font-bold uppercase tracking-widest text-[#8F5F2A]">Seguridad del rol</p><h2 className="text-2xl font-black text-[#74122A]">Vistas y acciones permitidas</h2><p className="mt-1 text-sm text-slate-500">Primero concede la vista. Las acciones permiten crear, editar, aprobar o eliminar. Al marcar una acción, su vista se activa automáticamente.</p></div><div className="mt-6 space-y-5">{GRUPOS_PERMISOS.map((grupo) => <fieldset key={grupo.grupo} className="rounded-2xl border p-4"><legend className="px-2 font-black text-[#74122A]">{grupo.grupo}</legend><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{grupo.items.map(([codigo, nombre]) => <label key={codigo} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${permisos.includes(codigo) ? "border-[#841534] bg-[#841534]/10" : "bg-white"}`}><input type="checkbox" checked={permisos.includes(codigo)} onChange={(evento) => cambiarPermisoCatalogo(codigo, evento.target.checked)} className="mt-1 h-4 w-4 accent-[#841534]"/><span><b className="block text-sm">{nombre}</b><small className="text-[10px] text-slate-500">{codigo}</small></span></label>)}</div></fieldset>)}</div><div className="sticky bottom-0 mt-6 flex justify-end border-t bg-white pt-4"><button type="button" onClick={() => setModalPermisos(false)} className="rounded-xl bg-[#74122A] px-6 py-3 font-bold text-white">Aplicar selección</button></div></section></div>}
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         {onCancelar && (

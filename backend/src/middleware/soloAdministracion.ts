@@ -66,7 +66,7 @@ function permisosNecesarios(req: Request): string[] {
   if (base.includes("traspasos")) return lectura ? ["VISTA_TRASPASOS"] : ["TRASPASOS_GESTIONAR"];
   if (base.includes("credenciales-qr")) return ["VISTA_ASISTENCIAS", "ASISTENCIAS_GESTIONAR"];
   if (base.includes("reportes")) return ["VISTA_REPORTES"];
-  if (base.includes("tokens-registro")) return ["TOKENS_GESTIONAR"];
+  if (base.includes("tokens-registro")) return lectura ? ["VISTA_TOKENS", "TOKENS_GESTIONAR"] : ["TOKENS_GESTIONAR"];
   return [];
 }
 
