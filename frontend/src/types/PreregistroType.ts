@@ -11,6 +11,7 @@ export type UsuarioPreregistro = {
   apellidoMaterno?: string | null;
   ci: string;
   email: string;
+  telefono?: string | null;
   sexo?: string | null;
   fotoPerfil?: string | null;
   fechaCreado?: string | null;

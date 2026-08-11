@@ -73,7 +73,7 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "👥",
   },
   {
-    nombre: "Usuarios",
+    nombre: "Gestión integral",
     ruta: "/perfil-usuario",
     icono: "👥",
   },
@@ -93,11 +93,6 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "🛡️",
   },
   
-  {
-    nombre: "Preregistros",
-    ruta: "/preregistros",
-    icono: "📝",
-  },
   {
     nombre: "Postulantes a guía",
     ruta: "/postulantes-guia",
@@ -134,19 +129,9 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "🔎",
   },
   {
-    nombre: "Pagos",
-    ruta: "/cuotas",
-    icono: "💳",
-  },
-  {
     nombre: "Asistencias",
     ruta: "/asistencias",
     icono: "✅",
-  },
-  {
-    nombre: "Fraternos",
-    ruta: "/fraternos",
-    icono: "🕺",
   },
   {
     nombre: "Traspasos",

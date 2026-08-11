@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { ESTADOS_PREREGISTRO, type PreregistroFormData } from "@/types/PreregistroType";
 
 type Props = {
@@ -7,9 +7,10 @@ type Props = {
   onSubmit: (event: FormEvent) => void;
   cargando?: boolean;
   esEdicion?: boolean;
+  accionesSecundarias?: ReactNode;
 };
 
-export default function PreregistroForm({ datos, setDatos, onSubmit, cargando, esEdicion }: Props) {
+export default function PreregistroForm({ datos, setDatos, onSubmit, cargando, esEdicion, accionesSecundarias }: Props) {
   const cambiar = (campo: keyof PreregistroFormData, valor: string | number | boolean | undefined) => setDatos({ ...datos, [campo]: valor });
   return (
     <form onSubmit={onSubmit} className="space-y-6 rounded-2xl border border-[#d3c9bb] bg-white p-5 shadow-sm sm:p-7">
@@ -35,7 +36,7 @@ export default function PreregistroForm({ datos, setDatos, onSubmit, cargando, e
       )}
 
       <label className="flex items-center gap-3 text-sm font-medium"><input type="checkbox" checked={datos.aceptoReglamento ?? false} onChange={(e) => cambiar("aceptoReglamento", e.target.checked)} className="h-4 w-4 accent-[#74122A]" /> Aceptó el reglamento</label>
-      <button disabled={cargando} className="rounded-xl bg-[#74122A] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#5E0E22] disabled:opacity-60">{cargando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear preregistro"}</button>
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center"><button disabled={cargando} className="rounded-xl bg-[#74122A] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#5E0E22] disabled:opacity-60">{cargando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Crear preregistro"}</button>{accionesSecundarias}</div>
     </form>
   );
 }

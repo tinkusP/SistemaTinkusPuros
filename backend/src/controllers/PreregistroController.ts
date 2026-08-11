@@ -7,7 +7,7 @@ import PostulanteGuia from "../models/PostulanteGuia";
 import Fraterno from "../models/Fraterno";
 
 const populate = [
-  { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email sexo estado fotoPerfil fechaCreado" },
+  { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono sexo estado fotoPerfil fechaCreado" },
   { path: "gestionId", select: "anio nombre estado cupoMaximo cupoMaximoHombres cupoMaximoMujeres" },
   { path: "usuarioAprobador", select: "nombres apellidoPaterno apellidoMaterno" },
   { path: "usuarioRevisor", select: "nombres apellidoPaterno apellidoMaterno" },

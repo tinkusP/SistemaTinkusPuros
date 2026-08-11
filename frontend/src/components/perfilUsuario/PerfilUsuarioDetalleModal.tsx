@@ -18,6 +18,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -244,7 +245,7 @@ export default function PerfilUsuarioDetalleModal({
       setDecisionPreregistroVisible(false);
       setPreregistroAprobado(false);
     }
-  }, [perfil?._id]);
+  }, [perfil]);
 
   const guardarEstado = useMutation({
     mutationFn: () => {
@@ -316,9 +317,9 @@ export default function PerfilUsuarioDetalleModal({
   const preregistroEstaAprobado = preregistroAprobado || preregistroVigente?.estado === "APROBADO";
   const yaEsPostulanteGuia = Boolean(preregistroVigente?.postulanteGuia);
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/50 p-0 sm:p-4"
+      className="fixed inset-0 z-[200] flex h-[100dvh] w-screen items-stretch justify-center overflow-hidden bg-black/65 p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="perfil-modal-title"
@@ -333,8 +334,8 @@ export default function PerfilUsuarioDetalleModal({
         }
       }}
     >
-      <div className="h-[100dvh] w-full max-w-6xl overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[94vh] sm:rounded-3xl">
-        <div className="flex items-center justify-between bg-gradient-to-r from-[#841534] to-[#c39b37] px-4 py-4 text-white sm:px-6 sm:py-5">
+      <div className="flex h-[100dvh] min-h-0 w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[94dvh] sm:rounded-3xl">
+        <div className="flex shrink-0 items-center justify-between gap-2 bg-gradient-to-r from-[#841534] to-[#c39b37] px-3 py-3 text-white sm:px-6 sm:py-5">
           <div>
             <p className="text-xs text-white/80">
               Información completa
@@ -348,7 +349,7 @@ export default function PerfilUsuarioDetalleModal({
             </h2>
           </div>
 
-          <div className="flex items-center gap-2"><button type="button" onClick={() => { cerrar(); navigate(`/perfilUsuario/${perfil._id}/editar`); }} className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold transition hover:bg-white/20">Editar usuario</button><button
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2"><button type="button" onClick={() => { cerrar(); navigate(`/perfilUsuario/${perfil._id}/editar`); }} className="rounded-lg border border-white/30 px-2 py-2 text-xs font-bold transition hover:bg-white/20 sm:px-3"><span className="hidden sm:inline">Editar usuario</span><span className="sm:hidden">Editar</span></button><button
             type="button"
             onClick={
               cerrar
@@ -360,7 +361,7 @@ export default function PerfilUsuarioDetalleModal({
           </button></div>
         </div>
 
-        <div className="h-[calc(100dvh-76px)] overflow-x-hidden overflow-y-auto p-3 sm:max-h-[84vh] sm:p-6">
+        <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable] sm:p-6">
           <div className="space-y-5">
             <section className="grid min-w-0 gap-4 rounded-2xl border border-[#eadcc7] bg-[#fdf8ef] p-3 sm:p-5 md:grid-cols-[1fr_190px]">
               <div className="flex min-h-36 flex-col justify-center rounded-2xl border bg-white p-6">
@@ -889,7 +890,7 @@ export default function PerfilUsuarioDetalleModal({
       </div>
     </div>
     </div>
-  );
+  , document.body);
 }
 
 /* =========================================

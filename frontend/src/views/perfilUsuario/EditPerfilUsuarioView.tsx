@@ -22,6 +22,7 @@ import {
 
 import {
   Link,
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -374,8 +375,13 @@ export default function EditarPerfilUsuarioAdminView() {
  const  params = useParams();
  const id = params.perfilUsuarioId;
 
+  const location = useLocation();
+
   const navigate =
     useNavigate();
+  const estadoNavegacion = location.state as { returnTo?: string; returnLabel?: string } | null;
+  const rutaRetorno = estadoNavegacion?.returnTo?.startsWith("/") ? estadoNavegacion.returnTo : "/perfil-usuario";
+  const etiquetaRetorno = estadoNavegacion?.returnLabel ?? "Volver a perfiles";
 
   const queryClient =
     useQueryClient();
@@ -710,9 +716,7 @@ export default function EditarPerfilUsuarioAdminView() {
             ),
           ]);
 
-          navigate(
-            "/perfil-usuario",
-          );
+          navigate(rutaRetorno);
         },
 
       onError:
@@ -986,11 +990,11 @@ export default function EditarPerfilUsuarioAdminView() {
         </div>
 
         <Link
-          to="/perfil-usuario"
+          to={rutaRetorno}
           className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold transition hover:bg-white/20"
         >
           <ArrowLeft size={18} />
-          Volver a perfiles
+          {etiquetaRetorno}
         </Link>
         <button type="button" disabled={autorizacionMutation.isPending} onClick={() => setModalPermisoAbierto(true)} className="inline-flex items-center justify-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold transition hover:bg-white/20 disabled:opacity-60">
           {autorizacionMutation.isPending ? "Habilitando..." : "Habilitar edición al usuario"}
@@ -1629,9 +1633,7 @@ export default function EditarPerfilUsuarioAdminView() {
           <button
             type="button"
             onClick={() =>
-              navigate(
-                "/perfil-usuario",
-              )
+              navigate(rutaRetorno)
             }
             disabled={
               actualizarMutation.isPending

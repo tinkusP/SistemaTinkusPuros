@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { eliminarPreregistro, obtenerPreregistros } from "@/api/PreregistroApi";
 import { habilitarGuia, listarGuias } from "@/api/GuiaApi";
+import { listarFraternos } from "@/api/FraternoApi";
 import { ESTADOS_PREREGISTRO, type EstadoPreregistro, type Preregistro } from "@/types/PreregistroType";
 import PreregistroDetalleModal from "@/components/preregistro/PreregistroDetalleModal";
 
@@ -34,6 +35,7 @@ export default function PreregistroView() {
     refetchOnWindowFocus: false,
   });
   const postulantesGuiaQuery = useQuery({ queryKey: ["postulantes-guia"], queryFn: listarGuias });
+  const fraternosQuery = useQuery({ queryKey: ["fraternos"], queryFn: listarFraternos });
 
   const eliminar = useMutation({
     mutationFn: eliminarPreregistro,
@@ -67,11 +69,11 @@ export default function PreregistroView() {
 
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#8F5F2A]">Proceso de admisión</p><h1 className="mt-1 text-3xl font-black text-[#74122A]">Preregistros</h1><p className="mt-1 text-sm text-[#735f55]">Revisión de postulantes, calificaciones y cupos.</p></div>
+      <div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#8F5F2A]">Proceso de admisión</p><h1 className="mt-1 text-3xl font-black text-[#74122A]">Admisión unificada</h1><p className="mt-1 text-sm text-[#735f55]">Usuario, preregistro y fraterno en un solo flujo de trabajo.</p></div>
       <div className="flex flex-wrap gap-2"><button onClick={() => navigate("/reportes")} className="rounded-xl border border-[#74122A] bg-white px-5 py-3 text-sm font-bold text-[#74122A]">🖨 Crear planilla</button><button onClick={() => navigate("/preregistros/crear")} className="rounded-xl bg-[#74122A] px-5 py-3 text-sm font-bold text-white">+ Nuevo preregistro</button></div>
     </header>
 
-    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5"><h2 className="font-black text-[#74122A]">Flujo recomendado de aprobación</h2><div className="mt-3 grid gap-3 text-sm md:grid-cols-3"><p className="rounded-xl bg-white p-3"><b>1. Revisar usuario</b><br/>Comprueba datos personales y documentos; usa “Editar usuario” si necesita correcciones.</p><p className="rounded-xl bg-white p-3"><b>2. Decidir preregistro</b><br/>Aprueba, observa, rechaza o envía a lista de espera. Las observaciones pueden enviarse por WhatsApp.</p><p className="rounded-xl bg-white p-3"><b>3. Confirmar fraterno</b><br/>Gestiona cuota, términos, cupo y situación final desde el módulo Fraternos.</p></div></section>
+    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5"><h2 className="font-black text-[#74122A]">Flujo recomendado de aprobación</h2><div className="mt-3 grid gap-3 text-sm md:grid-cols-3"><p className="rounded-xl bg-white p-3"><b>1. Datos y documentos</b><br/>Revisa o corrige el usuario y vuelve automáticamente a esta misma lista.</p><p className="rounded-xl bg-white p-3"><b>2. Decisión de admisión</b><br/>Aprueba, observa, rechaza o envía a lista de espera desde el preregistro.</p><p className="rounded-xl bg-white p-3"><b>3. Gestión final</b><br/>Cuando ya sea fraterno, abre directamente su control de cuota, términos y cupo.</p></div></section>
 
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">Total</p><strong className="mt-2 block text-3xl text-[#74122A]">{Object.values(resumen).reduce((total, cantidad) => total + (cantidad ?? 0), 0)}</strong></div>
@@ -90,27 +92,29 @@ export default function PreregistroView() {
 
     {consulta.isLoading ? <div className="rounded-2xl bg-white p-8 text-center"><span className="mx-auto block h-9 w-9 animate-spin rounded-full border-4 border-[#eadde0] border-t-[#74122A]"/><p className="mt-3">Cargando preregistros...</p></div> : consulta.isError ? <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700"><p className="font-bold">No se pudieron cargar los preregistros.</p><p className="mt-2 text-sm">{consulta.error instanceof Error ? consulta.error.message : "Verifica que el backend y MongoDB estén funcionando."}</p><button type="button" onClick={() => consulta.refetch()} className="mt-4 rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white">Volver a intentar</button></div> :
       <div className="overflow-hidden rounded-2xl border border-[#d3c9bb] bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-left text-sm">
-        <thead className="bg-[#74122A] text-white"><tr>{["N.º", "Postulante", "Gestión", "Estado", "Promedio", "Fecha", "Acciones"].map((titulo) => <th key={titulo} className="px-4 py-3">{titulo}</th>)}</tr></thead>
+        <thead className="bg-[#74122A] text-white"><tr>{["N.º", "Postulante", "Gestión", "Estado", "Etapa final", "Fecha", "Acciones"].map((titulo) => <th key={titulo} className={`px-4 py-3 ${titulo === "Postulante" ? "sticky left-0 z-20 min-w-64 bg-[#74122A]" : ""}`}>{titulo}</th>)}</tr></thead>
         <tbody>{registros.length === 0 ? <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-500">No hay preregistros para este filtro.</td></tr> : registros.map((item) => {
           const usuario = typeof item.usuarioId === "object" ? item.usuarioId : null;
           const gestion = typeof item.gestionId === "object" ? item.gestionId : null;
           const asignando = asignarGuia.isPending && asignarGuia.variables === item._id;
           const postulanteGuiaListado = postulantesGuiaQuery.data?.find((postulante) => postulante.preregistroId?._id === item._id);
           const postulanteGuia = item.postulanteGuia ?? postulanteGuiaListado;
+          const fraterno = fraternosQuery.data?.fraternos.find((registro) => (typeof registro.preregistroId === "object" ? registro.preregistroId._id : registro.preregistroId) === item._id);
           return <tr key={item._id} className="border-b border-[#e7dfd3] hover:bg-[#faf7f1]">
             <td className="px-4 py-4 font-bold text-[#74122A]">{item.numeroPreRegistro}</td>
-            <td className="px-4 py-4"><div className="flex items-center gap-3"><div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-[#C59A3A] bg-[#f3ead7] font-black text-[#841534]">{urlFoto(usuario?.fotoPerfil) ? <img src={urlFoto(usuario?.fotoPerfil)!} alt={`Foto de ${usuario?.nombres ?? "postulante"}`} className="h-full w-full object-cover" /> : `${usuario?.nombres?.[0] ?? ""}${usuario?.apellidoPaterno?.[0] ?? ""}`}</div><div><p className="font-bold">{usuario ? `${usuario.nombres} ${usuario.apellidoPaterno}` : "Usuario"}</p><p className="text-xs text-slate-500">CI {usuario?.ci}</p></div></div></td>
+            <td className="sticky left-0 z-10 min-w-64 bg-white px-4 py-4 shadow-[6px_0_10px_-10px_rgba(0,0,0,.7)]"><div className="flex items-center gap-3"><div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-[#C59A3A] bg-[#f3ead7] font-black text-[#841534]">{urlFoto(usuario?.fotoPerfil) ? <img src={urlFoto(usuario?.fotoPerfil)!} alt={`Foto de ${usuario?.nombres ?? "postulante"}`} className="h-full w-full object-cover" /> : `${usuario?.nombres?.[0] ?? ""}${usuario?.apellidoPaterno?.[0] ?? ""}`}</div><div className="min-w-0"><p className="truncate font-bold">{usuario ? `${usuario.nombres} ${usuario.apellidoPaterno}` : "Usuario"}</p><p className="text-xs text-slate-500">CI {usuario?.ci}</p></div></div></td>
             <td className="px-4 py-4">{gestion?.nombre ?? "—"}</td>
             <td className="px-4 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${colorEstado[item.estado]}`}>{item.estado.replace("_", " ")}</span></td>
-            <td className="px-4 py-4">{item.promedioExamen ?? "—"}</td>
+            <td className="px-4 py-4">{fraterno ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">{fraterno.numeroFraterno}</span> : <span className="text-xs text-slate-500">Aún no es fraterno</span>}</td>
             <td className="px-4 py-4">{new Date(item.fechaRegistro).toLocaleDateString("es-BO")}</td>
             <td className="px-4 py-4"><div className="flex flex-wrap gap-2">
               <button onClick={() => setDetalle(item)} className="rounded-lg bg-blue-100 px-3 py-2 text-blue-700">Ver</button>
-              {usuario&&<button onClick={() => navigate(`/perfilUsuario/${usuario._id}/editar`)} className="rounded-lg bg-slate-100 px-3 py-2 font-semibold text-slate-700">Editar usuario</button>}
+              {usuario&&<button onClick={() => navigate(`/perfilUsuario/${usuario._id}/editar`, { state: { returnTo: "/preregistros", returnLabel: "Volver a admisión" } })} className="rounded-lg bg-slate-100 px-3 py-2 font-semibold text-slate-700">Editar datos</button>}
               <button onClick={() => navigate(`/preregistros/${item._id}/editar`)} className="rounded-lg bg-amber-100 px-3 py-2 text-amber-800">Editar</button>
               <button onClick={() => navigate(`/cuotas?preregistroId=${item._id}`)} className="rounded-lg bg-emerald-100 px-3 py-2 font-semibold text-emerald-800">💳 Crear cuota</button>
               {postulanteGuia ? <button onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-lg bg-purple-700 px-3 py-2 font-semibold text-white">✓ Postulante a guía · {postulanteGuia.estado.replaceAll("_", " ")}</button> : <button disabled={asignando || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(item._id)} className="rounded-lg bg-purple-100 px-3 py-2 font-semibold text-purple-800 disabled:opacity-50">{asignando ? "Asignando..." : "🪶 Designar postulante a guía"}</button>}
               <button onClick={() => navigate(`/traspasos?preregistroId=${item._id}`)} className="rounded-lg bg-cyan-100 px-3 py-2 font-semibold text-cyan-800">🔄 Traspasar cupo</button>
+              {fraterno&&<button onClick={() => navigate(`/fraternos?buscar=${encodeURIComponent(usuario?.ci ?? fraterno.numeroFraterno)}`)} className="rounded-lg bg-[#74122A] px-3 py-2 font-semibold text-white">Gestionar fraterno</button>}
               <button onClick={() => setEliminarSeleccionado(item)} className="rounded-lg bg-red-100 px-3 py-2 text-red-700">Eliminar</button>
             </div></td>
           </tr>;
