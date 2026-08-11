@@ -386,8 +386,8 @@ export default function ComunicadosView() {
                     Mis pagos
                   </Link>
                   {esFraterno && <Link to="/mis-tallas" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">Mis tallas de polera y chamarra</Link>}
-                  <Link to="/pasos" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">Biblioteca de pasos</Link>
-                  <Link to="/cancionero" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">Cancionero</Link>
+                  <Link to="/mis-pasos" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">👣 Biblioteca de pasos</Link>
+                  <Link to="/mi-cancionero" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">🎵 Mi cancionero</Link>
                   <Link to="/mi-credencial-qr" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-[#C59A3A]/15">Mi credencial QR</Link>
                   {esPostulante && (
                     <Link to="/mi-asistencia-guia" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg bg-[#C59A3A]/15 px-3 py-2.5 text-sm font-bold text-[#74122A] transition hover:bg-[#C59A3A]/25">

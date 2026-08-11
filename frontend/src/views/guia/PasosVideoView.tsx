@@ -54,7 +54,7 @@ export default function PasosVideoView() {
 
   return (
     <Contenido titulo="Biblioteca de pasos" subtitulo="Aprende pasos creados y sugeridos por nuestros guías y postulantes a guía.">
-      <Link to="/comunicados" className="inline-block rounded-xl border border-white/30 px-4 py-2 font-bold">← Volver a Comunicados</Link>
+      <Link to="/comunicados" className="inline-block rounded-xl border border-white/30 px-4 py-2 font-bold">← Volver a mi panel</Link>
       {puedePublicar ? <Formulario form={form} setForm={setForm} enviar={() => crear.mutate()} cargando={crear.isPending} /> : null}
       <section className="grid gap-5 md:grid-cols-2">
         {consulta.data?.map((video) => (
