@@ -947,6 +947,7 @@ export default function EditarPerfilUsuarioAdminView() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["DATOS_PERSONALES", "Datos personales", "Información registrada"],
+                  ["CORREO_ELECTRONICO", "Correo electrónico", `Correo actual: ${perfilQuery.data.email}`],
                   ["ORIGEN_ACADEMICO", "Origen y facultad", "Permitir corregir origen, facultad, carrera y RU"],
                   ["FOTO_PERFIL", "Foto de perfil", perfilQuery.data.fotoPerfil ? "Ya tiene foto · permitir reemplazo" : "Falta subir"],
                   ["CARNET_ANVERSO", "Carnet completo", perfilQuery.data.documentos?.some(d=>d.tipoDocumento==="CARNET_IDENTIDAD") ? "Permite reemplazarlo con un PDF o con anverso y reverso" : "Falta subir PDF o ambas imágenes"],

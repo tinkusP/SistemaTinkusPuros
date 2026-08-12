@@ -13,7 +13,7 @@ import {
 } from "../services/AlmacenamientoService";
 
 type Archivo = { path: string; mimetype: string; originalname?: string; fieldname?: string };
-type CampoAutorizado = "DATOS_PERSONALES" | "ORIGEN_ACADEMICO" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
+type CampoAutorizado = "DATOS_PERSONALES" | "CORREO_ELECTRONICO" | "ORIGEN_ACADEMICO" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
 
 const eliminarArchivoPublico = async (ruta?: string | null) => {
   await eliminarArchivoAlmacenado(ruta);
@@ -42,9 +42,11 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
   const camposDatos = ["nombres", "apellidoPaterno", "apellidoMaterno", "telefono", "ci", "fechaNacimiento", "sexo"] as const;
   const hayDatosPersonales = camposDatos.some((campo) => req.body[campo] !== undefined);
   const hayOrigen = ["tipoOrigen", "facultad", "carrera", "registroUniversitario"].some((campo) => req.body[campo] !== undefined);
-  if (!enviados.length && !hayDatosPersonales && !hayOrigen) return res.status(400).json({ error: "Debe modificar datos o seleccionar al menos un archivo autorizado" });
+  const hayCorreo = req.body.email !== undefined;
+  if (!enviados.length && !hayDatosPersonales && !hayOrigen && !hayCorreo) return res.status(400).json({ error: "Debe modificar datos o seleccionar al menos un archivo autorizado" });
   if (hayDatosPersonales && !autorizacion.campos.includes("DATOS_PERSONALES")) return res.status(403).json({ error: "No fue autorizado para modificar datos personales" });
   if (hayOrigen && !autorizacion.campos.includes("ORIGEN_ACADEMICO")) return res.status(403).json({ error: "No fue autorizado para modificar origen y facultad" });
+  if (hayCorreo && !autorizacion.campos.includes("CORREO_ELECTRONICO")) return res.status(403).json({ error: "No fue autorizado para modificar el correo electrónico" });
   const noPermitido = enviados.find((item) => !autorizacion.campos.includes(item.permiso));
   if (noPermitido) return res.status(403).json({ error: `No fue autorizado para actualizar: ${noPermitido.permiso}` });
 
@@ -86,6 +88,15 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
   };
 
   try {
+    if (hayCorreo) {
+      const correo = String(req.body.email ?? "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return res.status(400).json({ error: "El correo electrónico no es válido" });
+      const correoOcupado = await PerfilUsuario.exists({ _id: { $ne: perfil._id }, email: correo, estado: { $ne: "ELIMINADO" } });
+      if (correoOcupado) return res.status(409).json({ error: "El correo electrónico ya está registrado en otra cuenta" });
+      perfil.email = correo;
+      perfil.emailVerificado = false;
+      await perfil.save();
+    }
     if (hayDatosPersonales) {
       const ciNuevo = String(req.body.ci ?? "").trim();
       if (!/^\d+$/.test(ciNuevo)) return res.status(400).json({ error: "El CI solo puede contener números" });

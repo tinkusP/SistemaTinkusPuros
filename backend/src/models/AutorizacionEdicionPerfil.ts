@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 const schema = new Schema({
   perfilUsuarioId: { type: Schema.Types.ObjectId, ref: "PerfilUsuario", required: true },
   administradorId: { type: Schema.Types.ObjectId, ref: "PerfilUsuario", required: true },
-  campos: [{ type: String, enum: ["DATOS_PERSONALES", "ORIGEN_ACADEMICO", "FOTO_PERFIL", "CARNET_ANVERSO", "CARNET_REVERSO", "REGISTRO_UNIVERSITARIO"] }],
+  campos: [{ type: String, enum: ["DATOS_PERSONALES", "CORREO_ELECTRONICO", "ORIGEN_ACADEMICO", "FOTO_PERFIL", "CARNET_ANVERSO", "CARNET_REVERSO", "REGISTRO_UNIVERSITARIO"] }],
   motivo: { type: String, required: true, trim: true, maxlength: 500 },
   estado: { type: String, enum: ["ACTIVA", "USADA", "REVOCADA", "VENCIDA"], default: "ACTIVA" },
   fechaCreado: { type: Date, default: Date.now },
