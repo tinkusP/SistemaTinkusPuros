@@ -48,7 +48,8 @@ export default function ReportesView() {
   const [titulo, setTitulo] = useState("PLANILLA DE CONTROL DE FRATERNOS");
   const [buscar, setBuscar] = useState("");
   const [bloque, setBloque] = useState("TODOS");
-  const [logo, setLogo] = useState(() => localStorage.getItem("LOGO_REPORTES") || "/imagenes/tinkus-puros.png");
+  const [logoIzquierdo, setLogoIzquierdo] = useState(() => localStorage.getItem("LOGO_REPORTES") || "/imagenes/tinkus-puros.png");
+  const [logoDerecho, setLogoDerecho] = useState(() => localStorage.getItem("LOGO_REPORTES_DERECHO") || "");
 
   const visibles = campos.filter((campo) => seleccion.includes(campo.id));
   const textoBusqueda = buscar.trim().toLowerCase();
@@ -64,13 +65,13 @@ export default function ReportesView() {
     return siguientes;
   });
   const alternarTodo = () => setSeccionesSeleccionadas(todoSeleccionado ? new Set() : new Set(secciones.map((seccion) => seccion.id)));
-  const cargarLogo = (archivo?: File) => {
+  const cargarLogo = (archivo: File | undefined, clave: "LOGO_REPORTES" | "LOGO_REPORTES_DERECHO", actualizar: (valor: string) => void) => {
     if (!archivo) return;
     const lector = new FileReader();
     lector.onload = () => {
       const valor = String(lector.result);
-      localStorage.setItem("LOGO_REPORTES", valor);
-      setLogo(valor);
+      localStorage.setItem(clave, valor);
+      actualizar(valor);
     };
     lector.readAsDataURL(archivo);
   };
@@ -89,7 +90,8 @@ export default function ReportesView() {
       <div className="mt-4 rounded-2xl bg-white p-5">
         <div className="grid gap-3 md:grid-cols-2">
           <input value={titulo} onChange={(evento) => setTitulo(evento.target.value)} className="rounded-xl border p-3 font-bold" aria-label="Título del reporte"/>
-          <label className="rounded-xl border p-3 text-sm font-bold">Logo para el documento<input type="file" accept="image/*" onChange={(evento) => cargarLogo(evento.target.files?.[0])} className="ml-3 text-xs"/></label>
+          <label className="rounded-xl border p-3 text-sm font-bold">Logo izquierdo<input type="file" accept="image/*" onChange={(evento) => cargarLogo(evento.target.files?.[0], "LOGO_REPORTES", setLogoIzquierdo)} className="mt-2 block w-full text-xs"/></label>
+          <label className="rounded-xl border p-3 text-sm font-bold">Logo derecho (reemplaza “UMSA LA MEJOR”)<input type="file" accept="image/*" onChange={(evento) => cargarLogo(evento.target.files?.[0], "LOGO_REPORTES_DERECHO", setLogoDerecho)} className="mt-2 block w-full text-xs"/></label>
           <input value={buscar} onChange={(evento) => setBuscar(evento.target.value)} className="rounded-xl border p-3" placeholder="Filtrar por nombre, CI o correo"/>
           <select value={bloque} onChange={(evento) => setBloque(evento.target.value)} className="rounded-xl border p-3"><option>TODOS</option>{bloques.map((nombre) => <option key={nombre}>{nombre}</option>)}</select>
         </div>
@@ -106,7 +108,7 @@ export default function ReportesView() {
 
     {!seccionesSeleccionadas.size ? <section className="rounded-xl bg-white p-10 text-center text-slate-500">Selecciona al menos una lista para mostrarla.</section> : <section className="rounded-xl bg-white p-6 shadow print:p-0 print:shadow-none">
       <header className="grid grid-cols-[90px_1fr_90px] items-center border-b-2 border-[#74122A] pb-4 text-center">
-        <img src={logo} alt="Logo del reporte" className="h-20 w-20 object-contain"/><div><b className="text-[#74122A]">FRATERNIDAD TINKUS PUROS</b><h2 className="text-xl font-black">{titulo}</h2><p className="text-xs">{q.data.gestion.nombre} · {bloque} · {new Date().toLocaleDateString("es-BO")}</p></div><div className="grid h-20 w-20 place-items-center rounded-full border-4 border-[#163a70] text-xs font-black text-[#163a70]">UMSA<br/>LA MEJOR</div>
+        <img src={logoIzquierdo} alt="Logo izquierdo del reporte" className="h-20 w-20 object-contain"/><div><b className="text-[#74122A]">FRATERNIDAD TINKUS PUROS</b><h2 className="text-xl font-black">{titulo}</h2><p className="text-xs">{q.data.gestion.nombre} · {bloque} · {new Date().toLocaleDateString("es-BO")}</p></div>{logoDerecho ? <img src={logoDerecho} alt="Logo derecho del reporte" className="h-20 w-20 object-contain"/> : <div className="grid h-20 w-20 place-items-center rounded-full border-4 border-[#163a70] text-xs font-black text-[#163a70]">UMSA<br/>LA MEJOR</div>}
       </header>
       <div className="space-y-8">
         {seccionesSeleccionadas.has("GENERAL") && <Seccion titulo="Lista de preregistros" cantidad={personas.length}><TablaGeneral personas={personas} visibles={visibles}/></Seccion>}
