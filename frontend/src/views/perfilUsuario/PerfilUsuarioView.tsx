@@ -53,13 +53,32 @@ import type { Fraterno } from "@/types/FraternoType";
 import { listarCuotas, obtenerCuota } from "@/api/CuotaApi";
 import type { Cuota } from "@/types/CuotaType";
 import { ESTADOS_PREREGISTRO, type EstadoPreregistro } from "@/types/PreregistroType";
-import { obtenerReporteTallas } from "@/api/ReporteApi";
+import { obtenerReporteFormacion, obtenerReporteTallas } from "@/api/ReporteApi";
 
 type FilaReporteUsuario = { numero: number; nombre: string; ci: string; genero: string; tallaPolera: string; tallaChamarra: string; email: string; estado: string; preregistro: string; estadoPreregistro: string; fraterno: string; pago: string; terminos: string; situacion: string; cupo: string; esPreregistro: boolean; esPostulanteGuia: boolean; esFraterno: boolean; cumpleFiltroActual: boolean };
 type FiltroPerfil = "TODOS" | "PENDIENTE" | "ACTIVO" | "POSTULANTE" | "INACTIVO" | "ADMINISTRADOR";
+type EtapaListado = "PERFIL" | "PREREGISTRO" | "POSTULANTE_GUIA" | "GUIA" | "FRATERNO" | "BAUCHER" | "TODOS";
 type EstadoRetornoPagos = { reopenCuotaId?: string; viewState?: { busqueda?: string; filtroRapido?: FiltroPerfil; filtroPreregistro?: EstadoPreregistro | "TODOS" | "SIN_PREREGISTRO"; paginaActual?: number } };
 const COLUMNAS_TABLA = [["nombre","Nombre",288],["ci","CI",150],["email","Email",300],["roles","Roles",180],["estado","Estado",150],["origen","Origen",180],["facultad","Facultad",240],["altaAdmin","Administrador que dio de alta",260],["altaId","ID administrador",250],["preregistro","Preregistro",190],["guia","Postulante a guía",210],["fraterno","N.º fraterno",170],["gestion","Gestión",150],["ingreso","Ingreso",140],["pago","Pago",170],["terminos","Términos",190],["situacion","Situación",160],["cupo","Cupo",140],["cuota","Pagos",210],["bauchers","Bauchers enviados",220],["acciones","Acciones",200]] as const;
 type ColumnaTabla = (typeof COLUMNAS_TABLA)[number][0];
+const COLUMNAS_POR_ETAPA: Record<EtapaListado, ColumnaTabla[]> = {
+  PERFIL: ["nombre", "ci", "email", "roles", "estado", "origen", "facultad", "altaAdmin", "acciones"],
+  PREREGISTRO: ["nombre", "ci", "origen", "facultad", "altaAdmin", "preregistro", "acciones"],
+  POSTULANTE_GUIA: ["nombre", "ci", "email", "preregistro", "guia", "acciones"],
+  GUIA: ["nombre", "ci", "email", "estado", "preregistro", "guia", "acciones"],
+  FRATERNO: ["nombre", "ci", "fraterno", "gestion", "ingreso", "pago", "terminos", "situacion", "cupo", "cuota", "acciones"],
+  BAUCHER: ["nombre", "ci", "preregistro", "cuota", "bauchers", "acciones"],
+  TODOS: COLUMNAS_TABLA.map(([id]) => id),
+};
+const ETAPAS_LISTADO: { id: EtapaListado; etiqueta: string }[] = [
+  { id: "PERFIL", etiqueta: "Perfil" },
+  { id: "PREREGISTRO", etiqueta: "Preregistro" },
+  { id: "POSTULANTE_GUIA", etiqueta: "Postulantes a guía" },
+  { id: "GUIA", etiqueta: "Guías" },
+  { id: "FRATERNO", etiqueta: "Fraternos" },
+  { id: "BAUCHER", etiqueta: "Bauchers enviados" },
+  { id: "TODOS", etiqueta: "Todos" },
+];
 type ResponsableAlta = { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string | null; email?: string | null };
 const esResponsablePoblado = (valor: unknown): valor is ResponsableAlta => Boolean(valor && typeof valor === "object" && "_id" in valor && "nombres" in valor);
 
@@ -123,8 +142,9 @@ export default function PerfilUsuarioView() {
   );
   const [paginaActual, setPaginaActual] = useState(() => estadoRetorno?.viewState?.paginaActual ?? 1);
   const [columnasFijadas, setColumnasFijadas] = useState<Set<ColumnaTabla>>(() => new Set(["nombre"]));
-  const [columnasVisibles, setColumnasVisibles] = useState<Set<ColumnaTabla>>(() => new Set(COLUMNAS_TABLA.map(([id]) => id)));
-  const [vistaCompleta, setVistaCompleta] = useState(true);
+  const [columnasVisibles, setColumnasVisibles] = useState<Set<ColumnaTabla>>(() => new Set(COLUMNAS_POR_ETAPA.PERFIL));
+  const [etapaListado, setEtapaListado] = useState<EtapaListado>("PERFIL");
+  const [vistaCompleta, setVistaCompleta] = useState(false);
   const [filtroPreregistro, setFiltroPreregistro] = useState<EstadoPreregistro | "TODOS" | "SIN_PREREGISTRO">(() => estadoRetorno?.viewState?.filtroPreregistro ?? "TODOS");
   const [filtroPago, setFiltroPago] = useState("TODOS");
   const [filtroOrigen, setFiltroOrigen] = useState("TODOS");
@@ -144,6 +164,7 @@ export default function PerfilUsuarioView() {
   const fraternosQuery = useQuery({ queryKey: ["fraternos"], queryFn: listarFraternos, retry: false });
   const cuotasQuery = useQuery({ queryKey: ["cuotas"], queryFn: listarCuotas, retry: false });
   const tallasQuery = useQuery({ queryKey: ["reporte-tallas"], queryFn: obtenerReporteTallas, retry: false });
+  const formacionQuery = useQuery({ queryKey: ["reporte-formacion"], queryFn: obtenerReporteFormacion, retry: false });
 
   const preregistroPorUsuario = useMemo(() => new Map(
     (preregistrosQuery.data?.preregistros ?? []).flatMap((preregistro) => {
@@ -164,6 +185,28 @@ export default function PerfilUsuarioView() {
     (cuotasQuery.data ?? []).map((cuota) => [cuota.preregistroId._id, cuota] as const),
   ), [cuotasQuery.data]);
   const tallasPorCi = useMemo(() => new Map((tallasQuery.data?.registros ?? []).map((registro) => [String(registro.ci), registro] as const)), [tallasQuery.data]);
+  const cisGuias = useMemo(() => new Set((formacionQuery.data?.guias ?? []).map((guia) => String(guia.ci))), [formacionQuery.data]);
+  const anchoTabla = useMemo(() => COLUMNAS_TABLA.reduce((total, [id,,ancho]) => total + (columnasVisibles.has(id) ? ancho : 0), 0), [columnasVisibles]);
+  const totalesEtapa = useMemo<Record<EtapaListado, number>>(() => ({
+    PERFIL: perfiles.length,
+    PREREGISTRO: preregistroPorUsuario.size,
+    POSTULANTE_GUIA: perfiles.filter((perfil) => {
+      const preregistro = preregistroPorUsuario.get(perfil._id);
+      return Boolean(preregistro && guiaPorPreregistro.has(preregistro._id) && !cisGuias.has(String(perfil.ci)));
+    }).length,
+    GUIA: perfiles.filter((perfil) => cisGuias.has(String(perfil.ci))).length,
+    FRATERNO: fraternoPorUsuario.size,
+    BAUCHER: Array.from(cuotaPorPreregistro.values()).filter((cuota) => Boolean(cuota.resumenPagos?.conBaucher)).length,
+    TODOS: perfiles.length,
+  }), [cisGuias, cuotaPorPreregistro, fraternoPorUsuario.size, guiaPorPreregistro, perfiles, preregistroPorUsuario]);
+
+  const seleccionarEtapa = (etapa: EtapaListado) => {
+    setEtapaListado(etapa);
+    setColumnasVisibles(new Set(COLUMNAS_POR_ETAPA[etapa]));
+    setVistaCompleta(etapa === "TODOS");
+    setFiltroPago(etapa === "BAUCHER" ? "BAUCHER_ENVIADO" : "TODOS");
+    setFiltroPreregistro("TODOS");
+  };
   const estilosColumnasFijas = useMemo(() => {
     const reglas: string[] = [];
     let izquierda = 0;
@@ -218,16 +261,23 @@ export default function PerfilUsuarioView() {
       const coincidePreregistro = filtroPreregistro === "TODOS"
         || (filtroPreregistro === "SIN_PREREGISTRO" ? !preregistro : preregistro?.estado === filtroPreregistro);
       const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+      const postulanteGuia = preregistro ? guiaPorPreregistro.get(preregistro._id) : undefined;
+      const coincideEtapa = etapaListado === "TODOS" || etapaListado === "PERFIL"
+        || (etapaListado === "PREREGISTRO" && Boolean(preregistro))
+        || (etapaListado === "POSTULANTE_GUIA" && Boolean(postulanteGuia) && !cisGuias.has(String(perfil.ci)))
+        || (etapaListado === "GUIA" && cisGuias.has(String(perfil.ci)))
+        || (etapaListado === "FRATERNO" && Boolean(fraterno))
+        || (etapaListado === "BAUCHER" && Boolean(cuota?.resumenPagos?.conBaucher));
       const coincidePago = filtroPago === "TODOS" || (filtroPago === "SIN_CUOTA" ? !cuota : filtroPago === "CON_SALDO" ? Boolean(cuota && cuota.saldo > 0) : filtroPago === "BAUCHER_ENVIADO" ? Boolean(cuota?.resumenPagos?.conBaucher) : filtroPago === "PENDIENTE_REVISION" ? Boolean(cuota?.resumenPagos?.pendientes) : cuota?.estado === filtroPago);
       const coincideOrigen = filtroOrigen === "TODOS" || perfil.tipoOrigen === filtroOrigen;
       const coincideFacultad = filtroFacultad === "TODAS" || (perfil.facultad || "SIN FACULTAD") === filtroFacultad;
       const gestion = fraterno && typeof fraterno.gestionId === "object" ? `${fraterno.gestionId.nombre} ${fraterno.gestionId.anio ?? ""}` : "";
       const textoColumnas = [perfil.nombres, perfil.apellidoPaterno, perfil.apellidoMaterno, perfil.ci, perfil.complementoCi, perfil.email, roles, perfil.estado, perfil.tipoOrigen, perfil.facultad, responsableAlta?._id, responsableAlta?.nombres, responsableAlta?.apellidoPaterno, responsableAlta?.apellidoMaterno, responsableAlta?.email, preregistro?.numeroPreRegistro, preregistro?.estado, postulantesGuiaQuery.data && preregistro ? guiaPorPreregistro.get(preregistro._id)?.estado : "", fraterno?.numeroFraterno, gestion, fraterno?.fechaIngreso ? new Date(fraterno.fechaIngreso).toLocaleString("es-BO") : "", fraterno?.estadoPago, fraterno?.terminos?.estado, fraterno?.situacion, fraterno?.estado, fraterno?.ocupaCupo ? "OCUPA CUPO" : "CUPO LIBRE", cuota?.estado, cuota?.montoTotal, cuota?.montoPagado, cuota?.saldo, cuota?.resumenPagos?.conBaucher, cuota?.resumenPagos?.pendientes].filter(valor=>valor !== undefined && valor !== null).join(" ");
-      return coincideFiltro && coincidePreregistro && coincidePago && coincideOrigen && coincideFacultad && (!texto || textoColumnas
+      return coincideEtapa && coincideFiltro && coincidePreregistro && coincidePago && coincideOrigen && coincideFacultad && (!texto || textoColumnas
         .toLowerCase()
         .includes(texto));
     });
-  }, [busqueda, cuotaPorPreregistro, filtroFacultad, filtroOrigen, filtroPago, filtroPreregistro, filtroRapido, fraternoPorUsuario, guiaPorPreregistro, perfiles, postulantesGuiaQuery.data, preregistroPorUsuario]);
+  }, [busqueda, cisGuias, cuotaPorPreregistro, etapaListado, filtroFacultad, filtroOrigen, filtroPago, filtroPreregistro, filtroRapido, fraternoPorUsuario, guiaPorPreregistro, perfiles, postulantesGuiaQuery.data, preregistroPorUsuario]);
 
   const idsPerfilesFiltrados = useMemo(() => new Set(perfilesFiltrados.map((perfil) => perfil._id)), [perfilesFiltrados]);
   const filasReporte = useMemo<FilaReporteUsuario[]>(() => perfiles.map((perfil, indice): FilaReporteUsuario => {
@@ -252,7 +302,7 @@ export default function PerfilUsuarioView() {
 
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroPreregistro, filtroRapido, filasPorPagina]);
+  }, [busqueda, etapaListado, filtroPago, filtroPreregistro, filtroRapido, filasPorPagina]);
 
   useEffect(() => {
     if (paginaActual > totalPaginas) setPaginaActual(totalPaginas);
@@ -537,12 +587,10 @@ export default function PerfilUsuarioView() {
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[#d9c8aa] bg-[#fffaf0] p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[#8F5F2A]">Ubicación actual</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-bold text-[#5d4a42]">
-            <span className="rounded-full bg-[#841534] px-3 py-1.5 text-white">1. Perfil</span><span aria-hidden="true">→</span>
-            <span className="rounded-full bg-white px-3 py-1.5">2. Preregistro</span><span aria-hidden="true">→</span>
-            <span className="rounded-full bg-white px-3 py-1.5">3. Postulante a guía</span><span aria-hidden="true">→</span>
-            <span className="rounded-full bg-white px-3 py-1.5">4. Fraterno</span>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[#8F5F2A]">Mostrar usuarios por etapa</p>
+          <p className="mt-1 text-xs text-[#735f55]">Cada botón muestra únicamente los usuarios y las columnas útiles de esa etapa.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold text-[#5d4a42]" role="group" aria-label="Filtrar usuarios por etapa">
+            {ETAPAS_LISTADO.map(({ id, etiqueta }) => <button key={id} type="button" aria-pressed={etapaListado === id} onClick={() => seleccionarEtapa(id)} className={`rounded-full border px-3 py-2 transition ${etapaListado === id ? "border-[#841534] bg-[#841534] text-white shadow-sm" : "border-[#d9c8aa] bg-white hover:border-[#841534] hover:text-[#841534]"}`}>{etiqueta} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[11px] ${etapaListado === id ? "bg-white/20" : "bg-[#eee8dc]"}`}>{totalesEtapa[id]}</span></button>)}
           </div>
         </div>
         <button type="button" aria-pressed={columnasFijadas.size > 0} onClick={() => setColumnasFijadas((actuales) => actuales.size ? new Set() : new Set(["nombre"]))} className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-black transition ${columnasFijadas.size ? "border-[#841534] bg-[#841534] text-white" : "border-[#841534]/30 bg-white text-[#841534]"}`}>
@@ -564,7 +612,7 @@ export default function PerfilUsuarioView() {
         ) : (
           <div className="max-w-full overflow-x-auto overscroll-x-contain" aria-label="Tabla unificada; desplázate horizontalmente para ver todas las etapas">
             <style>{estilosColumnasFijas}</style>
-            <table className={`tabla-configurable w-full table-fixed text-sm ${vistaCompleta ? "min-w-[3200px]" : "min-w-[1900px]"}`}>
+            <table className="tabla-configurable table-fixed text-sm" style={{ minWidth: `${Math.max(720, anchoTabla)}px`, width: `${Math.max(720, anchoTabla)}px` }}>
               <colgroup>{COLUMNAS_TABLA.map(([id,,ancho])=><col key={id} style={{visibility:columnasVisibles.has(id)?"visible":"collapse",width:ancho}}/>)}</colgroup>
               <thead className="bg-[#841534] text-white">
                 <tr>{COLUMNAS_TABLA.map(([id,titulo])=><th key={id} className={`p-4 text-left ${id==="nombre"?"min-w-72":""}`}><label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap font-black"><input type="checkbox" checked={columnasFijadas.has(id)} onChange={()=>setColumnasFijadas((actuales)=>{const nuevas=new Set(actuales);if(nuevas.has(id))nuevas.delete(id);else nuevas.add(id);return nuevas})} className="h-4 w-4 accent-[#C59A3A]" aria-label={`Fijar columna ${titulo}`}/>{titulo}</label></th>)}</tr>
