@@ -1,6 +1,6 @@
 
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { esRolPoblado } from "@/types/PerfilUsuarioType";
@@ -10,6 +10,22 @@ import api from "@/lib/axios";
 import { obtenerMiIndumentaria } from "@/api/IndumentariaApi";
 import { formatearFechaCivil } from "@/utils/fechaCivil";
 import { FileText, Images, UploadCloud } from "lucide-react";
+import { CARRERAS_FCPN, FACULTAD_FCPN, OPCIONES_ORIGEN_ACADEMICO, normalizarOrigenAcademico } from "@/constants/origenAcademico";
+import type { TipoOrigen } from "@/types/PerfilUsuarioType";
+
+type OrigenEditable = { tipoOrigen: string; facultad: string; carrera: string; registroUniversitario: string };
+
+function OrigenAcademicoAutorizado({ valor, cambiar }: { valor: OrigenEditable; cambiar: Dispatch<SetStateAction<OrigenEditable>> }) {
+  const origen = normalizarOrigenAcademico(valor.tipoOrigen as TipoOrigen);
+  const cambiarOrigen = (tipoOrigen: TipoOrigen) => cambiar((actual) => ({
+    ...actual,
+    tipoOrigen,
+    facultad: tipoOrigen === "INTERNO_UMSA" ? FACULTAD_FCPN : tipoOrigen === "EXTERNO_NO_UMSA" ? "" : actual.facultad,
+    carrera: tipoOrigen === "EXTERNO_NO_UMSA" || (tipoOrigen === "INTERNO_UMSA" && !CARRERAS_FCPN.includes(actual.carrera as typeof CARRERAS_FCPN[number])) ? "" : actual.carrera,
+    registroUniversitario: tipoOrigen === "EXTERNO_NO_UMSA" ? "" : actual.registroUniversitario,
+  }));
+  return <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4"><h3 className="font-black text-emerald-900">Origen y facultad autorizados</h3><p className="mt-1 text-xs text-slate-600">Selecciona la misma clasificación utilizada en el formulario de registro.</p><div className="mt-3 grid gap-3 md:grid-cols-2"><label className="text-sm font-bold">Origen<select value={origen} onChange={e=>cambiarOrigen(e.target.value as TipoOrigen)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5">{OPCIONES_ORIGEN_ACADEMICO.map(opcion=><option key={opcion.value} value={opcion.value}>{opcion.label}</option>)}</select></label>{origen !== "EXTERNO_NO_UMSA" ? <label className="text-sm font-bold">Registro universitario<input value={valor.registroUniversitario} onChange={e=>cambiar(actual=>({...actual,registroUniversitario:e.target.value.toLocaleUpperCase("es-BO")}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"/></label> : null}{origen === "INTERNO_UMSA" ? <><label className="text-sm font-bold">Facultad<input readOnly value={FACULTAD_FCPN} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5"/></label><label className="text-sm font-bold">Carrera FCPN<select value={valor.carrera} onChange={e=>cambiar(actual=>({...actual,carrera:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"><option value="">Seleccionar carrera</option>{CARRERAS_FCPN.map(carrera=><option key={carrera} value={carrera}>{carrera}</option>)}</select></label></> : origen === "EXTERNO_UMSA" ? <>{[["facultad","Facultad UMSA"],["carrera","Carrera"]].map(([campo,etiqueta])=><label key={campo} className="text-sm font-bold">{etiqueta}<input value={valor[campo as keyof OrigenEditable]} onChange={e=>cambiar(actual=>({...actual,[campo]:e.target.value.toLocaleUpperCase("es-BO")}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"/></label>)}</> : <p className="rounded-xl bg-white p-3 text-sm text-slate-600 md:col-span-2">No pertenece a la UMSA; no se solicitan facultad, carrera ni registro universitario.</p>}</div></div>;
+}
 
 export default function PerfilView() {
   const navigate = useNavigate();
@@ -25,10 +41,11 @@ export default function PerfilView() {
   const [tipoCarnet, setTipoCarnet] = useState<"PDF" | "IMAGENES" | "">("");
   const [fotoNueva,setFotoNueva]=useState<File|null>(null); const [carnetFrente,setCarnetFrente]=useState<File|null>(null); const [carnetReverso,setCarnetReverso]=useState<File|null>(null); const [ruNuevo,setRuNuevo]=useState<File|null>(null); const queryClient=useQueryClient();
   const [datosEditables,setDatosEditables]=useState({nombres:"",apellidoPaterno:"",apellidoMaterno:"",telefono:"",ci:"",fechaNacimiento:"",sexo:""});
-  useEffect(()=>{if(perfil)setDatosEditables({nombres:perfil.nombres??"",apellidoPaterno:perfil.apellidoPaterno??"",apellidoMaterno:perfil.apellidoMaterno??"",telefono:perfil.telefono??"",ci:perfil.ci??"",fechaNacimiento:perfil.fechaNacimiento?String(perfil.fechaNacimiento).slice(0,10):"",sexo:perfil.sexo??""});},[perfil]);
+  const [origenEditable,setOrigenEditable]=useState({tipoOrigen:"INTERNO",facultad:"",carrera:"",registroUniversitario:""});
+  useEffect(()=>{if(perfil){setDatosEditables({nombres:perfil.nombres??"",apellidoPaterno:perfil.apellidoPaterno??"",apellidoMaterno:perfil.apellidoMaterno??"",telefono:perfil.telefono??"",ci:perfil.ci??"",fechaNacimiento:perfil.fechaNacimiento?String(perfil.fechaNacimiento).slice(0,10):"",sexo:perfil.sexo??""});setOrigenEditable({tipoOrigen:perfil.tipoOrigen??"INTERNO",facultad:perfil.facultad??"",carrera:perfil.carrera??"",registroUniversitario:perfil.registroUniversitario??""})}},[perfil]);
   const autorizacionQuery=useQuery({queryKey:["mi-autorizacion-edicion"],queryFn:async()=> (await api.get("/perfilusuario/autorizacion-edicion/mia")).data});
   const indumentariaQuery=useQuery({queryKey:["mi-indumentaria"],queryFn:obtenerMiIndumentaria});
-  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setModalCambiosGuardados(true);setTipoCarnet("");setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
+  const completarMutation=useMutation({mutationFn:async()=>{const fd=new FormData();if(fotoNueva)fd.append("fotoPerfil",fotoNueva);if(carnetFrente)fd.append("carnetIdentidadPdf",carnetFrente);if(carnetReverso)fd.append("carnetIdentidadReverso",carnetReverso);if(ruNuevo)fd.append("registroUniversitarioPdf",ruNuevo);if(autorizacionQuery.data?.autorizacion?.campos.includes("DATOS_PERSONALES"))Object.entries(datosEditables).forEach(([campo,valor])=>fd.append(campo,valor));if(autorizacionQuery.data?.autorizacion?.campos.includes("ORIGEN_ACADEMICO"))Object.entries(origenEditable).forEach(([campo,valor])=>fd.append(campo,valor));return(await api.post("/perfilusuario/completar-perfil-autorizado",fd)).data;},onSuccess:async r=>{toast.success(r.message);setModalCambiosGuardados(true);setTipoCarnet("");setFotoNueva(null);setCarnetFrente(null);setCarnetReverso(null);setRuNuevo(null);await Promise.all([queryClient.invalidateQueries({queryKey:["usuario"]}),queryClient.invalidateQueries({queryKey:["mi-autorizacion-edicion"]})]);},onError:(e:any)=>toast.error(e.response?.data?.error??"No se pudo actualizar")});
 
   const cambiarTipoCarnet = (tipo: "PDF" | "IMAGENES") => {
     setTipoCarnet(tipo);
@@ -273,6 +290,7 @@ export default function PerfilView() {
                 <label className="text-sm font-bold">Género<select value={datosEditables.sexo} onChange={e=>setDatosEditables(actual=>({...actual,sexo:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5"><option value="">Seleccionar</option><option value="HOMBRE">Hombre</option><option value="MUJER">Mujer</option></select></label>
               </div></div>
             )}
+            {autorizacionQuery.data.autorizacion.campos.includes("ORIGEN_ACADEMICO") && <OrigenAcademicoAutorizado valor={origenEditable} cambiar={setOrigenEditable}/>}
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               {autorizacionQuery.data.autorizacion.campos.includes("FOTO_PERFIL") && <CampoArchivoElegante id="foto-perfil-edicion" titulo="Nueva foto de perfil" descripcion="Selecciona una fotografía clara y de frente." archivo={fotoNueva} accept="image/*" seleccionar={setFotoNueva}/>}
               {autorizacionQuery.data.autorizacion.campos.includes("REGISTRO_UNIVERSITARIO") && <CampoArchivoElegante id="ru-edicion" titulo="Registro universitario" descripcion="Puedes subir una imagen legible o un PDF." archivo={ruNuevo} accept=".pdf,application/pdf,image/*" seleccionar={setRuNuevo}/>}
@@ -286,7 +304,7 @@ export default function PerfilView() {
                 {ruNuevo && <VistaPreviaArchivo titulo="Registro universitario" archivo={ruNuevo} quitar={() => setRuNuevo(null)} />}
               </div>
             )}
-            <button type="button" disabled={completarMutation.isPending||(!autorizacionQuery.data.autorizacion.campos.includes("DATOS_PERSONALES")&&!fotoNueva&&!carnetFrente&&!carnetReverso&&!ruNuevo)} onClick={guardarCambiosAutorizados} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3.5 font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><UploadCloud className="h-5 w-5"/>{completarMutation.isPending?"Guardando cambios...":"Guardar cambios autorizados"}</button>
+            <button type="button" disabled={completarMutation.isPending||(!autorizacionQuery.data.autorizacion.campos.includes("DATOS_PERSONALES")&&!autorizacionQuery.data.autorizacion.campos.includes("ORIGEN_ACADEMICO")&&!fotoNueva&&!carnetFrente&&!carnetReverso&&!ruNuevo)} onClick={guardarCambiosAutorizados} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3.5 font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><UploadCloud className="h-5 w-5"/>{completarMutation.isPending?"Guardando cambios...":"Guardar cambios autorizados"}</button>
             </div>
           </section>
         )}

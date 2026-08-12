@@ -58,8 +58,10 @@ import { obtenerReporteTallas } from "@/api/ReporteApi";
 type FilaReporteUsuario = { numero: number; nombre: string; ci: string; genero: string; tallaPolera: string; tallaChamarra: string; email: string; estado: string; preregistro: string; estadoPreregistro: string; fraterno: string; pago: string; terminos: string; situacion: string; cupo: string; esPreregistro: boolean; esPostulanteGuia: boolean; esFraterno: boolean; cumpleFiltroActual: boolean };
 type FiltroPerfil = "TODOS" | "PENDIENTE" | "ACTIVO" | "POSTULANTE" | "INACTIVO" | "ADMINISTRADOR";
 type EstadoRetornoPagos = { reopenCuotaId?: string; viewState?: { busqueda?: string; filtroRapido?: FiltroPerfil; filtroPreregistro?: EstadoPreregistro | "TODOS" | "SIN_PREREGISTRO"; paginaActual?: number } };
-const COLUMNAS_TABLA = [["nombre","Nombre",288],["ci","CI",150],["email","Email",300],["roles","Roles",180],["estado","Estado",150],["preregistro","Preregistro",190],["guia","Postulante a guía",210],["fraterno","N.º fraterno",170],["gestion","Gestión",150],["ingreso","Ingreso",140],["pago","Pago",170],["terminos","Términos",190],["situacion","Situación",160],["cupo","Cupo",140],["cuota","Pagos y bauchers",210],["acciones","Acciones",200]] as const;
+const COLUMNAS_TABLA = [["nombre","Nombre",288],["ci","CI",150],["email","Email",300],["roles","Roles",180],["estado","Estado",150],["origen","Origen",180],["facultad","Facultad",240],["altaAdmin","Administrador que dio de alta",260],["altaId","ID administrador",250],["preregistro","Preregistro",190],["guia","Postulante a guía",210],["fraterno","N.º fraterno",170],["gestion","Gestión",150],["ingreso","Ingreso",140],["pago","Pago",170],["terminos","Términos",190],["situacion","Situación",160],["cupo","Cupo",140],["cuota","Pagos",210],["bauchers","Bauchers enviados",220],["acciones","Acciones",200]] as const;
 type ColumnaTabla = (typeof COLUMNAS_TABLA)[number][0];
+type ResponsableAlta = { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string | null; email?: string | null };
+const esResponsablePoblado = (valor: unknown): valor is ResponsableAlta => Boolean(valor && typeof valor === "object" && "_id" in valor && "nombres" in valor);
 
 export default function PerfilUsuarioView() {
   const location = useLocation();
@@ -124,6 +126,9 @@ export default function PerfilUsuarioView() {
   const [columnasVisibles, setColumnasVisibles] = useState<Set<ColumnaTabla>>(() => new Set(COLUMNAS_TABLA.map(([id]) => id)));
   const [vistaCompleta, setVistaCompleta] = useState(true);
   const [filtroPreregistro, setFiltroPreregistro] = useState<EstadoPreregistro | "TODOS" | "SIN_PREREGISTRO">(() => estadoRetorno?.viewState?.filtroPreregistro ?? "TODOS");
+  const [filtroPago, setFiltroPago] = useState("TODOS");
+  const [filtroOrigen, setFiltroOrigen] = useState("TODOS");
+  const [filtroFacultad, setFiltroFacultad] = useState("TODAS");
   const [fraternoSeleccionado, setFraternoSeleccionado] = useState<Fraterno | null>(null);
   const [cuotaSeleccionada, setCuotaSeleccionada] = useState<Cuota | null>(null);
   const [reporteAbierto, setReporteAbierto] = useState(false);
@@ -162,18 +167,11 @@ export default function PerfilUsuarioView() {
   const estilosColumnasFijas = useMemo(() => {
     const reglas: string[] = [];
     let izquierda = 0;
-    for (let indice = 0; indice < 8; indice += 1) {
+    for (let indice = 0; indice < COLUMNAS_TABLA.length; indice += 1) {
       const [id,,ancho] = COLUMNAS_TABLA[indice];
       if (!columnasVisibles.has(id) || !columnasFijadas.has(id)) continue;
       reglas.push(`.tabla-configurable th:nth-child(${indice + 1}),.tabla-configurable td:nth-child(${indice + 1}){position:sticky;left:${izquierda}px;z-index:20;box-shadow:8px 0 12px -12px rgba(0,0,0,.8)}.tabla-configurable th:nth-child(${indice + 1}){z-index:30;background:#841534}.tabla-configurable td:nth-child(${indice + 1}){background:white}`);
       izquierda += ancho;
-    }
-    let derecha = 0;
-    for (let indice = COLUMNAS_TABLA.length - 1; indice >= 8; indice -= 1) {
-      const [id,,ancho] = COLUMNAS_TABLA[indice];
-      if (!columnasVisibles.has(id) || !columnasFijadas.has(id)) continue;
-      reglas.push(`.tabla-configurable th:nth-child(${indice + 1}),.tabla-configurable td:nth-child(${indice + 1}){position:sticky;right:${derecha}px;z-index:20;box-shadow:-8px 0 12px -12px rgba(0,0,0,.8)}.tabla-configurable th:nth-child(${indice + 1}){z-index:30;background:#841534}.tabla-configurable td:nth-child(${indice + 1}){background:white}`);
-      derecha += ancho;
     }
     return reglas.join("");
   }, [columnasFijadas, columnasVisibles]);
@@ -215,13 +213,21 @@ export default function PerfilUsuarioView() {
         || (["PENDIENTE", "ACTIVO", "INACTIVO"].includes(filtroRapido) && perfil.estado === filtroRapido)
         || (["POSTULANTE", "ADMINISTRADOR"].includes(filtroRapido) && roles.toUpperCase().includes(filtroRapido));
       const preregistro = preregistroPorUsuario.get(perfil._id);
+      const fraterno = fraternoPorUsuario.get(perfil._id);
+      const responsableAlta = [preregistro?.usuarioCreador, fraterno?.usuarioCreador, perfil.usuarioAprobador, perfil.usuarioCreador].find(esResponsablePoblado);
       const coincidePreregistro = filtroPreregistro === "TODOS"
         || (filtroPreregistro === "SIN_PREREGISTRO" ? !preregistro : preregistro?.estado === filtroPreregistro);
-      return coincideFiltro && coincidePreregistro && (!texto || `${perfil.nombres} ${perfil.apellidoPaterno} ${perfil.apellidoMaterno ?? ""} ${perfil.ci} ${perfil.complementoCi ?? ""} ${perfil.email} ${perfil.estado} ${roles}`
+      const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+      const coincidePago = filtroPago === "TODOS" || (filtroPago === "SIN_CUOTA" ? !cuota : filtroPago === "CON_SALDO" ? Boolean(cuota && cuota.saldo > 0) : filtroPago === "BAUCHER_ENVIADO" ? Boolean(cuota?.resumenPagos?.conBaucher) : filtroPago === "PENDIENTE_REVISION" ? Boolean(cuota?.resumenPagos?.pendientes) : cuota?.estado === filtroPago);
+      const coincideOrigen = filtroOrigen === "TODOS" || perfil.tipoOrigen === filtroOrigen;
+      const coincideFacultad = filtroFacultad === "TODAS" || (perfil.facultad || "SIN FACULTAD") === filtroFacultad;
+      const gestion = fraterno && typeof fraterno.gestionId === "object" ? `${fraterno.gestionId.nombre} ${fraterno.gestionId.anio ?? ""}` : "";
+      const textoColumnas = [perfil.nombres, perfil.apellidoPaterno, perfil.apellidoMaterno, perfil.ci, perfil.complementoCi, perfil.email, roles, perfil.estado, perfil.tipoOrigen, perfil.facultad, responsableAlta?._id, responsableAlta?.nombres, responsableAlta?.apellidoPaterno, responsableAlta?.apellidoMaterno, responsableAlta?.email, preregistro?.numeroPreRegistro, preregistro?.estado, postulantesGuiaQuery.data && preregistro ? guiaPorPreregistro.get(preregistro._id)?.estado : "", fraterno?.numeroFraterno, gestion, fraterno?.fechaIngreso ? new Date(fraterno.fechaIngreso).toLocaleString("es-BO") : "", fraterno?.estadoPago, fraterno?.terminos?.estado, fraterno?.situacion, fraterno?.estado, fraterno?.ocupaCupo ? "OCUPA CUPO" : "CUPO LIBRE", cuota?.estado, cuota?.montoTotal, cuota?.montoPagado, cuota?.saldo, cuota?.resumenPagos?.conBaucher, cuota?.resumenPagos?.pendientes].filter(valor=>valor !== undefined && valor !== null).join(" ");
+      return coincideFiltro && coincidePreregistro && coincidePago && coincideOrigen && coincideFacultad && (!texto || textoColumnas
         .toLowerCase()
         .includes(texto));
     });
-  }, [busqueda, filtroPreregistro, filtroRapido, perfiles, preregistroPorUsuario]);
+  }, [busqueda, cuotaPorPreregistro, filtroFacultad, filtroOrigen, filtroPago, filtroPreregistro, filtroRapido, fraternoPorUsuario, guiaPorPreregistro, perfiles, postulantesGuiaQuery.data, preregistroPorUsuario]);
 
   const idsPerfilesFiltrados = useMemo(() => new Set(perfilesFiltrados.map((perfil) => perfil._id)), [perfilesFiltrados]);
   const filasReporte = useMemo<FilaReporteUsuario[]>(() => perfiles.map((perfil, indice): FilaReporteUsuario => {
@@ -509,7 +515,7 @@ export default function PerfilUsuarioView() {
             type="search"
             value={busqueda}
             onChange={(event) => setBusqueda(event.target.value)}
-            placeholder="Buscar por nombre, CI, correo, rol o estado..."
+            placeholder="Buscar por cualquier columna: usuario, administrador, ID, preregistro, pago, baucher..."
             className="w-full rounded-xl border border-gray-300 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-[#841534] focus:ring-4 focus:ring-[#841534]/10"
           />
         </label>
@@ -521,6 +527,12 @@ export default function PerfilUsuarioView() {
         >
           {[5, 10, 20, 50, 100].map((cantidad) => <option key={cantidad} value={cantidad}>{cantidad} filas</option>)}
         </select>
+      </section>
+
+      <section className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-3">
+        <label className="text-xs font-black uppercase text-[#735f55]">Pagos<select value={filtroPago} onChange={e=>setFiltroPago(e.target.value)} className="input-preregistro mt-1"><option value="TODOS">Todos los pagos</option><option value="BAUCHER_ENVIADO">Usuarios que enviaron baucher</option><option value="PENDIENTE_REVISION">Bauchers pendientes de revisión</option><option value="SIN_CUOTA">Sin cuota</option><option value="CON_SALDO">Con saldo pendiente</option><option value="PAGADA">Pagado</option><option value="PENDIENTE">Pago pendiente</option></select><button type="button" onClick={()=>setFiltroPago("BAUCHER_ENVIADO")} className="mt-2 w-full rounded-xl bg-blue-700 px-3 py-2 text-sm font-black normal-case text-white">Ver todos los que enviaron pagos</button></label>
+        <label className="text-xs font-black uppercase text-[#735f55]">Origen<select value={filtroOrigen} onChange={e=>setFiltroOrigen(e.target.value)} className="input-preregistro mt-1"><option value="TODOS">Todos los orígenes</option>{Array.from(new Set(perfiles.map(p=>p.tipoOrigen))).sort().map(origen=><option key={origen} value={origen}>{origen.replaceAll("_"," ")}</option>)}</select></label>
+        <label className="text-xs font-black uppercase text-[#735f55]">Facultad<select value={filtroFacultad} onChange={e=>setFiltroFacultad(e.target.value)} className="input-preregistro mt-1"><option value="TODAS">Todas las facultades</option>{Array.from(new Set(perfiles.map(p=>p.facultad||"SIN FACULTAD"))).sort().map(facultad=><option key={facultad} value={facultad}>{facultad}</option>)}</select></label>
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[#d9c8aa] bg-[#fffaf0] p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -539,7 +551,7 @@ export default function PerfilUsuarioView() {
         </button>
       </section>
 
-      <details className="rounded-2xl border bg-white p-4"><summary className="cursor-pointer font-black text-[#741229]">⚙️ Mostrar, ocultar o fijar columnas</summary><p className="mt-2 text-xs text-slate-500">Marca las columnas que deseas ver. Puedes fijar varias desde sus encabezados y se acomodarán de izquierda a derecha.</p><div className="mt-3 flex flex-wrap gap-2">{COLUMNAS_TABLA.map(([id,titulo]) => <label key={id} className={`rounded-xl border px-3 py-2 text-sm font-bold ${columnasVisibles.has(id)?"bg-[#fffaf0] text-[#741229]":"bg-slate-50 text-slate-400"}`}><input type="checkbox" className="mr-2" checked={columnasVisibles.has(id)} onChange={() => setColumnasVisibles((actuales) => { const nuevas=new Set(actuales); if(nuevas.has(id)){if(nuevas.size===1){toast.error("Debe quedar al menos una columna visible");return actuales}nuevas.delete(id);setColumnasFijadas((fijadas)=>{const siguientes=new Set(fijadas);siguientes.delete(id);return siguientes})}else nuevas.add(id);return nuevas; })}/>{titulo}</label>)}</div></details>
+      <details className="rounded-2xl border bg-white p-4"><summary className="cursor-pointer font-black text-[#741229]">⚙️ Mostrar, ocultar o fijar columnas</summary><p className="mt-2 text-xs text-slate-500">El primer check muestra la columna y el check con 📌 la deja fija al desplazarte.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={()=>setColumnasVisibles(new Set(COLUMNAS_TABLA.map(([id])=>id)))} className="rounded-xl bg-[#841534] px-4 py-2 text-sm font-black text-white">☑ Marcar todo</button><button type="button" onClick={()=>{setColumnasVisibles(new Set(["nombre"]));setColumnasFijadas(new Set(["nombre"]))}} className="rounded-xl border border-[#841534] px-4 py-2 text-sm font-black text-[#841534]">☐ Desmarcar todo</button><button type="button" onClick={()=>setColumnasFijadas(new Set(columnasVisibles))} className="rounded-xl border px-4 py-2 text-sm font-black">📌 Fijar visibles</button><button type="button" onClick={()=>setColumnasFijadas(new Set())} className="rounded-xl border px-4 py-2 text-sm font-black">Quitar fijación</button></div><div className="mt-3 flex flex-wrap gap-2">{COLUMNAS_TABLA.map(([id,titulo]) => <span key={id} className={`inline-flex items-center rounded-xl border px-3 py-2 text-sm font-bold ${columnasVisibles.has(id)?"bg-[#fffaf0] text-[#741229]":"bg-slate-50 text-slate-400"}`}><label className="cursor-pointer"><input type="checkbox" className="mr-2" checked={columnasVisibles.has(id)} onChange={() => setColumnasVisibles((actuales) => { const nuevas=new Set(actuales); if(nuevas.has(id)){if(nuevas.size===1){toast.error("Debe quedar al menos una columna visible");return actuales}nuevas.delete(id);setColumnasFijadas((fijadas)=>{const siguientes=new Set(fijadas);siguientes.delete(id);return siguientes})}else nuevas.add(id);return nuevas; })}/>{titulo}</label><label className="ml-3 cursor-pointer border-l pl-3" title={`Fijar ${titulo}`}><input type="checkbox" checked={columnasFijadas.has(id)} disabled={!columnasVisibles.has(id)} onChange={()=>setColumnasFijadas(actuales=>{const nuevas=new Set(actuales);if(nuevas.has(id))nuevas.delete(id);else nuevas.add(id);return nuevas})}/> 📌</label></span>)}</div></details>
 
       {/* TABLA */}
 
@@ -575,6 +587,8 @@ export default function PerfilUsuarioView() {
                     const preregistro = preregistroPorUsuario.get(perfil._id);
                     const postulanteGuia = preregistro ? guiaPorPreregistro.get(preregistro._id) : undefined;
                     const fraterno = fraternoPorUsuario.get(perfil._id);
+                    const responsableAlta = [preregistro?.usuarioCreador, fraterno?.usuarioCreador, perfil.usuarioAprobador, perfil.usuarioCreador].find(esResponsablePoblado);
+                    const fechaAltaMostrada = preregistro?.fechaCreado ?? perfil.fechaAlta ?? (fraterno?.fechaIngreso || undefined);
                     const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
                     const asignandoGuia = asignarGuia.isPending && asignarGuia.variables === preregistro?._id;
                     const creandoPreregistro = crearPreregistroFaltante.isPending && crearPreregistroFaltante.variables === perfil._id;
@@ -626,6 +640,11 @@ export default function PerfilUsuarioView() {
                           </span>
                         </td>
 
+                        <td className="p-4 font-bold">{perfil.tipoOrigen.replaceAll("_", " ")}</td>
+                        <td className="p-4">{perfil.facultad || "—"}</td>
+                        <td className="p-4">{responsableAlta ? <><strong>{responsableAlta.nombres} {responsableAlta.apellidoPaterno} {responsableAlta.apellidoMaterno ?? ""}</strong><span className="mt-1 block text-xs text-slate-500">{fechaAltaMostrada ? new Date(fechaAltaMostrada).toLocaleString("es-BO") : "Hora no registrada"}</span><span className="mt-1 block text-[10px] font-bold uppercase text-[#8F5F2A]">Usuario creador</span></> : <span className="text-xs text-slate-400">Sin usuario creador registrado</span>}</td>
+                        <td className="break-all p-4 font-mono text-xs">{responsableAlta?._id || "—"}</td>
+
                         <td className="p-4">
                           {preregistro ? <div className="space-y-2"><span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${preregistro.estado === "APROBADO" ? "bg-emerald-100 text-emerald-800" : preregistro.estado === "OBSERVADO" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}`}>{preregistro.estado.replaceAll("_", " ")}</span><p className="text-xs font-semibold text-slate-500">{preregistro.numeroPreRegistro}</p><button type="button" onClick={() => navigate(`/preregistros/${preregistro._id}/editar`, { state: { returnTo: "/perfil-usuario" } })} className="text-xs font-black text-[#841534] underline underline-offset-2">Revisar preregistro</button></div> : <div className="space-y-2"><span className="block text-xs font-bold text-amber-700">Sin preregistro</span><button type="button" disabled={creandoPreregistro} onClick={() => { if (window.confirm(`Se creará un preregistro en la gestión vigente para ${perfil.nombres}. ¿Deseas continuar?`)) crearPreregistroFaltante.mutate(perfil._id); }} className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-black text-amber-900 transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60">{creandoPreregistro ? "Creando..." : "+ Crear preregistro"}</button></div>}
                         </td>
@@ -642,6 +661,7 @@ export default function PerfilUsuarioView() {
                         <td className="p-4 font-black">{fraterno ? (fraterno.situacion ?? fraterno.estado).replaceAll("_", " ") : "—"}</td>
                         <td className="p-4">{fraterno ? <span className={`inline-flex items-center gap-2 font-bold ${fraterno.ocupaCupo ? "text-emerald-700" : "text-slate-500"}`}><span aria-hidden="true">{fraterno.ocupaCupo ? "🟢" : "⚪"}</span>{fraterno.ocupaCupo ? "OCUPA" : "LIBRE"}</span> : "—"}</td>
                         <td className="p-4">{cuota ? <button type="button" onClick={() => setCuotaSeleccionada(cuota)} className="rounded-xl bg-blue-100 px-4 py-2 text-xs font-black text-blue-800">Ver pagos<span className="mt-1 block font-medium">Bs {cuota.montoPagado.toFixed(2)} / {cuota.montoTotal.toFixed(2)}</span></button> : <span className="text-xs text-slate-400">Sin cuota</span>}</td>
+                        <td className="p-4">{cuota?.resumenPagos?.conBaucher ? <button type="button" onClick={()=>setCuotaSeleccionada(cuota)} className={`rounded-xl px-4 py-2 text-left text-xs font-black ${cuota.resumenPagos.pendientes ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>Revisar {cuota.resumenPagos.conBaucher} baucher{cuota.resumenPagos.conBaucher === 1 ? "" : "s"}<span className="mt-1 block font-medium">{cuota.resumenPagos.pendientes ? `${cuota.resumenPagos.pendientes} pendiente(s)` : "Sin pendientes"}</span></button> : <span className="text-xs text-slate-400">No envió baucher</span>}</td>
 
                         <td className="p-4">
                           <div className="flex flex-wrap justify-center gap-2">

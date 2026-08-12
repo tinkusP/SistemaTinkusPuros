@@ -726,6 +726,8 @@ export const PerfilUsuarioSchema = z
 
     fechaCreado: FechaApiSchema.nullable().optional(),
     usuarioCreador: UsuarioAuditoriaSchema.nullable().optional(),
+    fechaAlta: FechaApiSchema.nullable().optional(),
+    usuarioAprobador: UsuarioAuditoriaSchema.nullable().optional(),
     fechaEdit: FechaApiSchema.nullable().optional(),
     usuarioEdit: UsuarioAuditoriaSchema.nullable().optional(),
     fechaEliminado: FechaApiSchema.nullable().optional(),

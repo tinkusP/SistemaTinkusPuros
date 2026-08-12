@@ -12,6 +12,7 @@ const poblar = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email fotoPerfil" },
   { path: "gestionId", select: "nombre anio" },
   { path: "preregistroId", select: "numeroPreRegistro estado" },
+  { path: "usuarioCreador", select: "nombres apellidoPaterno apellidoMaterno email" },
 ];
 
 export async function listarFraternos(_req: Request, res: Response) {

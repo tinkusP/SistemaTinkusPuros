@@ -49,6 +49,7 @@ export interface Preregistro {
   fechaRevision?: string;
   fechaCreado: string;
   fechaEditado?: string;
+  usuarioCreador?: UsuarioPreregistro | string | null;
 }
 
 export type PreregistroFormData = {

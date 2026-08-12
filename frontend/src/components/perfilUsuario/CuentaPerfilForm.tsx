@@ -40,6 +40,7 @@ import type {
 import {
   comprimirImagen,
 } from "@/utils/comprimirImagen";
+import { CARRERAS_FCPN, FACULTAD_FCPN, OPCIONES_ORIGEN_ACADEMICO } from "@/constants/origenAcademico";
 
 /* =========================================
    MODOS DE USO
@@ -107,7 +108,7 @@ export const valoresInicialesPerfilUsuario:
     telefono: "",
     email: "",
 
-    tipoOrigen: "INTERNO",
+    tipoOrigen: "INTERNO_UMSA",
     tipoFraterno: "NUEVO",
 
     registroUniversitario: "",
@@ -624,16 +625,13 @@ export default function PerfilUsuarioForm({
        * El controlador actual exige el RU
        * para toda cuenta, incluso EXTERNO.
        */
-      if (
-        !formData.registroUniversitario.trim()
-      ) {
+      if (formData.tipoOrigen !== "EXTERNO_NO_UMSA" && !formData.registroUniversitario.trim()) {
         nuevosErrores.registroUniversitario =
           "El registro universitario es obligatorio";
       }
 
       if (
-        formData.tipoOrigen ===
-        "INTERNO"
+        formData.tipoOrigen === "INTERNO_UMSA" || formData.tipoOrigen === "EXTERNO_UMSA"
       ) {
         if (
           !formData.facultad.trim()
@@ -1208,28 +1206,19 @@ export default function PerfilUsuarioForm({
             value={
               formData.tipoOrigen
             }
-            onChange={(
-              valor,
-            ) =>
-              actualizarCampo(
-                "tipoOrigen",
-                valor as TipoOrigen,
-              )
-            }
-            opciones={[
-              {
-                value:
-                  "INTERNO",
-                label:
-                  "Interno - UMSA",
-              },
-              {
-                value:
-                  "EXTERNO",
-                label:
-                  "Externo",
-              },
-            ]}
+            onChange={(valor) => {
+              const origen = valor as TipoOrigen;
+              actualizarCampo("tipoOrigen", origen);
+              if (origen === "INTERNO_UMSA") {
+                actualizarCampo("facultad", FACULTAD_FCPN);
+                if (!CARRERAS_FCPN.includes(formData.carrera as typeof CARRERAS_FCPN[number])) actualizarCampo("carrera", "");
+              } else if (origen === "EXTERNO_NO_UMSA") {
+                actualizarCampo("facultad", "");
+                actualizarCampo("carrera", "");
+                actualizarCampo("registroUniversitario", "");
+              }
+            }}
+            opciones={OPCIONES_ORIGEN_ACADEMICO}
           />
 
           <Seleccion
@@ -1261,7 +1250,7 @@ export default function PerfilUsuarioForm({
             ]}
           />
 
-          <Campo
+          {formData.tipoOrigen !== "EXTERNO_NO_UMSA" && <Campo
             label="Registro universitario"
             value={
               formData.registroUniversitario
@@ -1278,9 +1267,14 @@ export default function PerfilUsuarioForm({
               errores.registroUniversitario
             }
             required
-          />
+          />}
 
-          <Campo
+          {formData.tipoOrigen === "INTERNO_UMSA" ? <Campo
+            label="Facultad"
+            value={FACULTAD_FCPN}
+            onChange={() => undefined}
+            readOnly
+          /> : formData.tipoOrigen === "EXTERNO_UMSA" ? <Campo
             label="Facultad"
             value={
               formData.facultad
@@ -1296,13 +1290,16 @@ export default function PerfilUsuarioForm({
             error={
               errores.facultad
             }
-            required={
-              formData.tipoOrigen ===
-              "INTERNO"
-            }
-          />
+            required
+          /> : null}
 
-          <Campo
+          {formData.tipoOrigen === "INTERNO_UMSA" ? <Seleccion
+            label="Carrera FCPN"
+            value={formData.carrera}
+            onChange={(valor) => actualizarCampo("carrera", valor)}
+            opciones={CARRERAS_FCPN.map((carrera) => ({ value: carrera, label: carrera }))}
+            required
+          /> : formData.tipoOrigen === "EXTERNO_UMSA" ? <Campo
             label="Carrera"
             value={
               formData.carrera
@@ -1318,11 +1315,8 @@ export default function PerfilUsuarioForm({
             error={
               errores.carrera
             }
-            required={
-              formData.tipoOrigen ===
-              "INTERNO"
-            }
-          />
+            required
+          /> : null}
         </div>
 
         {esModoCrear(

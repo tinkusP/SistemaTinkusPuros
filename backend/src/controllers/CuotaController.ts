@@ -112,7 +112,21 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
 }
 
 export const crearCuota = async (req: Request, res: Response) => { try { const preregistro = await Preregistro.findOne({ _id: req.body.preregistroId, fechaEliminado: null }); if (!preregistro) return res.status(404).json({ error: "Preregistro no encontrado" }); const montoTotal = Number(req.body.montoTotal); const cuota = await Cuota.create({ preregistroId: preregistro._id, montoTotal, saldo: montoTotal, fechaVencimiento: req.body.fechaVencimiento || undefined, observacion: req.body.observacion, usuarioCreador: req.usuario?._id }); await cuota.populate(poblar); await registrarAuditoria(req, { accion: "CREAR", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `Se creó una cuota de Bs ${montoTotal}`, datosDespues: cuota.toObject() }); return res.status(201).json({ message: "Cuota creada", cuota }); } catch (e) { if ((e as { code?: number }).code === 11000) return res.status(409).json({ error: "El preregistro ya tiene una cuota" }); return res.status(500).json({ error: "No se pudo crear la cuota" }); } };
-export const listarCuotas = async (_req: Request, res: Response) => res.json({ cuotas: await Cuota.find({ fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 }) });
+export const listarCuotas = async (_req: Request, res: Response) => {
+  const cuotas = await Cuota.find({ fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 }).lean();
+  const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision baucherImagen fechaPago").lean();
+  const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; conBaucher: number; ultimoEnvio?: Date }>();
+  for (const pago of pagos) {
+    const llave = String(pago.cuotaId);
+    const resumen = resumenPorCuota.get(llave) ?? { cantidad: 0, pendientes: 0, conBaucher: 0 };
+    resumen.cantidad += 1;
+    if (pago.estadoRevision === "PENDIENTE") resumen.pendientes += 1;
+    if (pago.baucherImagen) resumen.conBaucher += 1;
+    if (!resumen.ultimoEnvio || pago.fechaPago > resumen.ultimoEnvio) resumen.ultimoEnvio = pago.fechaPago;
+    resumenPorCuota.set(llave, resumen);
+  }
+  res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, conBaucher: 0 } })) });
+};
 export const obtenerMiCuota = async (req: Request, res: Response) => {
   const preregistros = await Preregistro.find({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado");
   const preregistroVigente = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("estado aprobado observacion").sort({ fechaRegistro: -1 });

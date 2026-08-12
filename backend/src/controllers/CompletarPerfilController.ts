@@ -13,7 +13,7 @@ import {
 } from "../services/AlmacenamientoService";
 
 type Archivo = { path: string; mimetype: string; originalname?: string; fieldname?: string };
-type CampoAutorizado = "DATOS_PERSONALES" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
+type CampoAutorizado = "DATOS_PERSONALES" | "ORIGEN_ACADEMICO" | "FOTO_PERFIL" | "CARNET_ANVERSO" | "CARNET_REVERSO" | "REGISTRO_UNIVERSITARIO";
 
 const eliminarArchivoPublico = async (ruta?: string | null) => {
   await eliminarArchivoAlmacenado(ruta);
@@ -41,8 +41,10 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
   const enviados = entradas.filter((item) => item.archivo);
   const camposDatos = ["nombres", "apellidoPaterno", "apellidoMaterno", "telefono", "ci", "fechaNacimiento", "sexo"] as const;
   const hayDatosPersonales = camposDatos.some((campo) => req.body[campo] !== undefined);
-  if (!enviados.length && !hayDatosPersonales) return res.status(400).json({ error: "Debe modificar datos o seleccionar al menos un archivo autorizado" });
+  const hayOrigen = ["tipoOrigen", "facultad", "carrera", "registroUniversitario"].some((campo) => req.body[campo] !== undefined);
+  if (!enviados.length && !hayDatosPersonales && !hayOrigen) return res.status(400).json({ error: "Debe modificar datos o seleccionar al menos un archivo autorizado" });
   if (hayDatosPersonales && !autorizacion.campos.includes("DATOS_PERSONALES")) return res.status(403).json({ error: "No fue autorizado para modificar datos personales" });
+  if (hayOrigen && !autorizacion.campos.includes("ORIGEN_ACADEMICO")) return res.status(403).json({ error: "No fue autorizado para modificar origen y facultad" });
   const noPermitido = enviados.find((item) => !autorizacion.campos.includes(item.permiso));
   if (noPermitido) return res.status(403).json({ error: `No fue autorizado para actualizar: ${noPermitido.permiso}` });
 
@@ -100,6 +102,20 @@ export const completarPerfilAutorizado = async (req: Request, res: Response) => 
       perfil.ci = ciNuevo;
       perfil.sexo = sexo;
       perfil.fechaNacimiento = req.body.fechaNacimiento ? new Date(req.body.fechaNacimiento) : undefined;
+      await perfil.save();
+    }
+    if (hayOrigen) {
+      const tipoOrigen = String(req.body.tipoOrigen ?? "").trim().toUpperCase();
+      if (!["INTERNO", "EXTERNO", "INTERNO_UMSA", "EXTERNO_UMSA", "EXTERNO_NO_UMSA"].includes(tipoOrigen)) return res.status(400).json({ error: "El origen académico no es válido" });
+      perfil.tipoOrigen = tipoOrigen as typeof perfil.tipoOrigen;
+      perfil.facultad = String(req.body.facultad ?? "").trim().toLocaleUpperCase("es-BO") || undefined;
+      perfil.carrera = String(req.body.carrera ?? "").trim().toLocaleUpperCase("es-BO") || undefined;
+      perfil.registroUniversitario = String(req.body.registroUniversitario ?? "").trim().toLocaleUpperCase("es-BO") || undefined;
+      if (["INTERNO", "INTERNO_UMSA"].includes(tipoOrigen)) {
+        const carrerasFcpn = ["BIOLOGÍA", "ESTADÍSTICA", "FÍSICA", "INFORMÁTICA", "MATEMÁTICA", "CIENCIAS QUÍMICAS"];
+        if (!carrerasFcpn.includes(perfil.carrera ?? "")) return res.status(400).json({ error: "Debe seleccionar una carrera válida de la FCPN" });
+        perfil.facultad = "FACULTAD DE CIENCIAS PURAS Y NATURALES (FCPN)";
+      }
       await perfil.save();
     }
     const foto = files.fotoPerfil?.[0];

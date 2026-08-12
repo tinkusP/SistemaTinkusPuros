@@ -46,6 +46,8 @@ export interface PerfilUsuarioType extends Document {
 
   fechaCreado?: Date;
   usuarioCreador?: mongoose.Types.ObjectId;
+  fechaAlta?: Date;
+  usuarioAprobador?: mongoose.Types.ObjectId;
 
   fechaEdit?: Date;
   usuarioEdit?: mongoose.Types.ObjectId;
@@ -248,6 +250,9 @@ const PerfilUsuarioSchema: Schema = new Schema(
       ref: "PerfilUsuario",
       default: null,
     },
+
+    fechaAlta: { type: Date, default: null },
+    usuarioAprobador: { type: Schema.Types.ObjectId, ref: "PerfilUsuario", default: null },
 
     fechaEdit: {
       type: Date,

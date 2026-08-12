@@ -832,7 +832,7 @@ router.post(
 router.get("/autorizacion-edicion/mia", authenticate, miAutorizacion);
 router.post("/completar-perfil-autorizado", authenticate, uploadRegistroCuenta.fields([{name:"fotoPerfil",maxCount:1},{name:"carnetIdentidadPdf",maxCount:1},{name:"carnetIdentidadReverso",maxCount:1},{name:"registroUniversitarioPdf",maxCount:1}]), completarPerfilAutorizado);
 router.get("/:id/autorizaciones-edicion", authenticate, soloAdministracion, param("id").isMongoId(), handleInputErrors, historialAutorizaciones);
-router.post("/:id/autorizaciones-edicion", authenticate, soloAdministracion, param("id").isMongoId(), body("motivo").trim().notEmpty().isLength({ max: 500 }), body("campos").isArray({ min: 1 }), body("campos.*").isIn(["DATOS_PERSONALES", "FOTO_PERFIL", "CARNET_ANVERSO", "CARNET_REVERSO", "REGISTRO_UNIVERSITARIO"]), handleInputErrors, autorizarEdicion);
+router.post("/:id/autorizaciones-edicion", authenticate, soloAdministracion, param("id").isMongoId(), body("motivo").trim().notEmpty().isLength({ max: 500 }), body("campos").isArray({ min: 1 }), body("campos.*").isIn(["DATOS_PERSONALES", "ORIGEN_ACADEMICO", "FOTO_PERFIL", "CARNET_ANVERSO", "CARNET_REVERSO", "REGISTRO_UNIVERSITARIO"]), handleInputErrors, autorizarEdicion);
 
 /**
  * @openapi

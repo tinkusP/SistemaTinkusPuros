@@ -42,6 +42,7 @@ import {
   comprimirImagen,
 } from "@/utils/comprimirImagen";
 import { guardarArchivoBorrador, guardarDatosBorrador, leerArchivosBorrador, leerDatosBorrador } from "@/utils/borradorRegistro";
+import { CARRERAS_FCPN, FACULTAD_FCPN, OPCIONES_ORIGEN_ACADEMICO } from "@/constants/origenAcademico";
 
 /* =========================================
    MODOS DE USO
@@ -1256,29 +1257,11 @@ export default function PerfilUsuarioForm({
                 actualizarCampo("carrera", "");
                 actualizarCampo("registroUniversitarioPdf", null);
               } else if (origen === "INTERNO_UMSA") {
-                actualizarCampo("facultad", "");
+                actualizarCampo("facultad", FACULTAD_FCPN);
+                if (!CARRERAS_FCPN.includes(formData.carrera as typeof CARRERAS_FCPN[number])) actualizarCampo("carrera", "");
               }
             }}
-            opciones={[
-              {
-                value:
-                  "INTERNO_UMSA",
-                label:
-                  "Interno UMSA - FCPN (Ciencias Puras y Naturales)",
-              },
-              {
-                value:
-                  "EXTERNO_UMSA",
-                label:
-                  "Externo UMSA - otra facultad",
-              },
-              {
-                value:
-                  "EXTERNO_NO_UMSA",
-                label:
-                  "Externo - no pertenece a la UMSA",
-              },
-            ]}
+            opciones={OPCIONES_ORIGEN_ACADEMICO}
           />
 
           <Seleccion
@@ -1332,7 +1315,7 @@ export default function PerfilUsuarioForm({
 
           {formData.tipoOrigen === "INTERNO_UMSA" && <Campo
             label="Facultad"
-            value="FACULTAD DE CIENCIAS PURAS Y NATURALES (FCPN)"
+            value={FACULTAD_FCPN}
             onChange={() => undefined}
             readOnly
           />}
@@ -1345,7 +1328,12 @@ export default function PerfilUsuarioForm({
             required
           />}
 
-          {mostrarDatosUniversitarios && <Campo
+          {formData.tipoOrigen === "INTERNO_UMSA" ? <Seleccion
+            label="Carrera FCPN"
+            value={formData.carrera}
+            onChange={(valor) => actualizarCampo("carrera", valor)}
+            opciones={CARRERAS_FCPN.map((carrera) => ({ value: carrera, label: carrera }))}
+          /> : mostrarDatosUniversitarios && <Campo
             label="Carrera"
             value={
               formData.carrera

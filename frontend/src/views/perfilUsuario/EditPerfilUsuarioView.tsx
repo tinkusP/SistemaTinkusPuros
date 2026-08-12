@@ -49,7 +49,9 @@ import {
 
 import type {
   PerfilUsuarioForm,
+  TipoOrigen,
 } from "@/types/PerfilUsuarioType";
+import { CARRERAS_FCPN, FACULTAD_FCPN, OPCIONES_ORIGEN_ACADEMICO, normalizarOrigenAcademico } from "@/constants/origenAcademico";
 
 type EstadoEditable =
   | "PENDIENTE"
@@ -76,9 +78,7 @@ type ActualizarPerfilAdminForm = {
   fotoPerfil?: File | null;
   email?: string;
 
-  tipoOrigen?:
-    | "INTERNO"
-    | "EXTERNO";
+  tipoOrigen?: TipoOrigen;
 
   tipoFraterno?:
     | "NUEVO"
@@ -933,9 +933,8 @@ export default function EditarPerfilUsuarioAdminView() {
     gestionesQuery.data ??
     [];
 
-  const esInterno =
-    formulario.tipoOrigen ===
-    "INTERNO";
+  const origenAcademico = normalizarOrigenAcademico(formulario.tipoOrigen as TipoOrigen);
+  const perteneceUmsa = origenAcademico !== "EXTERNO_NO_UMSA";
 
   return (
     <main className="space-y-6">
@@ -948,6 +947,7 @@ export default function EditarPerfilUsuarioAdminView() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["DATOS_PERSONALES", "Datos personales", "Información registrada"],
+                  ["ORIGEN_ACADEMICO", "Origen y facultad", "Permitir corregir origen, facultad, carrera y RU"],
                   ["FOTO_PERFIL", "Foto de perfil", perfilQuery.data.fotoPerfil ? "Ya tiene foto · permitir reemplazo" : "Falta subir"],
                   ["CARNET_ANVERSO", "Carnet completo", perfilQuery.data.documentos?.some(d=>d.tipoDocumento==="CARNET_IDENTIDAD") ? "Permite reemplazarlo con un PDF o con anverso y reverso" : "Falta subir PDF o ambas imágenes"],
                   ["REGISTRO_UNIVERSITARIO", "Registro universitario", perfilQuery.data.documentos?.some(d=>d.tipoDocumento==="REGISTRO_UNIVERSITARIO") ? "Ya existe · permitir reemplazo" : "Falta subir"],
@@ -1292,30 +1292,13 @@ export default function EditarPerfilUsuarioAdminView() {
               value={
                 formulario.tipoOrigen
               }
-              onChange={(
-                valor,
-              ) =>
-                actualizarCampo(
-                  "tipoOrigen",
-                  valor as
-                    | "INTERNO"
-                    | "EXTERNO",
-                )
-              }
-              opciones={[
-                {
-                  value:
-                    "INTERNO",
-                  label:
-                    "Interno - UMSA",
-                },
-                {
-                  value:
-                    "EXTERNO",
-                  label:
-                    "Externo",
-                },
-              ]}
+              onChange={(valor) => {
+                const origen = valor as TipoOrigen;
+                actualizarCampo("tipoOrigen", origen);
+                if (origen === "INTERNO_UMSA") actualizarCampo("facultad", FACULTAD_FCPN);
+                if (origen === "EXTERNO_NO_UMSA") { actualizarCampo("facultad", ""); actualizarCampo("carrera", ""); actualizarCampo("registroUniversitario", ""); }
+              }}
+              opciones={OPCIONES_ORIGEN_ACADEMICO}
             />
 
             <Seleccion
@@ -1350,7 +1333,7 @@ export default function EditarPerfilUsuarioAdminView() {
             />
           </div>
 
-          {esInterno && (
+          {perteneceUmsa && (
             <div className="mt-5 grid gap-5 md:grid-cols-3">
               <Campo
                 label="Registro universitario"
@@ -1367,22 +1350,14 @@ export default function EditarPerfilUsuarioAdminView() {
                 }
               />
 
-              <Campo
+              {origenAcademico === "INTERNO_UMSA" ? <Campo
                 label="Facultad"
-                value={
-                  formulario.facultad
-                }
-                onChange={(
-                  valor,
-                ) =>
-                  actualizarCampo(
-                    "facultad",
-                    valor,
-                  )
-                }
-              />
+                value={FACULTAD_FCPN}
+                onChange={()=>undefined}
+                readOnly
+              /> : <Campo label="Facultad" value={formulario.facultad} onChange={(valor)=>actualizarCampo("facultad",valor)}/>}
 
-              <Campo
+              {origenAcademico === "INTERNO_UMSA" ? <Seleccion label="Carrera FCPN" value={formulario.carrera} onChange={(valor)=>actualizarCampo("carrera",valor)} opciones={CARRERAS_FCPN.map(carrera=>({value:carrera,label:carrera}))}/> : <Campo
                 label="Carrera"
                 value={
                   formulario.carrera
@@ -1395,7 +1370,7 @@ export default function EditarPerfilUsuarioAdminView() {
                     valor,
                   )
                 }
-              />
+              />}
             </div>
           )}
         </SeccionFormulario>

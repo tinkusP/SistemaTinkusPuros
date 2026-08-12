@@ -1768,6 +1768,8 @@ const populatePerfil = [
   {
     path: "gestion",
   },
+  { path: "usuarioCreador", select: "nombres apellidoPaterno apellidoMaterno email" },
+  { path: "usuarioAprobador", select: "nombres apellidoPaterno apellidoMaterno email" },
 ];
 
 export class PerfilUsuarioController {
@@ -1889,11 +1891,15 @@ export class PerfilUsuarioController {
       if (perteneceUmsa && !carreraRegistro) {
         throw new SolicitudInvalidaError("Debe ingresar su carrera por pertenecer a la UMSA");
       }
+      const carrerasFcpn = ["BIOLOGÍA", "ESTADÍSTICA", "FÍSICA", "INFORMÁTICA", "MATEMÁTICA", "CIENCIAS QUÍMICAS"];
+      if (["INTERNO", "INTERNO_UMSA"].includes(String(req.body.tipoOrigen)) && !carrerasFcpn.includes(String(carreraRegistro).toLocaleUpperCase("es-BO"))) {
+        throw new SolicitudInvalidaError("Debe seleccionar una carrera válida de la FCPN");
+      }
       const esOtraFacultadUmsa = String(req.body.tipoOrigen) === "EXTERNO_UMSA";
       const facultadRegistro = esOtraFacultadUmsa
         ? textoOpcional(req.body.facultad)
         : perteneceUmsa
-          ? "FACULTAD DE CIENCIAS PURAS Y NATURALES"
+          ? "FACULTAD DE CIENCIAS PURAS Y NATURALES (FCPN)"
           : undefined;
       if (esOtraFacultadUmsa && !facultadRegistro) {
         throw new SolicitudInvalidaError("Debe ingresar su facultad cuando pertenece a otra facultad de la UMSA");
@@ -3045,6 +3051,9 @@ static getPerfilUsuarioById = async (
        * disponible. El helper es idempotente y no duplica usuario/gestión.
        */
       if (req.body.estado === "ACTIVO" && perfilAnterior?.estado !== "ACTIVO") {
+        perfil.fechaAlta = new Date();
+        perfil.usuarioAprobador = req.usuario?._id;
+        await perfil.save();
         const esPostulante = perfil.roles.some((rol) => {
           if (!rol || typeof rol !== "object") return false;
           const datosRol = rol as unknown as { codigo?: string; nombre?: string };
@@ -3072,6 +3081,18 @@ static getPerfilUsuarioById = async (
         }
 
       }
+
+      await registrarAuditoria(req, {
+        accion: req.body.estado === "ACTIVO" && perfilAnterior?.estado !== "ACTIVO" ? "DAR_DE_ALTA" : "ACTUALIZAR",
+        modulo: "PERFILES",
+        entidad: "PerfilUsuario",
+        entidadId: perfil._id,
+        descripcion: req.body.estado === "ACTIVO" && perfilAnterior?.estado !== "ACTIVO"
+          ? `Se dio de alta a ${perfil.nombres} ${perfil.apellidoPaterno}`
+          : `Se actualizó el perfil de ${perfil.nombres} ${perfil.apellidoPaterno}`,
+        datosAntes: perfilAnterior,
+        datosDespues: perfil.toObject(),
+      });
 
       return res.status(200).json({
         message: req.body.estado === "ACTIVO"

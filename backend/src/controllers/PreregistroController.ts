@@ -11,6 +11,7 @@ const populate = [
   { path: "gestionId", select: "anio nombre estado cupoMaximo cupoMaximoHombres cupoMaximoMujeres" },
   { path: "usuarioAprobador", select: "nombres apellidoPaterno apellidoMaterno" },
   { path: "usuarioRevisor", select: "nombres apellidoPaterno apellidoMaterno" },
+  { path: "usuarioCreador", select: "nombres apellidoPaterno apellidoMaterno email" },
 ];
 
 const error = (res: Response, causa: unknown, mensaje: string) => {
