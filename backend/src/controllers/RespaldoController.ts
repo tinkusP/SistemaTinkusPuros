@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import { EJSON } from "bson";
 import { gzipSync, gunzipSync } from "node:zlib";
 import archiver from "archiver";
+import unzipper from "unzipper";
+import path from "node:path";
 import {
   descargarArchivoAlmacenado,
   listarArchivosAlmacenados,
@@ -29,6 +31,55 @@ type RespaldoCompleto = {
   colecciones: ColeccionRespaldo[];
   archivos: ArchivoRespaldo[];
 };
+
+const contentTypeDesdeNombre = (nombre: string) => ({ ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".avif": "image/avif", ".pdf": "application/pdf", ".json": "application/json" }[path.extname(nombre).toLowerCase()] ?? "application/octet-stream");
+const rutaZipSegura = (nombre: string) => Boolean(nombre && !nombre.startsWith("/") && !nombre.includes("\\") && !nombre.split("/").includes(".."));
+const valorRuta = (documento: Record<string, unknown>, ruta: string): unknown => ruta.split(".").reduce<unknown>((valor, segmento) => valor && typeof valor === "object" ? (valor as Record<string, unknown>)[segmento] : undefined, documento);
+
+function filtrosIdentidad(documento: Record<string, unknown>, indices: Array<Record<string, unknown>>) {
+  const filtros: Record<string, unknown>[] = [{ _id: documento._id }];
+  for (const indice of indices) {
+    const datos = indice as { key?: Record<string, unknown>; unique?: boolean; partialFilterExpression?: Record<string, unknown> };
+    if (!datos.unique || !datos.key || "_id" in datos.key) continue;
+    const campos = Object.keys(datos.key);
+    const valores = campos.map((campo) => valorRuta(documento, campo));
+    if (valores.some((valor) => valor === undefined || valor === null)) continue;
+    filtros.push(Object.fromEntries(campos.map((campo, posicion) => [campo, valores[posicion]])));
+  }
+  return filtros;
+}
+
+async function leerRespaldoZip(buffer: Buffer): Promise<RespaldoCompleto> {
+  const directorio = await unzipper.Open.buffer(buffer);
+  if (directorio.files.length > 50_000) throw new Error("El ZIP contiene demasiados elementos");
+  const totalDescomprimido = directorio.files.reduce((total, archivo) => total + Number(archivo.uncompressedSize || 0), 0);
+  if (totalDescomprimido > 2 * 1024 * 1024 * 1024) throw new Error("El ZIP supera el límite descomprimido de 2 GB");
+  const archivosPorRuta = new Map(directorio.files.filter((archivo) => archivo.type === "File").map((archivo) => [archivo.path, archivo]));
+  for (const nombre of archivosPorRuta.keys()) if (!rutaZipSegura(nombre)) throw new Error("El ZIP contiene una ruta inválida");
+  const manifiesto = archivosPorRuta.get("LEEME-manifiesto.json");
+  if (!manifiesto) throw new Error("El ZIP no contiene el manifiesto de Tinkus");
+  const datosManifiesto = JSON.parse((await manifiesto.buffer()).toString("utf8")) as { sistema?: string };
+  if (datosManifiesto.sistema !== "SISTEMA_TINKUS_PUROS") throw new Error("El ZIP pertenece a otro sistema");
+  const colecciones: ColeccionRespaldo[] = [];
+  for (const [nombre, entrada] of archivosPorRuta) {
+    const coincidencia = nombre.match(/^base-de-datos\/colecciones\/([^/]+)\.json$/);
+    if (!coincidencia) continue;
+    const nombreColeccion = coincidencia[1];
+    if (nombreColeccion.startsWith("system.")) continue;
+    const documentos = EJSON.parse((await entrada.buffer()).toString("utf8")) as Record<string, unknown>[];
+    const entradaIndices = archivosPorRuta.get(`base-de-datos/indices/${nombreColeccion}.json`);
+    const indices = entradaIndices ? EJSON.parse((await entradaIndices.buffer()).toString("utf8")) as Array<Record<string, unknown>> : [];
+    if (!Array.isArray(documentos) || !Array.isArray(indices)) throw new Error(`La colección ${nombreColeccion} no es válida`);
+    colecciones.push({ nombre: nombreColeccion, documentos, indices });
+  }
+  if (!colecciones.length) throw new Error("El ZIP no contiene colecciones para restaurar");
+  const archivos: ArchivoRespaldo[] = [];
+  for (const [nombre, entrada] of archivosPorRuta) {
+    if (!nombre.startsWith("documentos/") || nombre.endsWith("/")) continue;
+    archivos.push({ key: `uploads/${nombre.slice("documentos/".length)}`, contentType: contentTypeDesdeNombre(nombre), contenidoBase64: (await entrada.buffer()).toString("base64") });
+  }
+  return { sistema: "SISTEMA_TINKUS_PUROS", version: 1, creadoEn: new Date(), baseDatos: "zip-organizado", colecciones, archivos };
+}
 
 const dbActual = () => {
   const db = mongoose.connection.db;
@@ -118,7 +169,9 @@ export async function exportarRespaldoOrganizado(_req: Request, res: Response) {
       baseDatos: db.databaseName,
       colecciones: nombres.length,
       archivos: listado.length,
-      nota: "Esta copia es legible. Para restaurar el sistema use el archivo .tinkus.gz.",
+      version: 1,
+      formato: "ZIP_ORGANIZADO_RESTAURABLE",
+      nota: "Este ZIP es legible y también puede subirse directamente en Restaurar o sincronizar.",
     }, null, 2), { name: "LEEME-manifiesto.json" });
 
     for (const nombre of nombres) {
@@ -142,12 +195,13 @@ export async function exportarRespaldoOrganizado(_req: Request, res: Response) {
 
 export async function importarRespaldo(req: Request, res: Response) {
   try {
-    if (!req.file?.buffer) return res.status(400).json({ error: "Debe seleccionar un archivo .tinkus.gz" });
+    if (!req.file?.buffer) return res.status(400).json({ error: "Debe seleccionar un archivo .zip o .tinkus.gz" });
     let respaldo: RespaldoCompleto;
     try {
-      respaldo = EJSON.parse(gunzipSync(req.file.buffer).toString("utf8")) as RespaldoCompleto;
+      const esZip = req.file.buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      respaldo = esZip ? await leerRespaldoZip(req.file.buffer) : EJSON.parse(gunzipSync(req.file.buffer).toString("utf8")) as RespaldoCompleto;
     } catch {
-      return res.status(400).json({ error: "El archivo no es un respaldo válido o está dañado" });
+      return res.status(400).json({ error: "El archivo no es un respaldo Tinkus válido, compatible o está dañado" });
     }
     if (respaldo.sistema !== "SISTEMA_TINKUS_PUROS" || respaldo.version !== 1) {
       return res.status(400).json({ error: "El respaldo pertenece a otro sistema o versión" });
@@ -160,9 +214,16 @@ export async function importarRespaldo(req: Request, res: Response) {
       const coleccion = db.collection(item.nombre);
       const operaciones = item.documentos
         .filter((documento) => documento && documento._id)
-        .map((documento) => ({
-          replaceOne: { filter: { _id: documento._id }, replacement: documento, upsert: true },
-        }));
+        .map((documento) => {
+          const { _id, ...campos } = documento;
+          return {
+            updateOne: {
+              filter: { $or: filtrosIdentidad(documento, item.indices ?? []) },
+              update: { $set: campos, $setOnInsert: { _id } },
+              upsert: true,
+            },
+          };
+        });
       for (let inicio = 0; inicio < operaciones.length; inicio += 500) {
         const lote = operaciones.slice(inicio, inicio + 500);
         if (lote.length) await coleccion.bulkWrite(lote, { ordered: false });
