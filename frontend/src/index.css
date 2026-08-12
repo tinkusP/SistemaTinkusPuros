@@ -4,9 +4,47 @@
 
 @layer components {
   .input-preregistro {
-    @apply w-full rounded-xl border border-[#cdbfae] bg-[#fffdf8] px-3 py-2.5 text-sm text-[#262022] outline-none transition focus:border-[#74122A] focus:ring-4 focus:ring-[#74122A]/10;
+    @apply w-full rounded-xl border border-[#cdbfae] bg-[#fffdf8] px-3 py-2.5 text-sm text-[#262022] outline-none transition focus:border-[#74122A] focus:ring-4 focus:ring-[#74122A]/10 dark:border-white/20 dark:bg-[#332B2E] dark:text-[#F6F0E3] dark:focus:border-[#C59A3A] dark:focus:ring-[#C59A3A]/20;
   }
 }
+
+/* Capa global de contraste para vistas administrativas heredadas. */
+html.dark { color-scheme: dark; }
+html.dark [class~="bg-white"],
+html.dark [class*="bg-white/"],
+html.dark [class~="bg-[#fffdf8]"],
+html.dark [class~="bg-[#fffaf0]"] {
+  background-color: #332b2e;
+  color: #f6f0e3;
+  border-color: rgb(183 167 160 / .32);
+}
+html.dark [class~="bg-gray-50"],
+html.dark [class~="bg-slate-50"],
+html.dark [class~="bg-[#eee8dc]"],
+html.dark [class~="bg-[#faf7f1]"] {
+  background-color: #292225;
+  color: #f6f0e3;
+}
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html.dark select,
+html.dark textarea {
+  background-color: #332b2e;
+  color: #f6f0e3;
+  border-color: rgb(183 167 160 / .4);
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #b7a7a0; opacity: 1; }
+html.dark table tbody tr { border-color: rgb(183 167 160 / .22); }
+html.dark table tbody tr:hover { background-color: #403539; }
+html.dark table td { color: #f6f0e3; }
+html.dark .tabla-configurable { --tabla-fondo-fijo: #332b2e; }
+html.dark [class~="text-[#741229]"],
+html.dark [class~="text-[#74122A]"],
+html.dark [class~="text-[#841534]"] { color: #e9cf91; }
+html.dark [class~="text-[#735f55]"],
+html.dark [class~="text-[#5d4a42]"],
+html.dark [class~="text-gray-500"],
+html.dark [class~="text-slate-500"] { color: #c8bbc0; }
 .fixed.inset-0 { overflow-y: auto; overscroll-behavior: contain; }
 .fixed.inset-0 > section,
 .fixed.inset-0 > div:not(.fixed) { max-height: calc(100dvh - 2rem) !important; overflow-y: auto !important; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }

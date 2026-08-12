@@ -54,6 +54,7 @@ import { listarCuotas, obtenerCuota } from "@/api/CuotaApi";
 import type { Cuota } from "@/types/CuotaType";
 import { ESTADOS_PREREGISTRO, type EstadoPreregistro } from "@/types/PreregistroType";
 import { obtenerReporteFormacion, obtenerReporteTallas } from "@/api/ReporteApi";
+import { normalizarFacultadAcademica, normalizarOrigenAcademico, OPCIONES_ORIGEN_ACADEMICO } from "@/constants/origenAcademico";
 
 type FilaReporteUsuario = { numero: number; nombre: string; ci: string; genero: string; tallaPolera: string; tallaChamarra: string; email: string; estado: string; preregistro: string; estadoPreregistro: string; fraterno: string; pago: string; terminos: string; situacion: string; cupo: string; esPreregistro: boolean; esPostulanteGuia: boolean; esFraterno: boolean; cumpleFiltroActual: boolean };
 type FiltroPerfil = "TODOS" | "PENDIENTE" | "ACTIVO" | "POSTULANTE" | "INACTIVO" | "ADMINISTRADOR";
@@ -199,6 +200,11 @@ export default function PerfilUsuarioView() {
     BAUCHER: Array.from(cuotaPorPreregistro.values()).filter((cuota) => Boolean(cuota.resumenPagos?.conBaucher)).length,
     TODOS: perfiles.length,
   }), [cisGuias, cuotaPorPreregistro, fraternoPorUsuario.size, guiaPorPreregistro, perfiles, preregistroPorUsuario]);
+  const origenesDisponibles = useMemo(() => {
+    const presentes = new Set(perfiles.map((perfil) => normalizarOrigenAcademico(perfil.tipoOrigen)));
+    return OPCIONES_ORIGEN_ACADEMICO.filter((opcion) => presentes.has(opcion.value));
+  }, [perfiles]);
+  const facultadesDisponibles = useMemo(() => Array.from(new Set(perfiles.map((perfil) => normalizarFacultadAcademica(perfil.facultad)))).sort((a, b) => a.localeCompare(b, "es")), [perfiles]);
 
   const seleccionarEtapa = (etapa: EtapaListado) => {
     setEtapaListado(etapa);
@@ -213,7 +219,7 @@ export default function PerfilUsuarioView() {
     for (let indice = 0; indice < COLUMNAS_TABLA.length; indice += 1) {
       const [id,,ancho] = COLUMNAS_TABLA[indice];
       if (!columnasVisibles.has(id) || !columnasFijadas.has(id)) continue;
-      reglas.push(`.tabla-configurable th:nth-child(${indice + 1}),.tabla-configurable td:nth-child(${indice + 1}){position:sticky;left:${izquierda}px;z-index:20;box-shadow:8px 0 12px -12px rgba(0,0,0,.8)}.tabla-configurable th:nth-child(${indice + 1}){z-index:30;background:#841534}.tabla-configurable td:nth-child(${indice + 1}){background:white}`);
+      reglas.push(`.tabla-configurable th:nth-child(${indice + 1}),.tabla-configurable td:nth-child(${indice + 1}){position:sticky;left:${izquierda}px;z-index:20;box-shadow:8px 0 12px -12px rgba(0,0,0,.8)}.tabla-configurable th:nth-child(${indice + 1}){z-index:30;background:#841534}.tabla-configurable td:nth-child(${indice + 1}){background:var(--tabla-fondo-fijo,#fff)}`);
       izquierda += ancho;
     }
     return reglas.join("");
@@ -269,8 +275,8 @@ export default function PerfilUsuarioView() {
         || (etapaListado === "FRATERNO" && Boolean(fraterno))
         || (etapaListado === "BAUCHER" && Boolean(cuota?.resumenPagos?.conBaucher));
       const coincidePago = filtroPago === "TODOS" || (filtroPago === "SIN_CUOTA" ? !cuota : filtroPago === "CON_SALDO" ? Boolean(cuota && cuota.saldo > 0) : filtroPago === "BAUCHER_ENVIADO" ? Boolean(cuota?.resumenPagos?.conBaucher) : filtroPago === "PENDIENTE_REVISION" ? Boolean(cuota?.resumenPagos?.pendientes) : cuota?.estado === filtroPago);
-      const coincideOrigen = filtroOrigen === "TODOS" || perfil.tipoOrigen === filtroOrigen;
-      const coincideFacultad = filtroFacultad === "TODAS" || (perfil.facultad || "SIN FACULTAD") === filtroFacultad;
+      const coincideOrigen = filtroOrigen === "TODOS" || normalizarOrigenAcademico(perfil.tipoOrigen) === filtroOrigen;
+      const coincideFacultad = filtroFacultad === "TODAS" || normalizarFacultadAcademica(perfil.facultad) === filtroFacultad;
       const gestion = fraterno && typeof fraterno.gestionId === "object" ? `${fraterno.gestionId.nombre} ${fraterno.gestionId.anio ?? ""}` : "";
       const textoColumnas = [perfil.nombres, perfil.apellidoPaterno, perfil.apellidoMaterno, perfil.ci, perfil.complementoCi, perfil.email, roles, perfil.estado, perfil.tipoOrigen, perfil.facultad, responsableAlta?._id, responsableAlta?.nombres, responsableAlta?.apellidoPaterno, responsableAlta?.apellidoMaterno, responsableAlta?.email, preregistro?.numeroPreRegistro, preregistro?.estado, postulantesGuiaQuery.data && preregistro ? guiaPorPreregistro.get(preregistro._id)?.estado : "", fraterno?.numeroFraterno, gestion, fraterno?.fechaIngreso ? new Date(fraterno.fechaIngreso).toLocaleString("es-BO") : "", fraterno?.estadoPago, fraterno?.terminos?.estado, fraterno?.situacion, fraterno?.estado, fraterno?.ocupaCupo ? "OCUPA CUPO" : "CUPO LIBRE", cuota?.estado, cuota?.montoTotal, cuota?.montoPagado, cuota?.saldo, cuota?.resumenPagos?.conBaucher, cuota?.resumenPagos?.pendientes].filter(valor=>valor !== undefined && valor !== null).join(" ");
       return coincideEtapa && coincideFiltro && coincidePreregistro && coincidePago && coincideOrigen && coincideFacultad && (!texto || textoColumnas
@@ -581,8 +587,8 @@ export default function PerfilUsuarioView() {
 
       <section className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-3">
         <label className="text-xs font-black uppercase text-[#735f55]">Pagos<select value={filtroPago} onChange={e=>setFiltroPago(e.target.value)} className="input-preregistro mt-1"><option value="TODOS">Todos los pagos</option><option value="BAUCHER_ENVIADO">Usuarios que enviaron baucher</option><option value="PENDIENTE_REVISION">Bauchers pendientes de revisión</option><option value="SIN_CUOTA">Sin cuota</option><option value="CON_SALDO">Con saldo pendiente</option><option value="PAGADA">Pagado</option><option value="PENDIENTE">Pago pendiente</option></select><button type="button" onClick={()=>setFiltroPago("BAUCHER_ENVIADO")} className="mt-2 w-full rounded-xl bg-blue-700 px-3 py-2 text-sm font-black normal-case text-white">Ver todos los que enviaron pagos</button></label>
-        <label className="text-xs font-black uppercase text-[#735f55]">Origen<select value={filtroOrigen} onChange={e=>setFiltroOrigen(e.target.value)} className="input-preregistro mt-1"><option value="TODOS">Todos los orígenes</option>{Array.from(new Set(perfiles.map(p=>p.tipoOrigen))).sort().map(origen=><option key={origen} value={origen}>{origen.replaceAll("_"," ")}</option>)}</select></label>
-        <label className="text-xs font-black uppercase text-[#735f55]">Facultad<select value={filtroFacultad} onChange={e=>setFiltroFacultad(e.target.value)} className="input-preregistro mt-1"><option value="TODAS">Todas las facultades</option>{Array.from(new Set(perfiles.map(p=>p.facultad||"SIN FACULTAD"))).sort().map(facultad=><option key={facultad} value={facultad}>{facultad}</option>)}</select></label>
+        <label className="text-xs font-black uppercase text-[#735f55]">Origen<select value={filtroOrigen} onChange={e=>setFiltroOrigen(e.target.value)} className="input-preregistro mt-1"><option value="TODOS">Todos los orígenes</option>{origenesDisponibles.map((origen)=><option key={origen.value} value={origen.value}>{origen.label}</option>)}</select></label>
+        <label className="text-xs font-black uppercase text-[#735f55]">Facultad<select value={filtroFacultad} onChange={e=>setFiltroFacultad(e.target.value)} className="input-preregistro mt-1"><option value="TODAS">Todas las facultades</option>{facultadesDisponibles.map((facultad)=><option key={facultad} value={facultad}>{facultad}</option>)}</select></label>
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[#d9c8aa] bg-[#fffaf0] p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -688,8 +694,8 @@ export default function PerfilUsuarioView() {
                           </span>
                         </td>
 
-                        <td className="p-4 font-bold">{perfil.tipoOrigen.replaceAll("_", " ")}</td>
-                        <td className="p-4">{perfil.facultad || "—"}</td>
+                        <td className="p-4 font-bold">{OPCIONES_ORIGEN_ACADEMICO.find((opcion) => opcion.value === normalizarOrigenAcademico(perfil.tipoOrigen))?.label ?? perfil.tipoOrigen.replaceAll("_", " ")}</td>
+                        <td className="p-4">{normalizarFacultadAcademica(perfil.facultad)}</td>
                         <td className="p-4">{responsableAlta ? <><strong>{responsableAlta.nombres} {responsableAlta.apellidoPaterno} {responsableAlta.apellidoMaterno ?? ""}</strong><span className="mt-1 block text-xs text-slate-500">{fechaAltaMostrada ? new Date(fechaAltaMostrada).toLocaleString("es-BO") : "Hora no registrada"}</span><span className="mt-1 block text-[10px] font-bold uppercase text-[#8F5F2A]">Usuario creador</span></> : <span className="text-xs text-slate-400">Sin usuario creador registrado</span>}</td>
                         <td className="break-all p-4 font-mono text-xs">{responsableAlta?._id || "—"}</td>
 
