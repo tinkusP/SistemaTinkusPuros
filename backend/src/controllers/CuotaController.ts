@@ -92,7 +92,12 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
 
 export const crearCuota = async (req: Request, res: Response) => { try { const resultado = await sincronizarCuotaPreregistro(req.body.preregistroId, { crearSiFalta: true, usuarioCreador: req.usuario?._id, fechaVencimiento: req.body.fechaVencimiento ? new Date(req.body.fechaVencimiento) : undefined }); if (!resultado) return res.status(409).json({ error: "La cuota requiere un usuario activo, preregistro aprobado y configuración de pagos vigente" }); const cuota = resultado.cuota; await cuota.populate(poblar); await registrarAuditoria(req, { accion: resultado.creada ? "CREAR" : "SINCRONIZAR_TARIFA", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: resultado.creada ? `Se vinculó una cuota ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}` : `Se sincronizó la cuota con la tarifa ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}`, datosAntes: resultado.creada ? undefined : { tipoOrigenTarifa: resultado.tipoAnterior, montoTotal: resultado.montoAnterior }, datosDespues: cuota.toObject() }); return res.status(resultado.creada ? 201 : 200).json({ message: resultado.creada ? "Cuota vinculada correctamente" : "Cuota y tarifa sincronizadas", cuota }); } catch (e) { console.error(e); return res.status(500).json({ error: "No se pudo vincular o sincronizar la cuota" }); } };
 export const listarCuotas = async (_req: Request, res: Response) => {
-  const cuotas = await Cuota.find({ fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 }).lean();
+  const preregistrosActivos = await Preregistro.find({ fechaEliminado: null })
+    .populate({ path: "usuarioId", match: { fechaEliminado: null }, select: "_id" })
+    .select("_id usuarioId")
+    .lean();
+  const preregistrosVisibles = preregistrosActivos.filter((preregistro) => preregistro.usuarioId).map((preregistro) => preregistro._id);
+  const cuotas = await Cuota.find({ fechaEliminado: null, preregistroId: { $in: preregistrosVisibles } }).populate(poblar).sort({ fechaCreado: -1 }).lean();
   const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision baucherImagen fechaPago").lean();
   const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; conBaucher: number; ultimoEnvio?: Date }>();
   for (const pago of pagos) {

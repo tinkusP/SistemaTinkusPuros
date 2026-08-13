@@ -60,14 +60,14 @@ type FilaReporteUsuario = { numero: number; nombre: string; ci: string; genero: 
 type FiltroPerfil = "TODOS" | "PENDIENTE" | "ACTIVO" | "POSTULANTE" | "INACTIVO" | "ADMINISTRADOR";
 type EtapaListado = "PERFIL" | "PREREGISTRO" | "POSTULANTE_GUIA" | "GUIA" | "FRATERNO" | "BAUCHER" | "TODOS";
 type EstadoRetornoPagos = { reopenCuotaId?: string; viewState?: { busqueda?: string; filtroRapido?: FiltroPerfil; filtroPreregistro?: EstadoPreregistro | "TODOS" | "SIN_PREREGISTRO"; paginaActual?: number } };
-const COLUMNAS_TABLA = [["nombre","Nombre",288],["ci","CI",150],["email","Email",300],["roles","Roles",180],["estado","Estado",150],["origen","Origen",180],["facultad","Facultad",240],["altaAdmin","Administrador que dio de alta",260],["altaId","ID administrador",250],["preregistro","Preregistro",190],["guia","Postulante a guía",210],["fraterno","N.º fraterno",170],["gestion","Gestión",150],["ingreso","Ingreso",140],["pago","Pago",170],["terminos","Términos",190],["situacion","Situación",160],["cupo","Cupo",140],["cuota","Pagos",210],["bauchers","Bauchers enviados",220],["acciones","Acciones",200]] as const;
+const COLUMNAS_TABLA = [["nombre","Nombre",288],["ci","CI",150],["email","Email",300],["roles","Roles",180],["estado","Estado",150],["origen","Origen",180],["facultad","Facultad",240],["tallas","Tallas polera / chamarra",210],["altaAdmin","Administrador que dio de alta",260],["altaId","ID administrador",250],["preregistro","Preregistro",190],["guia","Postulante a guía",210],["fraterno","N.º fraterno",170],["gestion","Gestión",150],["ingreso","Ingreso",140],["pago","Pago",170],["terminos","Términos",190],["situacion","Situación",160],["cupo","Cupo",140],["cuota","Pagos",210],["bauchers","Bauchers enviados",220],["acciones","Acciones",200]] as const;
 type ColumnaTabla = (typeof COLUMNAS_TABLA)[number][0];
 const COLUMNAS_POR_ETAPA: Record<EtapaListado, ColumnaTabla[]> = {
-  PERFIL: ["nombre", "ci", "email", "roles", "estado", "origen", "facultad", "altaAdmin", "acciones"],
+  PERFIL: ["nombre", "ci", "email", "roles", "estado", "origen", "facultad", "tallas", "altaAdmin", "acciones"],
   PREREGISTRO: ["nombre", "ci", "origen", "facultad", "altaAdmin", "preregistro", "acciones"],
   POSTULANTE_GUIA: ["nombre", "ci", "email", "preregistro", "guia", "acciones"],
   GUIA: ["nombre", "ci", "email", "estado", "preregistro", "guia", "acciones"],
-  FRATERNO: ["nombre", "ci", "fraterno", "gestion", "ingreso", "pago", "terminos", "situacion", "cupo", "cuota", "acciones"],
+  FRATERNO: ["nombre", "ci", "tallas", "fraterno", "gestion", "ingreso", "pago", "terminos", "situacion", "cupo", "cuota", "acciones"],
   BAUCHER: ["nombre", "ci", "preregistro", "cuota", "bauchers", "acciones"],
   TODOS: COLUMNAS_TABLA.map(([id]) => id),
 };
@@ -187,6 +187,16 @@ export default function PerfilUsuarioView() {
   const cuotaPorPreregistro = useMemo(() => new Map(
     (cuotasQuery.data ?? []).map((cuota) => [cuota.preregistroId._id, cuota] as const),
   ), [cuotasQuery.data]);
+  const cuotaConBaucherPorUsuario = useMemo(() => {
+    const cuotasPorUsuario = new Map<string, Cuota>();
+    for (const cuota of cuotasQuery.data ?? []) {
+      const usuarioId = cuota.preregistroId.usuarioId?._id;
+      if (usuarioId && cuota.resumenPagos?.conBaucher && !cuotasPorUsuario.has(usuarioId)) {
+        cuotasPorUsuario.set(usuarioId, cuota);
+      }
+    }
+    return cuotasPorUsuario;
+  }, [cuotasQuery.data]);
   const tallasPorCi = useMemo(() => new Map((tallasQuery.data?.registros ?? []).map((registro) => [String(registro.ci), registro] as const)), [tallasQuery.data]);
   const cisGuias = useMemo(() => new Set((formacionQuery.data?.guias ?? []).map((guia) => String(guia.ci))), [formacionQuery.data]);
   const anchoTabla = useMemo(() => COLUMNAS_TABLA.reduce((total, [id,,ancho]) => total + (columnasVisibles.has(id) ? ancho : 0), 0), [columnasVisibles]);
@@ -199,9 +209,9 @@ export default function PerfilUsuarioView() {
     }).length,
     GUIA: perfiles.filter((perfil) => cisGuias.has(String(perfil.ci))).length,
     FRATERNO: fraternoPorUsuario.size,
-    BAUCHER: Array.from(cuotaPorPreregistro.values()).filter((cuota) => Boolean(cuota.resumenPagos?.conBaucher)).length,
+    BAUCHER: perfiles.filter((perfil) => cuotaConBaucherPorUsuario.has(perfil._id)).length,
     TODOS: perfiles.length,
-  }), [cisGuias, cuotaPorPreregistro, fraternoPorUsuario.size, guiaPorPreregistro, perfiles, preregistroPorUsuario]);
+  }), [cisGuias, cuotaConBaucherPorUsuario, fraternoPorUsuario.size, guiaPorPreregistro, perfiles, preregistroPorUsuario]);
   const origenesDisponibles = useMemo(() => {
     const presentes = new Set(perfiles.map((perfil) => normalizarOrigenAcademico(perfil.tipoOrigen)));
     return OPCIONES_ORIGEN_ACADEMICO.filter((opcion) => presentes.has(opcion.value));
@@ -292,7 +302,9 @@ export default function PerfilUsuarioView() {
       const responsableAlta = [preregistro?.usuarioCreador, fraterno?.usuarioCreador, perfil.usuarioAprobador, perfil.usuarioCreador].find(esResponsablePoblado);
       const coincidePreregistro = filtroPreregistro === "TODOS"
         || (filtroPreregistro === "SIN_PREREGISTRO" ? !preregistro : preregistro?.estado === filtroPreregistro);
-      const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+      const cuotaActual = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+      const cuotaConBaucher = cuotaConBaucherPorUsuario.get(perfil._id);
+      const cuota = etapaListado === "BAUCHER" || filtroPago === "BAUCHER_ENVIADO" ? cuotaConBaucher : cuotaActual;
       const postulanteGuia = preregistro ? guiaPorPreregistro.get(preregistro._id) : undefined;
       const coincideEtapa = etapaListado === "TODOS" || etapaListado === "PERFIL"
         || (etapaListado === "PREREGISTRO" && Boolean(preregistro))
@@ -309,7 +321,7 @@ export default function PerfilUsuarioView() {
         .toLowerCase()
         .includes(texto));
     });
-  }, [busqueda, cisGuias, cuotaPorPreregistro, etapaListado, filtroFacultad, filtroOrigen, filtroPago, filtroPreregistro, filtroRapido, fraternoPorUsuario, guiaPorPreregistro, perfiles, postulantesGuiaQuery.data, preregistroPorUsuario]);
+  }, [busqueda, cisGuias, cuotaConBaucherPorUsuario, cuotaPorPreregistro, etapaListado, filtroFacultad, filtroOrigen, filtroPago, filtroPreregistro, filtroRapido, fraternoPorUsuario, guiaPorPreregistro, perfiles, postulantesGuiaQuery.data, preregistroPorUsuario]);
 
   const idsPerfilesFiltrados = useMemo(() => new Set(perfilesFiltrados.map((perfil) => perfil._id)), [perfilesFiltrados]);
   const filasReporte = useMemo<FilaReporteUsuario[]>(() => perfiles.map((perfil, indice): FilaReporteUsuario => {
@@ -665,11 +677,13 @@ export default function PerfilUsuarioView() {
                         perfil._id;
 
                     const preregistro = preregistroPorUsuario.get(perfil._id);
+                    const tallas = tallasPorCi.get(String(perfil.ci));
                     const postulanteGuia = preregistro ? guiaPorPreregistro.get(preregistro._id) : undefined;
                     const fraterno = fraternoPorUsuario.get(perfil._id);
                     const responsableAlta = [preregistro?.usuarioCreador, fraterno?.usuarioCreador, perfil.usuarioAprobador, perfil.usuarioCreador].find(esResponsablePoblado);
                     const fechaAltaMostrada = preregistro?.fechaCreado ?? perfil.fechaAlta ?? (fraterno?.fechaIngreso || undefined);
-                    const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+                    const cuotaActual = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+                    const cuota = etapaListado === "BAUCHER" || filtroPago === "BAUCHER_ENVIADO" ? cuotaConBaucherPorUsuario.get(perfil._id) ?? cuotaActual : cuotaActual;
                     const gestion = preregistro && typeof preregistro.gestionId === "object" ? preregistro.gestionId : fraterno && typeof fraterno.gestionId === "object" ? fraterno.gestionId : undefined;
                     const situacion = fraterno ? (fraterno.situacion ?? fraterno.estado).replaceAll("_", " ") : postulanteGuia ? "POSTULANTE A GUÍA" : preregistro ? preregistro.estado.replaceAll("_", " ") : "SIN PREREGISTRO";
                     const vinculandoCuota = vincularCuota.isPending && vincularCuota.variables?.preregistroId === preregistro?._id;
@@ -726,6 +740,7 @@ export default function PerfilUsuarioView() {
 
                         <td className="p-4 font-bold">{OPCIONES_ORIGEN_ACADEMICO.find((opcion) => opcion.value === normalizarOrigenAcademico(perfil.tipoOrigen))?.label ?? perfil.tipoOrigen.replaceAll("_", " ")}</td>
                         <td className="p-4">{normalizarFacultadAcademica(perfil.facultad)}</td>
+                        <td className="p-4"><div className="space-y-1 text-xs"><p><span className="font-semibold text-slate-500">Polera:</span> <strong className={tallas?.tallaPolera ? "text-[#74122A]" : "text-slate-400"}>{tallas?.tallaPolera || "Sin registrar"}</strong></p><p><span className="font-semibold text-slate-500">Chamarra:</span> <strong className={tallas?.tallaChamarra ? "text-[#74122A]" : "text-slate-400"}>{tallas?.tallaChamarra || "Sin registrar"}</strong></p></div></td>
                         <td className="p-4">{responsableAlta ? <><strong>{responsableAlta.nombres} {responsableAlta.apellidoPaterno} {responsableAlta.apellidoMaterno ?? ""}</strong><span className="mt-1 block text-xs text-slate-500">{fechaAltaMostrada ? new Date(fechaAltaMostrada).toLocaleString("es-BO") : "Hora no registrada"}</span><span className="mt-1 block text-[10px] font-bold uppercase text-[#8F5F2A]">Usuario creador</span></> : <span className="text-xs text-slate-400">Sin usuario creador registrado</span>}</td>
                         <td className="break-all p-4 font-mono text-xs">{responsableAlta?._id || "—"}</td>
 
