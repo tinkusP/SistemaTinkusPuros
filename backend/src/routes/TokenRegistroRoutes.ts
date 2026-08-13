@@ -3,7 +3,7 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { soloAdministracion } from "../middleware/soloAdministracion";
 import { handleInputErrors } from "../middleware/validation";
-import { anularToken, generarToken, guardarConfiguracionTokens, listarTokens, obtenerConfiguracionPublica, obtenerConfiguracionTokens, validarTokenPublico } from "../controllers/TokenRegistroController";
+import { anularToken, eliminarTokenNoUtilizado, generarToken, guardarConfiguracionTokens, listarTokens, obtenerConfiguracionPublica, obtenerConfiguracionTokens, validarTokenPublico } from "../controllers/TokenRegistroController";
 const r = Router();
 r.post("/validar", body("codigo").trim().notEmpty(), handleInputErrors, validarTokenPublico);
 r.get("/configuracion-publica", obtenerConfiguracionPublica);
@@ -12,4 +12,5 @@ r.put("/configuracion", authenticate, soloAdministracion, body("gestionId").isMo
 r.get("/", authenticate, soloAdministracion, listarTokens);
 r.post("/", authenticate, soloAdministracion, body("gestionId").isMongoId(), body("vigenciaHoras").optional().isInt({ min: 1, max: 8760 }).toInt(), body("plazoPagoHoras").optional().isInt({ min: 1, max: 8760 }).toInt(), handleInputErrors, generarToken);
 r.patch("/:id/anular", authenticate, soloAdministracion, param("id").isMongoId(), handleInputErrors, anularToken);
+r.delete("/:id", authenticate, soloAdministracion, param("id").isMongoId(), handleInputErrors, eliminarTokenNoUtilizado);
 export default r;

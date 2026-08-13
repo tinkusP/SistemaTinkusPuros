@@ -3,11 +3,18 @@ import { Html5Qrcode } from "html5-qrcode";
 import { toast } from "react-toastify";
 import { marcarAsistenciaQr, verificarCredencialQr, type IdentidadQr } from "@/api/CredencialQrApi";
 import { guardarTallaUsuario } from "@/api/IndumentariaApi";
+import { useAuth } from "@/hooks/useAuth";
 
 const API = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
 const TALLAS = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 
 export default function EscanerQrView() {
+  const { data: usuario } = useAuth();
+  const roles = Array.isArray(usuario?.roles) ? usuario.roles.filter((rol) => typeof rol === "object" && rol) : [];
+  const esAdministrador = roles.some((rol) => [rol.codigo, rol.nombre].some((valor) => ["ADMIN", "ADMINISTRADOR", "SUPERADMIN", "SUPERADMINISTRADOR"].includes(String(valor ?? "").toUpperCase().replace(/[\s_-]/g, ""))));
+  const permisos = new Set(roles.flatMap((rol) => rol.permisos ?? []));
+  const puedeRegistrarTallas = esAdministrador || permisos.has("TALLAS_REGISTRAR") || permisos.has("INDUMENTARIA_GESTIONAR");
+  const puedeMarcarAsistencia = esAdministrador || permisos.has("ASISTENCIAS_GESTIONAR");
   const lector = useRef<Html5Qrcode | null>(null);
   const tokenLeido = useRef("");
   const [resultado, setResultado] = useState<IdentidadQr | null>(null);
@@ -112,9 +119,9 @@ export default function EscanerQrView() {
 
   return <main className="space-y-6">
     <header>
-      <p className="text-xs font-bold uppercase tracking-widest text-[#8F5F2A]">Control de identidad y asistencia</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-[#8F5F2A]">Control de identidad</p>
       <h1 className="text-3xl font-black text-[#74122A]">Escáner de credenciales QR</h1>
-      <p className="text-sm text-slate-500">Escanea el QR en el teléfono de la persona, compara su rostro con la fotografía y confirma su asistencia.</p>
+      <p className="text-sm text-slate-500">Escanea el QR, verifica la identidad y realiza únicamente las acciones autorizadas para tu rol.</p>
     </header>
     <section className="grid gap-5 lg:grid-cols-2">
       <div className="rounded-2xl bg-white p-5 shadow">
@@ -126,7 +133,7 @@ export default function EscanerQrView() {
           📷 Tomar foto del QR
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => { void fotografiarQr(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </label>
-        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La persona debe presentar su QR y estar físicamente presente. Compara siempre su rostro con la fotografía antes de marcar asistencia.</p>
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La persona debe presentar su QR y estar físicamente presente. Compara siempre su rostro con la fotografía antes de registrar información.</p>
         {!window.isSecureContext && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-800">Estás usando HTTP: “Abrir cámara” está bloqueado por el navegador. Usa “Tomar foto del QR”, que abre la cámara nativa del celular.</p>}
       </div>
       <div className="rounded-2xl bg-white p-5 shadow">
@@ -136,8 +143,8 @@ export default function EscanerQrView() {
           <h2 className="mt-4 text-2xl font-black">{u.nombres} {u.apellidoPaterno} {u.apellidoMaterno}</h2>
           <p className="mt-2 text-xl font-bold text-[#74122A]">CI {u.ci}</p>
           <p className="text-sm text-slate-500">{u.email}</p>
-          <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section>
-          {horaMarcada ? <div className="mt-5 rounded-xl bg-emerald-100 p-4 font-black text-emerald-800">ASISTENCIA MARCADA · {new Date(horaMarcada).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</div> : <button onClick={marcar} disabled={!resultado.valida || !u.fotoPerfil || marcando} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{marcando ? "Marcando..." : !u.fotoPerfil ? "No se puede validar: sin fotografía" : "Rostro verificado — Marcar asistencia"}</button>}
+          {puedeRegistrarTallas ? <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section> : null}
+          {puedeMarcarAsistencia ? (horaMarcada ? <div className="mt-5 rounded-xl bg-emerald-100 p-4 font-black text-emerald-800">ASISTENCIA MARCADA · {new Date(horaMarcada).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</div> : <button onClick={marcar} disabled={!resultado.valida || !u.fotoPerfil || marcando} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{marcando ? "Marcando..." : !u.fotoPerfil ? "No se puede validar: sin fotografía" : "Rostro verificado — Marcar asistencia"}</button>) : null}
           <button onClick={() => { setResultado(null); setHoraMarcada(null); tokenLeido.current = ""; }} className="mt-3 rounded-xl border px-5 py-3 font-bold">Escanear otra persona</button>
         </div>}
       </div>

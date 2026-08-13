@@ -5,6 +5,7 @@ import PerfilUsuario from "../models/PerfilUsuario";
 import Preregistro, { type EstadoPreregistro } from "../models/Preregistro";
 import PostulanteGuia from "../models/PostulanteGuia";
 import Fraterno from "../models/Fraterno";
+import { registrarAuditoria } from "../services/AuditoriaService";
 
 const populate = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono sexo estado fotoPerfil fechaCreado" },
@@ -197,6 +198,7 @@ export const actualizarPreregistro = async (req: Request, res: Response) => {
     const permitido = ["estado", "aceptoReglamento", "examen1", "examen2", "examen3", "examen4", "examen5", "examen6", "puntajeTotal", "observacion"];
     const preregistro = await Preregistro.findOne({ _id: req.params.id, fechaEliminado: null });
     if (!preregistro) return res.status(404).json({ error: "Preregistro no encontrado" });
+    const datosAntes = preregistro.toObject();
     if (req.body.estado === "APROBADO" && preregistro.estado !== "APROBADO") {
       const [gestion, usuario] = await Promise.all([Gestion.findById(preregistro.gestionId), PerfilUsuario.findById(preregistro.usuarioId)]);
       if (!gestion || !usuario) return res.status(409).json({ error: "No se pudo verificar la gestión o el usuario" });
@@ -216,6 +218,16 @@ export const actualizarPreregistro = async (req: Request, res: Response) => {
     preregistro.usuarioEditor = req.usuario?._id;
     await preregistro.save();
     await preregistro.populate(populate);
+    const estadoFinal = String(preregistro.estado);
+    await registrarAuditoria(req, {
+      accion: estadoFinal === "OBSERVADO" ? "OBSERVAR_PREREGISTRO" : estadoFinal === "APROBADO" ? "APROBAR_PREREGISTRO" : "REVISAR_PREREGISTRO",
+      modulo: "PREREGISTROS",
+      entidad: "Preregistro",
+      entidadId: preregistro._id,
+      descripcion: estadoFinal === "OBSERVADO" ? `Se observó el preregistro ${preregistro.numeroPreRegistro}: ${preregistro.observacion}` : `El preregistro ${preregistro.numeroPreRegistro} quedó en estado ${estadoFinal}`,
+      datosAntes,
+      datosDespues: preregistro.toObject(),
+    });
     return res.json({ message: "Preregistro actualizado correctamente", preregistro });
   } catch (causa) { return error(res, causa, "Error al actualizar el preregistro"); }
 };

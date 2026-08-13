@@ -17,5 +17,5 @@ export async function editarAnuncio(id: string, datos: Partial<Anuncio>): Promis
 export async function borrarAnuncio(id: string) { try { return (await api.delete(`/comunicacion/anuncios/${id}`)).data; } catch (e) { return manejar(e, "No se pudo eliminar el anuncio"); } }
 export async function misNotificaciones(): Promise<{ notificaciones: Notificacion[]; noLeidas: number }> { try { return (await api.get("/comunicacion/notificaciones/mias")).data; } catch (e) { return manejar(e, "No se pudieron cargar las notificaciones"); } }
 export async function leerNotificacion(id: string) { try { return (await api.patch(`/comunicacion/notificaciones/${id}/leida`)).data; } catch (e) { return manejar(e, "No se pudo marcar la notificación"); } }
-export async function listarAuditoria(): Promise<EventoAuditoria[]> { try { return (await api.get("/comunicacion/auditoria")).data.eventos; } catch (e) { return manejar(e, "No se pudo cargar la auditoría"); } }
+export async function listarAuditoria(): Promise<EventoAuditoria[]> { try { return (await api.get("/comunicacion/auditoria", { params: { limite: 500 } })).data.eventos; } catch (e) { return manejar(e, "No se pudo cargar la auditoría"); } }
 export async function registrarCierreSesion() { try { await api.post("/comunicacion/auditoria/logout"); } catch { /* no bloquea el cierre */ } }

@@ -8,6 +8,7 @@ import Cuota from "../models/Cuota";
 import Fraterno from "../models/Fraterno";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import { TERMINOS_PARTICIPACION } from "../constants/terminosParticipacion";
+import { registrarAuditoria } from "../services/AuditoriaService";
 
 const normalizar = (v: unknown) => String(v ?? "").trim().toUpperCase().replace(/\s+/g, "");
 const codigoNuevo = () => `FRA-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
@@ -74,6 +75,24 @@ export async function anularToken(req: Request, res: Response) {
   const token = await TokenRegistro.findOneAndUpdate(filtro, { estado: "ANULADO" }, { new: true });
   if (!token) return res.status(404).json({ error: "El token no está disponible" });
   return res.json({ message: "Token anulado y cupo liberado", token });
+}
+
+export async function eliminarTokenNoUtilizado(req: Request, res: Response) {
+  const filtro: Record<string, unknown> = { _id: req.params.id, estado: { $ne: "UTILIZADO" } };
+  if (!esAdministrador(req)) filtro.generadoPor = req.usuario?._id;
+  const token = await TokenRegistro.findOne(filtro);
+  if (!token) return res.status(404).json({ error: "El token no existe, no te pertenece o ya fue utilizado" });
+  const datosAntes = token.toObject();
+  await token.deleteOne();
+  await registrarAuditoria(req, {
+    accion: "ELIMINAR",
+    modulo: "TOKENS_REGISTRO",
+    entidad: "TokenRegistro",
+    entidadId: token._id,
+    descripcion: `Se eliminó el token no utilizado ${token.codigo}`,
+    datosAntes,
+  });
+  return res.json({ message: "Token no utilizado eliminado definitivamente" });
 }
 
 export async function obtenerConfiguracionTokens(req: Request, res: Response) {

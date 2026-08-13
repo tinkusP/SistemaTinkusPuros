@@ -9,3 +9,4 @@ export async function obtenerConfiguracionTokens(){try{return(await api.get("/to
 export async function guardarConfiguracionTokens(datos:any){try{return(await api.put("/tokens-registro/configuracion",datos)).data}catch(e){return fallo(e,"No se pudo guardar la configuración")}}
 export async function crearToken(datos:{gestionId:string;vigenciaHoras:number;plazoPagoHoras:number;observacion?:string}){try{return(await api.post("/tokens-registro",datos)).data}catch(e){return fallo(e,"No se pudo generar el token")}}
 export async function anularToken(id:string){try{return(await api.patch(`/tokens-registro/${id}/anular`)).data}catch(e){return fallo(e,"No se pudo anular el token")}}
+export async function eliminarToken(id:string){try{return(await api.delete(`/tokens-registro/${id}`)).data}catch(e){return fallo(e,"No se pudo eliminar el token")}}

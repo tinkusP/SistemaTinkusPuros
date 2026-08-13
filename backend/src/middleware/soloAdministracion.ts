@@ -49,7 +49,10 @@ function permisosNecesarios(req: Request): string[] {
   if (base.includes("asistencias-postulantes-guia")) return lectura ? ["VISTA_ASISTENCIA_GUIA"] : ["ASISTENCIA_GUIA_GESTIONAR"];
   if (base.includes("postulantes-guia")) return lectura ? ["VISTA_POSTULANTES_GUIA"] : ["GUIAS_GESTIONAR"];
   if (base.includes("guias")) return lectura ? ["VISTA_GUIAS_BLOQUES"] : ruta.includes("bloques") ? ["BLOQUES_SUPERVISAR"] : ["GUIAS_GESTIONAR"];
-  if (base.includes("indumentaria")) return lectura ? ["VISTA_INDUMENTARIA"] : ["INDUMENTARIA_GESTIONAR"];
+  if (base.includes("indumentaria")) {
+    if (metodo === "PUT" && ruta === "/tallas/usuario") return ["TALLAS_REGISTRAR", "INDUMENTARIA_GESTIONAR"];
+    return lectura ? ["VISTA_INDUMENTARIA"] : ["INDUMENTARIA_GESTIONAR"];
+  }
   if (base.includes("facultades")) return ["VISTA_FACULTADES"];
   if (base.includes("configuracion-pagos")) return ["PAGOS_CONFIGURAR"];
   if (base.includes("cuotas")) {
@@ -64,7 +67,7 @@ function permisosNecesarios(req: Request): string[] {
   if (base.includes("asistencias")) return lectura ? ["VISTA_ASISTENCIAS"] : ["ASISTENCIAS_GESTIONAR"];
   if (base.includes("fraternos")) return lectura ? ["VISTA_FRATERNOS"] : ["FRATERNOS_GESTIONAR"];
   if (base.includes("traspasos")) return lectura ? ["VISTA_TRASPASOS"] : ["TRASPASOS_GESTIONAR"];
-  if (base.includes("credenciales-qr")) return ["VISTA_ASISTENCIAS", "ASISTENCIAS_GESTIONAR"];
+  if (base.includes("credenciales-qr")) return ["VISTA_ASISTENCIAS", "ASISTENCIAS_GESTIONAR", "TALLAS_REGISTRAR"];
   if (base.includes("reportes")) return ["VISTA_REPORTES"];
   if (base.includes("tokens-registro")) return lectura ? ["VISTA_TOKENS", "TOKENS_GESTIONAR"] : ["TOKENS_GESTIONAR"];
   return [];
