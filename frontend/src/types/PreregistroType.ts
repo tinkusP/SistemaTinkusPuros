@@ -15,6 +15,7 @@ export type UsuarioPreregistro = {
   sexo?: string | null;
   fotoPerfil?: string | null;
   fechaCreado?: string | null;
+  tipoOrigen?: string | null;
 };
 
 export type GestionPreregistro = {

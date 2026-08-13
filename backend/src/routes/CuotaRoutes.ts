@@ -34,7 +34,7 @@ router.get("/", authenticate, soloAdministracion, listarCuotas);
  */
 router.post("/habilitar-masivo", authenticate, soloAdministracion, body("tarifaInterno").optional().isFloat({ min: 0.01 }).toFloat(), body("tarifaExterno").optional().isFloat({ min: 0.01 }).toFloat(), body("fechaVencimiento").optional({ checkFalsy: true }).isISO8601(), handleInputErrors, habilitarCuotasMasivas);
 router.patch("/prorroga/vencidas", authenticate, soloAdministracion, body("horas").isInt({ min: 1, max: 8760 }).toInt(), body("motivo").trim().isLength({ min: 3, max: 500 }), handleInputErrors, prorrogarCuotasVencidas);
-router.post("/", authenticate, soloAdministracion, body("preregistroId").isMongoId(), body("montoTotal").isFloat({ min: 0.01 }).toFloat(), body("fechaVencimiento").optional({ checkFalsy: true }).isISO8601(), handleInputErrors, crearCuota);
+router.post("/", authenticate, soloAdministracion, body("preregistroId").isMongoId(), body("fechaVencimiento").optional({ checkFalsy: true }).isISO8601(), handleInputErrors, crearCuota);
 router.get("/mia", authenticate, obtenerMiCuota);
 /** @openapi
  * /api/cuotas/{id}:

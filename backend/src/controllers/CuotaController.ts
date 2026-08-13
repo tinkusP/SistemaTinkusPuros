@@ -12,8 +12,9 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
 import Fraterno from "../models/Fraterno";
 import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
+import { sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
 
-const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }] };
+const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil tipoOrigen" }, { path: "gestionId", select: "nombre anio" }] };
 const esAdministrador = usuarioEsAdministrador;
 const tienePermiso = (req: Request, ...permisos: string[]) => {
   const roles = req.usuario?.roles as unknown as { permisos?: string[] }[] | undefined;
@@ -85,33 +86,11 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
   const preregistro = await Preregistro.findOne({ usuarioId, estado: "APROBADO", aprobado: true, fechaEliminado: null })
     .sort({ fechaAprobacion: -1, fechaRegistro: -1 });
   if (!preregistro) return null;
-  const existente = await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null });
-  if (existente) return existente;
-  const [usuario, configuracion] = await Promise.all([
-    PerfilUsuario.findOne({ _id: usuarioId, estado: "ACTIVO" }).select("tipoOrigen"),
-    ConfiguracionPago.findOne({ gestionId: preregistro.gestionId, activo: true }),
-  ]);
-  if (!usuario || !configuracion) return null;
-  const esExterno = ["EXTERNO", "EXTERNO_UMSA", "EXTERNO_NO_UMSA"].includes(String(usuario.tipoOrigen));
-  const montoTotal = esExterno ? configuracion.tarifaExterno : configuracion.tarifaInterno;
-  try {
-    return await Cuota.create({
-      preregistroId: preregistro._id,
-      tipoOrigenTarifa: esExterno ? "EXTERNO" : "INTERNO",
-      tarifaAplicada: montoTotal,
-      montoTotal,
-      primeraCuotaMonto: Math.min(configuracion.primeraCuota || 300, montoTotal),
-      montoPagado: 0,
-      saldo: montoTotal,
-      observacion: "Cuota habilitada. El plazo comenzará al aceptar los términos y condiciones.",
-    });
-  } catch (error) {
-    if ((error as { code?: number }).code === 11000) return Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null });
-    throw error;
-  }
+  const resultado = await sincronizarCuotaPreregistro(preregistro._id, { crearSiFalta: true });
+  return resultado?.cuota ?? null;
 }
 
-export const crearCuota = async (req: Request, res: Response) => { try { const preregistro = await Preregistro.findOne({ _id: req.body.preregistroId, fechaEliminado: null }); if (!preregistro) return res.status(404).json({ error: "Preregistro no encontrado" }); const montoTotal = Number(req.body.montoTotal); const cuota = await Cuota.create({ preregistroId: preregistro._id, montoTotal, saldo: montoTotal, fechaVencimiento: req.body.fechaVencimiento || undefined, observacion: req.body.observacion, usuarioCreador: req.usuario?._id }); await cuota.populate(poblar); await registrarAuditoria(req, { accion: "CREAR", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: `Se creó una cuota de Bs ${montoTotal}`, datosDespues: cuota.toObject() }); return res.status(201).json({ message: "Cuota creada", cuota }); } catch (e) { if ((e as { code?: number }).code === 11000) return res.status(409).json({ error: "El preregistro ya tiene una cuota" }); return res.status(500).json({ error: "No se pudo crear la cuota" }); } };
+export const crearCuota = async (req: Request, res: Response) => { try { const resultado = await sincronizarCuotaPreregistro(req.body.preregistroId, { crearSiFalta: true, usuarioCreador: req.usuario?._id, fechaVencimiento: req.body.fechaVencimiento ? new Date(req.body.fechaVencimiento) : undefined }); if (!resultado) return res.status(409).json({ error: "La cuota requiere un usuario activo, preregistro aprobado y configuración de pagos vigente" }); const cuota = resultado.cuota; await cuota.populate(poblar); await registrarAuditoria(req, { accion: resultado.creada ? "CREAR" : "SINCRONIZAR_TARIFA", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: resultado.creada ? `Se vinculó una cuota ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}` : `Se sincronizó la cuota con la tarifa ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}`, datosAntes: resultado.creada ? undefined : { tipoOrigenTarifa: resultado.tipoAnterior, montoTotal: resultado.montoAnterior }, datosDespues: cuota.toObject() }); return res.status(resultado.creada ? 201 : 200).json({ message: resultado.creada ? "Cuota vinculada correctamente" : "Cuota y tarifa sincronizadas", cuota }); } catch (e) { console.error(e); return res.status(500).json({ error: "No se pudo vincular o sincronizar la cuota" }); } };
 export const listarCuotas = async (_req: Request, res: Response) => {
   const cuotas = await Cuota.find({ fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 }).lean();
   const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision baucherImagen fechaPago").lean();

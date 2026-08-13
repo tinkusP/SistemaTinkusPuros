@@ -8,7 +8,7 @@ import Fraterno from "../models/Fraterno";
 import { registrarAuditoria } from "../services/AuditoriaService";
 
 const populate = [
-  { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono sexo estado fotoPerfil fechaCreado" },
+  { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono sexo estado fotoPerfil fechaCreado tipoOrigen" },
   { path: "gestionId", select: "anio nombre estado cupoMaximo cupoMaximoHombres cupoMaximoMujeres" },
   { path: "usuarioAprobador", select: "nombres apellidoPaterno apellidoMaterno" },
   { path: "usuarioRevisor", select: "nombres apellidoPaterno apellidoMaterno" },

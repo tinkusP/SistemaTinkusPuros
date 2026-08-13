@@ -1492,6 +1492,7 @@ import Fraterno from "../models/Fraterno";
 import Rol from "../models/Rol";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import { eliminarArchivoAlmacenado, subirArchivoProcesado } from "../services/AlmacenamientoService";
+import { sincronizarCuotasUsuario } from "../services/SincronizacionCuotaService";
 
 type DetalleSolicitudInvalida = {
   tipo?: "DUPLICADO" | "ARCHIVO" | "DATO" | "TOKEN";
@@ -3080,6 +3081,25 @@ static getPerfilUsuarioById = async (
           }
         }
 
+      }
+
+      const cambioOrigen = req.body.tipoOrigen !== undefined && String(perfilAnterior.tipoOrigen) !== String(perfil.tipoOrigen);
+      const perfilActivado = req.body.estado === "ACTIVO" && perfilAnterior?.estado !== "ACTIVO";
+      if (perfil.estado === "ACTIVO" && (cambioOrigen || perfilActivado)) {
+        const sincronizadas = await sincronizarCuotasUsuario(perfil._id, req.usuario?._id);
+        if (sincronizadas.length) {
+          await registrarAuditoria(req, {
+            accion: cambioOrigen ? "SINCRONIZAR_TARIFA_ORIGEN" : "VINCULAR_CUOTA_ANTIGUA",
+            modulo: "CUOTAS",
+            entidad: "PerfilUsuario",
+            entidadId: perfil._id,
+            descripcion: cambioOrigen
+              ? `Se sincronizaron ${sincronizadas.length} cuota(s) después de cambiar el origen de ${perfilAnterior.tipoOrigen} a ${perfil.tipoOrigen}; se conservaron pagos y bauchers`
+              : `Se vincularon ${sincronizadas.length} cuota(s) a preregistros aprobados del usuario`,
+            datosAntes: { tipoOrigen: perfilAnterior.tipoOrigen },
+            datosDespues: { tipoOrigen: perfil.tipoOrigen, cuotas: sincronizadas.map((resultado) => ({ cuotaId: resultado.cuota._id, tipo: resultado.cuota.tipoOrigenTarifa, montoTotal: resultado.cuota.montoTotal, montoPagado: resultado.cuota.montoPagado, saldo: resultado.cuota.saldo })) },
+          });
+        }
       }
 
       await registrarAuditoria(req, {

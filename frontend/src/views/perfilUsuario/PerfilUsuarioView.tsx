@@ -50,7 +50,7 @@ import { habilitarGuia, listarGuias, retirarPostulanteGuia } from "@/api/GuiaApi
 import { listarFraternos } from "@/api/FraternoApi";
 import { GestionarFraternoModal } from "@/views/fraterno/FraternoView";
 import type { Fraterno } from "@/types/FraternoType";
-import { listarCuotas, obtenerCuota } from "@/api/CuotaApi";
+import { crearCuota, listarCuotas, obtenerCuota } from "@/api/CuotaApi";
 import type { Cuota } from "@/types/CuotaType";
 import { ESTADOS_PREREGISTRO, type EstadoPreregistro } from "@/types/PreregistroType";
 import { obtenerReporteFormacion, obtenerReporteTallas } from "@/api/ReporteApi";
@@ -263,6 +263,18 @@ export default function PerfilUsuarioView() {
       await queryClient.invalidateQueries({ queryKey: ["preregistros"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo crear el preregistro"),
+  });
+
+  const vincularCuota = useMutation({
+    mutationFn: crearCuota,
+    onSuccess: async (cuotaCreada) => {
+      toast.success(`Cuota ${cuotaCreada.tipoOrigenTarifa ?? ""} vinculada por Bs ${cuotaCreada.montoTotal.toFixed(2)}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cuotas"] }),
+        queryClient.invalidateQueries({ queryKey: ["fraternos"] }),
+      ]);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo vincular la cuota"),
   });
 
   const perfilesFiltrados = useMemo(() => {
@@ -658,6 +670,9 @@ export default function PerfilUsuarioView() {
                     const responsableAlta = [preregistro?.usuarioCreador, fraterno?.usuarioCreador, perfil.usuarioAprobador, perfil.usuarioCreador].find(esResponsablePoblado);
                     const fechaAltaMostrada = preregistro?.fechaCreado ?? perfil.fechaAlta ?? (fraterno?.fechaIngreso || undefined);
                     const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
+                    const gestion = preregistro && typeof preregistro.gestionId === "object" ? preregistro.gestionId : fraterno && typeof fraterno.gestionId === "object" ? fraterno.gestionId : undefined;
+                    const situacion = fraterno ? (fraterno.situacion ?? fraterno.estado).replaceAll("_", " ") : postulanteGuia ? "POSTULANTE A GUÍA" : preregistro ? preregistro.estado.replaceAll("_", " ") : "SIN PREREGISTRO";
+                    const vinculandoCuota = vincularCuota.isPending && vincularCuota.variables?.preregistroId === preregistro?._id;
                     const asignandoGuia = asignarGuia.isPending && asignarGuia.variables === preregistro?._id;
                     const quitandoPostulante = quitarPostulanteGuia.isPending && quitarPostulanteGuia.variables === postulanteGuia?._id;
                     const creandoPreregistro = crearPreregistroFaltante.isPending && crearPreregistroFaltante.variables === perfil._id;
@@ -723,13 +738,13 @@ export default function PerfilUsuarioView() {
                         </td>
 
                         <td className="p-4">{fraterno ? <button type="button" onClick={() => navigate(`/fraternos?buscar=${encodeURIComponent(perfil.ci)}`)} className="rounded-xl bg-emerald-100 px-3 py-2 text-left text-xs font-black text-emerald-800">{fraterno.numeroFraterno}<span className="mt-1 block font-medium">Gestionar</span></button> : <span className="text-xs text-slate-400">—</span>}</td>
-                        <td className="p-4 font-semibold">{fraterno && typeof fraterno.gestionId === "object" ? fraterno.gestionId.nombre : "—"}</td>
+                        <td className="p-4 font-semibold">{gestion ? `${gestion.nombre}${"anio" in gestion ? ` ${gestion.anio}` : ""}` : "Sin gestión vinculada"}</td>
                         <td className="p-4">{fraterno ? new Date(fraterno.fechaIngreso).toLocaleDateString("es-BO") : "—"}</td>
-                        <td className="p-4">{fraterno ? <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${fraterno.estadoPago === "SALDADO" ? "bg-emerald-100 text-emerald-800" : fraterno.estadoPago === "EN_VERIFICACION" ? "bg-blue-100 text-blue-800" : fraterno.estadoPago === "OBSERVADO" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}`}>{(fraterno.estadoPago ?? "SIN_PAGO").replaceAll("_", " ")}</span> : "—"}</td>
+                        <td className="p-4">{cuota ? <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${cuota.estado === "PAGADA" ? "bg-emerald-100 text-emerald-800" : cuota.resumenPagos?.pendientes ? "bg-blue-100 text-blue-800" : cuota.estado === "VENCIDA" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}`}>{cuota.resumenPagos?.pendientes ? "EN VERIFICACIÓN" : cuota.estado.replaceAll("_", " ")}</span> : <span className="text-xs font-bold text-amber-700">SIN CUOTA</span>}</td>
                         <td className="p-4">{fraterno ? <span className="text-xs font-black">{fraterno.terminos?.estado === "ACEPTADOS" ? "✅ ACEPTADOS" : fraterno.terminos?.estado === "REQUIERE_NUEVA_ACEPTACION" ? "🔄 NUEVA ACEPTACIÓN" : fraterno.terminos?.estado === "NO_ACEPTADOS" ? "❌ NO ACEPTADOS" : "⚠️ PENDIENTE"}</span> : "—"}</td>
-                        <td className="p-4 font-black">{fraterno ? (fraterno.situacion ?? fraterno.estado).replaceAll("_", " ") : "—"}</td>
-                        <td className="p-4">{fraterno ? <span className={`inline-flex items-center gap-2 font-bold ${fraterno.ocupaCupo ? "text-emerald-700" : "text-slate-500"}`}><span aria-hidden="true">{fraterno.ocupaCupo ? "🟢" : "⚪"}</span>{fraterno.ocupaCupo ? "OCUPA" : "LIBRE"}</span> : "—"}</td>
-                        <td className="p-4">{cuota ? <button type="button" onClick={() => setCuotaSeleccionada(cuota)} className="rounded-xl bg-blue-100 px-4 py-2 text-xs font-black text-blue-800">Ver pagos<span className="mt-1 block font-medium">Bs {cuota.montoPagado.toFixed(2)} / {cuota.montoTotal.toFixed(2)}</span></button> : <span className="text-xs text-slate-400">Sin cuota</span>}</td>
+                        <td className="p-4 font-black">{situacion}</td>
+                        <td className="p-4">{fraterno ? <span className={`inline-flex items-center gap-2 font-bold ${fraterno.ocupaCupo ? "text-emerald-700" : "text-slate-500"}`}><span aria-hidden="true">{fraterno.ocupaCupo ? "🟢" : "⚪"}</span>{fraterno.ocupaCupo ? "OCUPA" : "LIBRE"}</span> : preregistro?.estado === "APROBADO" ? <span className="font-bold text-blue-700">RESERVADO POR APROBACIÓN</span> : <span className="font-bold text-slate-500">NO ASIGNADO</span>}</td>
+                        <td className="p-4">{cuota ? <button type="button" onClick={() => setCuotaSeleccionada(cuota)} className="rounded-xl bg-blue-100 px-4 py-2 text-xs font-black text-blue-800">Ver pagos<span className="mt-1 block font-medium">Bs {cuota.montoPagado.toFixed(2)} / {cuota.montoTotal.toFixed(2)}</span><span className="mt-1 block">Tarifa {cuota.tipoOrigenTarifa ?? "sin clasificar"}</span></button> : preregistro?.estado === "APROBADO" ? <button type="button" disabled={vinculandoCuota} onClick={() => { if (window.confirm(`Se vinculará automáticamente la tarifa según el origen ${perfil.tipoOrigen.replaceAll("_", " ")}. ¿Continuar?`)) vincularCuota.mutate({ preregistroId: preregistro._id }); }} className="rounded-xl bg-amber-100 px-4 py-2 text-xs font-black text-amber-900 disabled:opacity-50">{vinculandoCuota ? "Vinculando..." : `Crear cuota ${normalizarOrigenAcademico(perfil.tipoOrigen).startsWith("EXTERNO") ? "externa" : "interna"}`}</button> : <span className="text-xs text-slate-400">Requiere preregistro aprobado</span>}</td>
                         <td className="p-4">{cuota?.resumenPagos?.conBaucher ? <button type="button" onClick={()=>setCuotaSeleccionada(cuota)} className={`rounded-xl px-4 py-2 text-left text-xs font-black ${cuota.resumenPagos.pendientes ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>Revisar {cuota.resumenPagos.conBaucher} baucher{cuota.resumenPagos.conBaucher === 1 ? "" : "s"}<span className="mt-1 block font-medium">{cuota.resumenPagos.pendientes ? `${cuota.resumenPagos.pendientes} pendiente(s)` : "Sin pendientes"}</span></button> : <span className="text-xs text-slate-400">No envió baucher</span>}</td>
 
                         <td className="p-4">

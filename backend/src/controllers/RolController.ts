@@ -7,7 +7,8 @@ export class RolController {
     // Crear rol
     static createRol = async (req: Request, res: Response) => {
         const permisos = normalizarPermisosRol(req.body.permisos);
-        if(permisos.some((p)=>!PERMISOS_VALIDOS.has(p))) return res.status(400).json({error:"Uno o más permisos no pertenecen al catálogo autorizado"});
+        const permisosInvalidos = permisos.filter((permiso) => !PERMISOS_VALIDOS.has(permiso));
+        if (permisosInvalidos.length) return res.status(400).json({ error: `Permisos no autorizados: ${permisosInvalidos.join(", ")}`, permisosInvalidos });
         const rol = new Rol({
             nombre: req.body.nombre,
             codigo: req.body.codigo,
@@ -113,7 +114,12 @@ export class RolController {
             rol.codigo = req.body.codigo ?? rol.codigo
             rol.descripcion = req.body.descripcion ?? rol.descripcion
             rol.estado = req.body.estado ?? rol.estado
-            if(req.body.permisos){const permisos=normalizarPermisosRol(req.body.permisos);if(permisos.some(p=>!PERMISOS_VALIDOS.has(p)))return res.status(400).json({error:"Uno o más permisos no pertenecen al catálogo autorizado"});rol.permisos=permisos;}
+            if (req.body.permisos) {
+                const permisos = normalizarPermisosRol(req.body.permisos)
+                const permisosInvalidos = permisos.filter((permiso) => !PERMISOS_VALIDOS.has(permiso))
+                if (permisosInvalidos.length) return res.status(400).json({ error: `Permisos no autorizados: ${permisosInvalidos.join(", ")}`, permisosInvalidos })
+                rol.permisos = permisos
+            }
             rol.esRolSistema =
                 req.body.esRolSistema ?? rol.esRolSistema
 
