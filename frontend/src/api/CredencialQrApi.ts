@@ -1,7 +1,7 @@
 import api from "@/lib/axios";
 import { obtenerMensajeError } from "./apiError";
 
-export type IdentidadQr = { valida: boolean; usuario: { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string; ci: string; fotoPerfil?: string; email: string; estado: string; roles: { nombre: string; codigo: string }[] } };
+export type IdentidadQr = { valida: boolean; usuario: { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string; ci: string; fotoPerfil?: string; email: string; estado: string; roles: { nombre: string; codigo: string }[] }; fraterno: { _id: string; numeroFraterno: string; estado: string } | null; talla: { tallaPolera: string; tallaChamarra: string; fechaActualizado?: string } | null };
 
 export async function miCredencialQr() {
   try { return (await api.get("/credenciales-qr/mia")).data as { token: string; nombre: string; ci: string; fotoPerfil?: string }; }

@@ -22,7 +22,7 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
   await asegurarPrendasPrincipales(req.usuario?._id);
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
   const [tallas, prendas, entregas, cuotas, configuracionTallas] = await Promise.all([
-    TallaFraterno.find().populate({ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }),
+    TallaFraterno.find().populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci").populate({ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }),
     PrendaIndumentaria.find().sort({ nombre: 1 }),
     EntregaIndumentaria.find().populate(poblarEntrega).sort({ fechaEntrega: -1 }),
     Cuota.find({ fechaEliminado: null }).select("preregistroId montoTotal montoPagado saldo estado"),
@@ -38,12 +38,13 @@ export const miIndumentaria = async (req: Request, res: Response) => {
   }).sort({ fechaIngreso: -1 });
 
   if (!fraterno) {
-    return res.json({ fraterno: null, talla: null, entregas: [] });
+    const talla = await TallaFraterno.findOne({ usuarioId: req.usuario?._id });
+    return res.json({ fraterno: null, talla, entregas: [], edicionTallasBloqueada: true });
   }
 
   const gestion = await Gestion.findById(fraterno.gestionId);
   const [talla, entregas, configuracionTallas] = await Promise.all([
-    TallaFraterno.findOne({ fraternoId: fraterno._id }),
+    TallaFraterno.findOne({ $or: [{ usuarioId: req.usuario?._id }, { fraternoId: fraterno._id }] }),
     EntregaIndumentaria.find({ fraternoId: fraterno._id })
       .populate("prendaId")
       .sort({ fechaEntrega: -1 }),
@@ -53,17 +54,18 @@ export const miIndumentaria = async (req: Request, res: Response) => {
   return res.json({ fraterno, talla, entregas, edicionTallasBloqueada: talla?.edicionBloqueada === true, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null, gestion: gestion?.nombre } });
 };
 export const guardarTalla = async (req: Request, res: Response) => { const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: req.body.fraternoId }, { ...req.body, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true }); res.json({ message: "Tallas guardadas", talla }); };
-export const guardarMiTalla = async (req: Request, res: Response) => {
-  const fraterno = await Fraterno.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO", fechaEliminado: null }).sort({ fechaIngreso: -1 });
-  if (!fraterno) return res.status(404).json({ error: "No existe un registro activo de fraterno" });
-  const tallaActual = await TallaFraterno.findOne({ fraternoId: fraterno._id }).select("edicionBloqueada");
-  if (tallaActual?.edicionBloqueada) return res.status(409).json({ error: "Administración bloqueó la edición de tus tallas. Solicita una nueva habilitación si necesitas corregirlas." });
-  const configuracion = await ConfiguracionPago.findOne({ gestionId: fraterno.gestionId }).select("registroTallasHabilitado fechaLimiteRegistroTallas");
-  if (!configuracion?.registroTallasHabilitado) return res.status(409).json({ error: "Administración todavía no habilitó el registro de tallas." });
-  if (configuracion.fechaLimiteRegistroTallas && configuracion.fechaLimiteRegistroTallas < new Date()) return res.status(409).json({ error: "La fecha límite para modificar tallas ya terminó. Contacta a administración." });
-  const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: fraterno._id }, { tallaPolera: req.body.tallaPolera, tallaChamarra: req.body.tallaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true });
-  return res.json({ message: "Tus tallas fueron guardadas", talla, fechaLimite: configuracion.fechaLimiteRegistroTallas ?? null });
+export const guardarTallaUsuario = async (req: Request, res: Response) => {
+  const fraterno = await Fraterno.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id");
+  const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
+  const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };
+  const talla = await TallaFraterno.findOneAndUpdate(
+    filtro,
+    { $set: { usuarioId: req.body.usuarioId, ...(fraterno ? { fraternoId: fraterno._id } : {}), tallaPolera: req.body.tallaPolera, tallaChamarra: req.body.tallaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id } },
+    { upsert: true, new: true, runValidators: true },
+  );
+  return res.json({ message: "Tallas del usuario guardadas", talla });
 };
+export const guardarMiTalla = async (_req: Request, res: Response) => res.status(403).json({ error: "Las tallas son registradas y corregidas únicamente por Administración. Puedes consultarlas desde tu perfil." });
 export const configurarRegistroTallas = async (req: Request, res: Response) => {
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
   if (!gestion) return res.status(404).json({ error: "No existe una gestión activa" });

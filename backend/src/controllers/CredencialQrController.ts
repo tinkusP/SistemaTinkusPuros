@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import PerfilUsuario from "../models/PerfilUsuario";
+import Fraterno from "../models/Fraterno";
+import TallaFraterno from "../models/TallaFraterno";
 import { registrarAuditoria } from "../services/AuditoriaService";
 
 const secreto = () => process.env.JWT_SECRET || "";
@@ -23,8 +25,10 @@ export async function verificarCredencialQr(req: Request, res: Response) {
     const usuario = await PerfilUsuario.findOne({ _id: payload.sub, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci fotoPerfil email estado roles credencialQrVersion").populate("roles", "nombre codigo");
     if (!usuario) return res.status(404).json({ error: "El usuario del QR ya no existe" });
     if (Number(payload.versionQr) !== Number(usuario.credencialQrVersion ?? 0)) return res.status(409).json({ error: "Este QR ya fue utilizado. Solicita a la persona que muestre su nuevo código QR" });
+    const fraterno = await Fraterno.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id numeroFraterno estado");
+    const talla = await TallaFraterno.findOne({ $or: [{ usuarioId: usuario._id }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] }).select("tallaPolera tallaChamarra fechaActualizado");
     await registrarAuditoria(req, { accion: "ESCANEAR_QR", modulo: "CREDENCIALES", entidad: "PerfilUsuario", entidadId: usuario._id, descripcion: `Se verificó la identidad de ${usuario.ci}` });
-    return res.json({ valida: usuario.estado === "ACTIVO", usuario: { _id: usuario._id, nombres: usuario.nombres, apellidoPaterno: usuario.apellidoPaterno, apellidoMaterno: usuario.apellidoMaterno, ci: usuario.ci, fotoPerfil: usuario.fotoPerfil, email: usuario.email, estado: usuario.estado, roles: usuario.roles } });
+    return res.json({ valida: usuario.estado === "ACTIVO", usuario: { _id: usuario._id, nombres: usuario.nombres, apellidoPaterno: usuario.apellidoPaterno, apellidoMaterno: usuario.apellidoMaterno, ci: usuario.ci, fotoPerfil: usuario.fotoPerfil, email: usuario.email, estado: usuario.estado, roles: usuario.roles }, fraterno, talla });
   } catch {
     return res.status(400).json({ error: "QR inválido, alterado o vencido" });
   }
