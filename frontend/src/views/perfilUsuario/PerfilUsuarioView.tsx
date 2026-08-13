@@ -46,7 +46,7 @@ import {
 
 import PerfilUsuarioDetalleModal from "@/components/perfilUsuario/PerfilUsuarioDetalleModal";
 import { crearPreregistro, obtenerPreregistros } from "@/api/PreregistroApi";
-import { habilitarGuia, listarGuias } from "@/api/GuiaApi";
+import { habilitarGuia, listarGuias, retirarPostulanteGuia } from "@/api/GuiaApi";
 import { listarFraternos } from "@/api/FraternoApi";
 import { GestionarFraternoModal } from "@/views/fraterno/FraternoView";
 import type { Fraterno } from "@/types/FraternoType";
@@ -174,7 +174,9 @@ export default function PerfilUsuarioView() {
     }),
   ), [preregistrosQuery.data]);
   const guiaPorPreregistro = useMemo(() => new Map(
-    (postulantesGuiaQuery.data ?? []).map((postulante) => [postulante.preregistroId._id, postulante] as const),
+    (postulantesGuiaQuery.data ?? [])
+      .filter((postulante) => postulante.habilitado && postulante.estado !== "RETIRADO")
+      .map((postulante) => [postulante.preregistroId._id, postulante] as const),
   ), [postulantesGuiaQuery.data]);
   const fraternoPorUsuario = useMemo(() => new Map(
     (fraternosQuery.data?.fraternos ?? []).flatMap((fraterno) => {
@@ -240,6 +242,18 @@ export default function PerfilUsuarioView() {
       await queryClient.invalidateQueries({ queryKey: ["postulantes-guia"] });
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo enviar al proceso de guía"),
+  });
+
+  const quitarPostulanteGuia = useMutation({
+    mutationFn: retirarPostulanteGuia,
+    onSuccess: async (respuesta) => {
+      toast.success(respuesta.message);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["postulantes-guia"] }),
+        queryClient.invalidateQueries({ queryKey: ["perfilusuarios"] }),
+      ]);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo quitar al postulante a guía"),
   });
 
   const crearPreregistroFaltante = useMutation({
@@ -645,6 +659,7 @@ export default function PerfilUsuarioView() {
                     const fechaAltaMostrada = preregistro?.fechaCreado ?? perfil.fechaAlta ?? (fraterno?.fechaIngreso || undefined);
                     const cuota = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
                     const asignandoGuia = asignarGuia.isPending && asignarGuia.variables === preregistro?._id;
+                    const quitandoPostulante = quitarPostulanteGuia.isPending && quitarPostulanteGuia.variables === postulanteGuia?._id;
                     const creandoPreregistro = crearPreregistroFaltante.isPending && crearPreregistroFaltante.variables === perfil._id;
 
                     return (
@@ -704,7 +719,7 @@ export default function PerfilUsuarioView() {
                         </td>
 
                         <td className="p-4">
-                          {postulanteGuia ? <button type="button" onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-xl bg-purple-100 px-3 py-2 text-left text-xs font-black text-purple-800">{postulanteGuia.estado.replaceAll("_", " ")}<span className="mt-1 block font-medium">Abrir evaluación</span></button> : preregistro ? <button type="button" disabled={asignandoGuia || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(preregistro._id)} className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-xs font-black text-purple-800 disabled:opacity-50">{asignandoGuia ? "Enviando..." : "Enviar a postulante guía"}</button> : <span className="text-xs font-semibold text-slate-400">Primero crea el preregistro</span>}
+                          {postulanteGuia ? <div className="flex flex-col items-start gap-2"><button type="button" onClick={() => navigate(`/postulantes-guia/${postulanteGuia._id}`)} className="rounded-xl bg-purple-100 px-3 py-2 text-left text-xs font-black text-purple-800">{postulanteGuia.estado.replaceAll("_", " ")}<span className="mt-1 block font-medium">Abrir evaluación</span></button><button type="button" disabled={quitandoPostulante} onClick={() => { if (window.confirm(`¿Quitar a ${perfil.nombres} ${perfil.apellidoPaterno} de postulantes a guía? Podrás volver a enviarlo después.`)) quitarPostulanteGuia.mutate(postulanteGuia._id); }} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 disabled:cursor-wait disabled:opacity-50">{quitandoPostulante ? "Quitando..." : "Quitar postulante"}</button></div> : preregistro ? <button type="button" disabled={asignandoGuia || postulantesGuiaQuery.isLoading} onClick={() => asignarGuia.mutate(preregistro._id)} className="rounded-xl border border-purple-200 bg-white px-3 py-2 text-xs font-black text-purple-800 disabled:opacity-50">{asignandoGuia ? "Enviando..." : "Enviar a postulante guía"}</button> : <span className="text-xs font-semibold text-slate-400">Primero crea el preregistro</span>}
                         </td>
 
                         <td className="p-4">{fraterno ? <button type="button" onClick={() => navigate(`/fraternos?buscar=${encodeURIComponent(perfil.ci)}`)} className="rounded-xl bg-emerald-100 px-3 py-2 text-left text-xs font-black text-emerald-800">{fraterno.numeroFraterno}<span className="mt-1 block font-medium">Gestionar</span></button> : <span className="text-xs text-slate-400">—</span>}</td>
