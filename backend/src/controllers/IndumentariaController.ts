@@ -6,6 +6,8 @@ import Fraterno from "../models/Fraterno";
 import Cuota from "../models/Cuota";
 import Gestion from "../models/Gestion";
 import ConfiguracionPago from "../models/ConfiguracionPago";
+import Preregistro from "../models/Preregistro";
+import DetalleCuota from "../models/DetalleCuota";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -32,6 +34,10 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
 };
 
 export const miIndumentaria = async (req: Request, res: Response) => {
+  const preregistro = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id");
+  const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id primeraCuotaMonto montoPagado saldo estado") : null;
+  const primerPago = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, numeroPago: 1, fechaEliminado: null }).select("estadoRevision baucherImagen") : null;
+  const pago = { tieneCuota: Boolean(cuota), envioBaucher: Boolean(primerPago?.baucherImagen), primeraCuotaVerificada: primerPago?.estadoRevision === "VERIFICADO", estadoPrimeraCuota: primerPago?.estadoRevision ?? "NO_ENVIADA" };
   const fraterno = await Fraterno.findOne({
     usuarioId: req.usuario?._id,
     fechaEliminado: null,
@@ -39,7 +45,7 @@ export const miIndumentaria = async (req: Request, res: Response) => {
 
   if (!fraterno) {
     const talla = await TallaFraterno.findOne({ usuarioId: req.usuario?._id });
-    return res.json({ fraterno: null, talla, entregas: [], edicionTallasBloqueada: true });
+    return res.json({ fraterno: null, talla, entregas: [], edicionTallasBloqueada: true, pago });
   }
 
   const gestion = await Gestion.findById(fraterno.gestionId);
@@ -51,11 +57,15 @@ export const miIndumentaria = async (req: Request, res: Response) => {
     ConfiguracionPago.findOne({ gestionId: fraterno.gestionId }).select("registroTallasHabilitado fechaLimiteRegistroTallas"),
   ]);
 
-  return res.json({ fraterno, talla, entregas, edicionTallasBloqueada: talla?.edicionBloqueada === true, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null, gestion: gestion?.nombre } });
+  return res.json({ fraterno, talla, entregas, edicionTallasBloqueada: talla?.edicionBloqueada === true, pago, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null, gestion: gestion?.nombre } });
 };
 export const guardarTalla = async (req: Request, res: Response) => { const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: req.body.fraternoId }, { ...req.body, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true }); res.json({ message: "Tallas guardadas", talla }); };
 export const guardarTallaUsuario = async (req: Request, res: Response) => {
   const fraterno = await Fraterno.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id");
+  const preregistro = await Preregistro.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id");
+  const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id") : null;
+  const primeraCuota = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, numeroPago: 1, estadoRevision: "VERIFICADO", fechaEliminado: null }).select("_id") : null;
+  if (!primeraCuota) return res.status(409).json({ error: cuota ? "La primera cuota todavía no fue verificada; no se pueden registrar tallas" : "El usuario no tiene una cuota vinculada; regularízala antes de registrar tallas" });
   const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
   const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };
   const talla = await TallaFraterno.findOneAndUpdate(

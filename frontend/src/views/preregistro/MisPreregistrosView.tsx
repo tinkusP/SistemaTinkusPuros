@@ -47,7 +47,7 @@ export default function MisPreregistrosView() {
                   <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{esFraterno ? `Ya eres fraterno activo con número ${p.fraterno?.numeroFraterno}. Puedes registrar tus tallas y continuar con tus cuotas.` : mensajes[p.estado]}</p>
                   <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-xs text-slate-500">Calificaciones</dt><dd className="font-bold">{p.promedioExamen ?? "Aún sin registrar"}</dd></div><div><dt className="text-xs text-slate-500">Fecha de registro</dt><dd className="font-bold">{new Date(p.fechaRegistro).toLocaleDateString("es-BO")}</dd></div></dl>
                   {p.observacion && <div className={`mt-4 rounded-xl border p-4 text-sm ${observado ? "border-amber-300 bg-amber-50 text-amber-950" : "border-blue-200 bg-blue-50 text-blue-900"}`}><strong className="block mb-1">Observación de administración</strong>{p.observacion}</div>}
-                  {esFraterno && <Link to="/mis-tallas" className="mt-4 block rounded-xl bg-[#841534] px-4 py-3 text-center text-sm font-bold text-white">Seleccionar tallas de polera y chamarra</Link>}
+                  {(p.estado === "APROBADO" || esFraterno) && <Link to="/mis-tallas" className="mt-4 block rounded-xl bg-[#841534] px-4 py-3 text-center text-sm font-bold text-white">Ver mis tallas de polera y chamarra</Link>}
                 </article>
               );
             })}

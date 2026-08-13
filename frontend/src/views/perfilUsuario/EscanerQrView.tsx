@@ -103,7 +103,7 @@ export default function EscanerQrView() {
   };
 
   const guardarTallas = async () => {
-    if (!resultado?.valida || !resultado.usuario || !tallaPolera || !tallaChamarra || guardandoTalla) return;
+    if (!resultado?.valida || !resultado.pago.primeraCuotaVerificada || !resultado.usuario || !tallaPolera || !tallaChamarra || guardandoTalla) return;
     setGuardandoTalla(true);
     try {
       const respuesta = await guardarTallaUsuario({ usuarioId: resultado.usuario._id, tallaPolera, tallaChamarra });
@@ -143,7 +143,8 @@ export default function EscanerQrView() {
           <h2 className="mt-4 text-2xl font-black">{u.nombres} {u.apellidoPaterno} {u.apellidoMaterno}</h2>
           <p className="mt-2 text-xl font-bold text-[#74122A]">CI {u.ci}</p>
           <p className="text-sm text-slate-500">{u.email}</p>
-          {puedeRegistrarTallas ? <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section> : null}
+          <EstadoPrimeraCuota pago={resultado.pago} />
+          {puedeRegistrarTallas ? <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || !resultado.pago.primeraCuotaVerificada || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : !resultado.pago.primeraCuotaVerificada ? "Primera cuota pendiente de verificación" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section> : null}
           {puedeMarcarAsistencia ? (horaMarcada ? <div className="mt-5 rounded-xl bg-emerald-100 p-4 font-black text-emerald-800">ASISTENCIA MARCADA · {new Date(horaMarcada).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</div> : <button onClick={marcar} disabled={!resultado.valida || !u.fotoPerfil || marcando} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{marcando ? "Marcando..." : !u.fotoPerfil ? "No se puede validar: sin fotografía" : "Rostro verificado — Marcar asistencia"}</button>) : null}
           <button onClick={() => { setResultado(null); setHoraMarcada(null); tokenLeido.current = ""; }} className="mt-3 rounded-xl border px-5 py-3 font-bold">Escanear otra persona</button>
         </div>}
@@ -153,3 +154,12 @@ export default function EscanerQrView() {
 }
 
 function SelectorTalla({ etiqueta, valor, cambiar }: { etiqueta: string; valor: string; cambiar: (valor: string) => void }) { return <label className="text-sm font-bold">{etiqueta}<select value={valor} onChange={(evento) => cambiar(evento.target.value)} className="input-preregistro mt-1"><option value="">Seleccionar</option>{TALLAS.map((talla) => <option key={talla} value={talla}>{talla}</option>)}</select></label>; }
+
+function EstadoPrimeraCuota({ pago }: { pago: IdentidadQr["pago"] }) {
+  const correcta = pago.primeraCuotaVerificada;
+  return <section className={`mt-5 rounded-2xl border p-4 text-left ${correcta ? "border-emerald-300 bg-emerald-50 text-emerald-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-black">Primera cuota</h3><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black">{correcta ? "PAGO VERIFICADO" : pago.envioBaucher ? `BAUCHER ${pago.estadoPrimeraCuota}` : pago.tieneCuota ? "SIN BAUCHER" : "SIN CUOTA"}</span></div>
+    <p className="mt-2 text-sm font-semibold">{correcta ? "Puede registrar o actualizar sus tallas." : pago.envioBaucher ? "El comprobante fue enviado y todavía no está verificado. No se pueden registrar tallas." : pago.tieneCuota ? "Aún no envió el comprobante de su primera cuota." : "No tiene una cuota vinculada. Administración debe regularizarla antes de registrar tallas."}</p>
+    {pago.tieneCuota && <p className="mt-2 text-xs">Pagado: Bs {pago.montoPagado.toFixed(2)}{pago.saldo !== null ? ` · Saldo: Bs ${pago.saldo.toFixed(2)}` : ""}</p>}
+  </section>;
+}
