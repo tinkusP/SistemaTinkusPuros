@@ -12,6 +12,7 @@ import {
 import { Link } from "react-router-dom";
 import { obtenerReporteEjecutivo } from "@/api/ReporteApi";
 import { getPerfilUsuarios } from "@/api/PerfilUsuarioApi";
+import { listarCuotas } from "@/api/CuotaApi";
 import { useAuth } from "@/hooks/useAuth";
 
 const COLORES_ESTADO: Record<string, string> = {
@@ -101,6 +102,12 @@ export default function DashboardView() {
     refetchInterval: 30_000,
     enabled: puedeVerUsuarios,
   });
+  const cuotasQuery = useQuery({
+    queryKey: ["cuotas", "dashboard"],
+    queryFn: listarCuotas,
+    refetchInterval: 30_000,
+    enabled: puedeVerPagos,
+  });
 
   const reporte = reporteQuery.data;
   const resumen = reporte?.resumen ?? {};
@@ -120,7 +127,9 @@ export default function DashboardView() {
     { nombre: "Fraternos", total: resumen.fraternos ?? 0, color: "#2563a8" },
     { nombre: "Guías", total: resumen.guias ?? 0, color: "#7c3aed" },
   ];
-  const cargando = (puedeVerReportes && reporteQuery.isLoading) || (puedeVerUsuarios && usuariosQuery.isLoading);
+  const pagosPorVerificar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.pendientes ?? 0), 0);
+  const pagosVerificados = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.verificados ?? 0), 0);
+  const cargando = (puedeVerReportes && reporteQuery.isLoading) || (puedeVerUsuarios && usuariosQuery.isLoading) || (puedeVerPagos && cuotasQuery.isLoading);
 
   return (
     <div className="space-y-6">
@@ -133,11 +142,11 @@ export default function DashboardView() {
         {reporte && <p className="mt-3 text-xs text-white/75">{reporte.gestion.nombre} · actualizado {new Date(reporte.generadoEn).toLocaleString("es-BO")}</p>}
       </section>
 
-      {((puedeVerReportes && reporteQuery.isError) || (puedeVerUsuarios && usuariosQuery.isError)) && (
+      {((puedeVerReportes && reporteQuery.isError) || (puedeVerUsuarios && usuariosQuery.isError) || (puedeVerPagos && cuotasQuery.isError)) && (
         <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
           <p className="font-black">No se pudo cargar toda la información del dashboard.</p>
-          <p className="mt-1 text-sm">{reporteQuery.error?.message || usuariosQuery.error?.message}</p>
-          <button type="button" onClick={() => { reporteQuery.refetch(); usuariosQuery.refetch(); }} className="mt-3 rounded-xl bg-[#841534] px-4 py-2 text-sm font-bold text-white">Volver a intentar</button>
+          <p className="mt-1 text-sm">{reporteQuery.error?.message || usuariosQuery.error?.message || cuotasQuery.error?.message}</p>
+          <button type="button" onClick={() => { reporteQuery.refetch(); usuariosQuery.refetch(); cuotasQuery.refetch(); }} className="mt-3 rounded-xl bg-[#841534] px-4 py-2 text-sm font-bold text-white">Volver a intentar</button>
         </section>
       )}
 
@@ -150,6 +159,17 @@ export default function DashboardView() {
         {puedeVerPreregistros && puedeVerReportes ? <Tarjeta titulo="Observados" valor={cargando ? "…" : estadosApi.get("OBSERVADO") ?? 0} descripcion="Deben regularizar información" icono="⚠️" ruta="/preregistros" /> : null}
         {puedeVerPreregistros && puedeVerReportes ? <Tarjeta titulo="Lista de espera" valor={cargando ? "…" : estadosApi.get("LISTA_ESPERA") ?? 0} descripcion="Postulantes esperando un cupo" icono="📋" ruta="/preregistros" /> : null}
         {puedeVerPagos && puedeVerReportes ? <Tarjeta titulo="Cobrado verificado" valor={cargando ? "…" : `Bs ${(reporte?.finanzas.montoCobrado ?? 0).toFixed(2)}`} descripcion="Pagos verificados de la gestión" icono="💳" ruta="/cuotas" /> : null}
+      </section> : null}
+
+      {puedeVerPagos ? <section className="overflow-hidden rounded-3xl border border-[#d3c9bb] bg-white shadow-sm dark:bg-[#262022]">
+        <div className="flex flex-col gap-3 bg-[#74122A] px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#e9cf91]">Vista rápida</p><h2 className="mt-1 text-2xl font-black">Pagos</h2><p className="mt-1 text-sm text-white/75">Seguimiento de comprobantes recibidos en la gestión.</p></div>
+          <Link to="/cuotas" className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-[#74122A]">Ver todos los pagos →</Link>
+        </div>
+        <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+          <Link to="/cuotas?revision=PENDIENTE" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">⏳</span><span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-black text-amber-900">REQUIERE ACCIÓN</span></div><p className="mt-4 text-4xl font-black text-amber-900">{cuotasQuery.isLoading ? "…" : pagosPorVerificar}</p><h3 className="mt-1 font-black text-amber-950">Pagos por verificar</h3><p className="mt-1 text-sm text-amber-800">Comprobantes pendientes de revisión administrativa.</p></Link>
+          <Link to="/cuotas?revision=VERIFICADO" className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">✅</span><span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-black text-emerald-900">APROBADOS</span></div><p className="mt-4 text-4xl font-black text-emerald-900">{cuotasQuery.isLoading ? "…" : pagosVerificados}</p><h3 className="mt-1 font-black text-emerald-950">Pagos verificados</h3><p className="mt-1 text-sm text-emerald-800">Comprobantes revisados y aceptados por administración.</p></Link>
+        </div>
       </section> : null}
 
       {puedeVerReportes ? <section className="grid gap-5 xl:grid-cols-2">

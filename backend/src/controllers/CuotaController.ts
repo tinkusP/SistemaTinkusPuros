@@ -99,17 +99,18 @@ export const listarCuotas = async (_req: Request, res: Response) => {
   const preregistrosVisibles = preregistrosActivos.filter((preregistro) => preregistro.usuarioId).map((preregistro) => preregistro._id);
   const cuotas = await Cuota.find({ fechaEliminado: null, preregistroId: { $in: preregistrosVisibles } }).populate(poblar).sort({ fechaCreado: -1 }).lean();
   const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision baucherImagen fechaPago").lean();
-  const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; conBaucher: number; ultimoEnvio?: Date }>();
+  const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; verificados: number; conBaucher: number; ultimoEnvio?: Date }>();
   for (const pago of pagos) {
     const llave = String(pago.cuotaId);
-    const resumen = resumenPorCuota.get(llave) ?? { cantidad: 0, pendientes: 0, conBaucher: 0 };
+    const resumen = resumenPorCuota.get(llave) ?? { cantidad: 0, pendientes: 0, verificados: 0, conBaucher: 0 };
     resumen.cantidad += 1;
     if (pago.estadoRevision === "PENDIENTE") resumen.pendientes += 1;
+    if (pago.estadoRevision === "VERIFICADO") resumen.verificados += 1;
     if (pago.baucherImagen) resumen.conBaucher += 1;
     if (!resumen.ultimoEnvio || pago.fechaPago > resumen.ultimoEnvio) resumen.ultimoEnvio = pago.fechaPago;
     resumenPorCuota.set(llave, resumen);
   }
-  res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, conBaucher: 0 } })) });
+  res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, verificados: 0, conBaucher: 0 } })) });
 };
 export const obtenerMiCuota = async (req: Request, res: Response) => {
   const preregistros = await Preregistro.find({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado");
