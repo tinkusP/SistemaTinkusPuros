@@ -83,7 +83,6 @@ export async function marcarEntradaPorQr(req: Request, res: Response) {
       metodoEntrada: "ADMINISTRACION",
       usuarioRegistroEntrada: req.usuario?._id,
     });
-    await PerfilUsuario.updateOne({ _id: usuario._id }, { $inc: { credencialQrVersion: 1 } });
     await registrarAuditoria(req, {
       accion: "MARCAR_ENTRADA_QR",
       modulo: "ASISTENCIAS",

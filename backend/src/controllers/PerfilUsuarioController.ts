@@ -2685,6 +2685,28 @@ export class PerfilUsuarioController {
     } catch (error) { return responderError(res, error, "No se pudo generar la contraseña temporal"); }
   };
 
+  static desbloquearCuenta = async (req: Request, res: Response) => {
+    try {
+      const id = validarIdParametro(req.params.id);
+      const perfil = await PerfilUsuario.findOne({ _id: id, estado: { $ne: "ELIMINADO" } });
+      if (!perfil) return res.status(404).json({ error: "Usuario no encontrado" });
+
+      const estadoAnterior = perfil.estado;
+      const estabaBloqueada = estadoAnterior === "BLOQUEADO" || Boolean(perfil.bloqueadoHasta) || perfil.intentosFallidos > 0;
+      if (!estabaBloqueada) return res.status(400).json({ error: "La cuenta no se encuentra bloqueada" });
+
+      if (perfil.estado === "BLOQUEADO") perfil.estado = "ACTIVO";
+      perfil.intentosFallidos = 0;
+      perfil.bloqueadoHasta = null;
+      perfil.usuarioEdit = req.usuario?._id ?? undefined;
+      perfil.fechaEdit = new Date();
+      await perfil.save();
+
+      await registrarAuditoria(req, { usuarioId: req.usuario?._id, accion: "DESBLOQUEAR_CUENTA", modulo: "AUTENTICACION", entidad: "PerfilUsuario", entidadId: perfil._id, descripcion: `Se desbloqueó la cuenta de ${perfil.email}`, datosAntes: { estado: estadoAnterior }, datosDespues: { estado: perfil.estado, intentosFallidos: 0, bloqueadoHasta: null } });
+      return res.json({ message: "Cuenta desbloqueada correctamente", perfil: { estado: perfil.estado, intentosFallidos: perfil.intentosFallidos, bloqueadoHasta: perfil.bloqueadoHasta } });
+    } catch (error) { return responderError(res, error, "No se pudo desbloquear la cuenta"); }
+  };
+
   /* =========================================
      OBTENER TODOS LOS USUARIOS NO ELIMINADOS
   ========================================= */

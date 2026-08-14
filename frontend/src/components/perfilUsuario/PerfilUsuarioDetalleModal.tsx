@@ -426,7 +426,7 @@ export default function PerfilUsuarioDetalleModal({
                   <Dato icono={<UserRound />} titulo="Género" valor={perfil.sexo || "No registrado"} />
                   <Dato icono={<CalendarDays />} titulo="Fecha de nacimiento" valor={formatearFechaCivil(perfil.fechaNacimiento)} />
                   <Dato icono={<UserRound />} titulo="Tipo de fraterno" valor={perfil.tipoFraterno} />
-                  <Dato icono={<ShieldCheck />} titulo="Origen" valor={perfil.tipoOrigen} />
+                  <Dato icono={<ShieldCheck />} titulo="Origen" valor={perfil.tipoOrigen === "INTERNO" || perfil.tipoOrigen === "INTERNO_UMSA" ? "Interno" : "Externo"} />
                 </div>
               </Bloque>
             </div>

@@ -1142,6 +1142,16 @@ export async function generarPasswordTemporal(perfilUsuarioId: string) {
   return data as { message: string; passwordTemporal: string; usuario: string };
 }
 
+export async function desbloquearCuenta(perfilUsuarioId: string) {
+  try {
+    const perfilId = ObjectIdSchema.parse(perfilUsuarioId);
+    const { data } = await api.patch(`${PERFIL_URL}/desbloquear/${perfilId}`);
+    return data as { message: string; perfil: { estado: string; intentosFallidos: number; bloqueadoHasta: null } };
+  } catch (error) {
+    throw new Error(obtenerMensajeError(error, "No se pudo desbloquear la cuenta"));
+  }
+}
+
 /* =========================================
    ELIMINAR PERFIL LÓGICAMENTE
 ========================================= */

@@ -16,7 +16,7 @@ export async function miCredencialQr(req: Request, res: Response) {
   const token = jwt.sign(
     { sub: String(req.usuario._id), tipo: "CREDENCIAL_QR", versionQr },
     secreto(),
-    { expiresIn: "24h", issuer: "tinkus-local" },
+    { noTimestamp: true, issuer: "tinkus-local" },
   );
   return res.json({ token, nombre: [req.usuario.nombres, req.usuario.apellidoPaterno, req.usuario.apellidoMaterno].filter(Boolean).join(" "), ci: req.usuario.ci, fotoPerfil: req.usuario.fotoPerfil, versionQr });
 }
@@ -27,7 +27,7 @@ export async function verificarCredencialQr(req: Request, res: Response) {
     if (payload.tipo !== "CREDENCIAL_QR" || !payload.sub || !Number.isInteger(payload.versionQr)) return res.status(400).json({ error: "El QR no corresponde a una credencial válida" });
     const usuario = await PerfilUsuario.findOne({ _id: payload.sub, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci fotoPerfil email estado roles credencialQrVersion").populate("roles", "nombre codigo");
     if (!usuario) return res.status(404).json({ error: "El usuario del QR ya no existe" });
-    if (Number(payload.versionQr) !== Number(usuario.credencialQrVersion ?? 0)) return res.status(409).json({ error: "Este QR ya fue utilizado. Solicita a la persona que muestre su nuevo código QR" });
+    if (Number(payload.versionQr) !== Number(usuario.credencialQrVersion ?? 0)) return res.status(409).json({ error: "Esta credencial QR fue revocada" });
     const fraterno = await Fraterno.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id numeroFraterno estado");
     const talla = await TallaFraterno.findOne({ $or: [{ usuarioId: usuario._id }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] }).select("tallaPolera tallaChamarra fechaActualizado");
     const preregistro = await Preregistro.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id numeroPreRegistro estado");

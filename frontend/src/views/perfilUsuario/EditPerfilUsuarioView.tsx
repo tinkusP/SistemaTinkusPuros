@@ -45,12 +45,10 @@ import {
   updatePerfilUsuario,
   autorizarEdicionPerfil,
   generarPasswordTemporal,
+  desbloquearCuenta,
 } from "@/api/PerfilUsuarioApi";
 
-import type {
-  PerfilUsuarioForm,
-  TipoOrigen,
-} from "@/types/PerfilUsuarioType";
+import type { TipoOrigen } from "@/types/PerfilUsuarioType";
 import { CARRERAS_FCPN, FACULTAD_FCPN, OPCIONES_ORIGEN_ACADEMICO, normalizarOrigenAcademico } from "@/constants/origenAcademico";
 
 type EstadoEditable =
@@ -132,7 +130,10 @@ type FormularioEdicion = {
 
   tipoOrigen:
     | "INTERNO"
-    | "EXTERNO";
+    | "EXTERNO"
+    | "INTERNO_UMSA"
+    | "EXTERNO_UMSA"
+    | "EXTERNO_NO_UMSA";
 
   tipoFraterno:
     | "NUEVO"
@@ -524,10 +525,7 @@ export default function EditarPerfilUsuarioAdminView() {
         "",
 
       tipoOrigen:
-        perfil.tipoOrigen ===
-        "EXTERNO"
-          ? "EXTERNO"
-          : "INTERNO",
+        normalizarOrigenAcademico(perfil.tipoOrigen),
 
       tipoFraterno:
         perfil.tipoFraterno ===
@@ -737,6 +735,7 @@ export default function EditarPerfilUsuarioAdminView() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo habilitar la edición"),
   });
   const passwordTemporalMutation = useMutation({ mutationFn: () => generarPasswordTemporal(id!), onSuccess: (respuesta) => { setPasswordTemporal(respuesta.passwordTemporal); setModalPasswordAbierto(false); toast.success(respuesta.message); }, onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo generar la contraseña temporal") });
+  const desbloquearMutation = useMutation({ mutationFn: () => desbloquearCuenta(id!), onSuccess: async (respuesta) => { toast.success(respuesta.message); setFormulario(actual => ({ ...actual, estado: respuesta.perfil.estado as EstadoEditable })); await perfilQuery.refetch(); }, onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo desbloquear la cuenta") });
 
   const validarFormulario =
     (): string | null => {
@@ -1568,6 +1567,8 @@ export default function EditarPerfilUsuarioAdminView() {
                 },
               ]}
             />
+
+            {(perfilQuery.data.estado === "BLOQUEADO" || Boolean(perfilQuery.data.bloqueadoHasta) || perfilQuery.data.intentosFallidos > 0) && <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4"><p className="font-black text-amber-900">Cuenta bloqueada</p><p className="mt-1 text-sm text-amber-800">Intentos fallidos: {perfilQuery.data.intentosFallidos}. Al desbloquear se restablecerán los intentos y el acceso temporal.</p><button type="button" disabled={desbloquearMutation.isPending} onClick={() => desbloquearMutation.mutate()} className="mt-3 w-full rounded-xl bg-amber-700 px-4 py-3 font-bold text-white disabled:opacity-50">{desbloquearMutation.isPending ? "Desbloqueando..." : "Desbloquear cuenta"}</button></div>}
 
             <Interruptor
               titulo="Correo verificado"

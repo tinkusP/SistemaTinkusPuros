@@ -1001,6 +1001,15 @@ router.post(
   PerfilUsuarioController.generarPasswordTemporal,
 );
 
+router.patch(
+  "/desbloquear/:id",
+  authenticate,
+  soloAdministracion,
+  param("id").isMongoId().withMessage("ID de usuario no válido"),
+  handleInputErrors,
+  PerfilUsuarioController.desbloquearCuenta,
+);
+
 /**
  * @openapi
  * /api/perfilusuario/{id}:
