@@ -125,11 +125,14 @@ export const listarPagosAdmin = async (_req: Request, res: Response) => {
 export const asignarQrSaldo = async (req: Request, res: Response) => {
   const idsEntrada = typeof req.body.cuotaIds === "string" ? JSON.parse(req.body.cuotaIds) : req.body.cuotaIds;
   const cuotaIds = Array.isArray(idsEntrada) ? [...new Set(idsEntrada.map(String))] : [];
-  const monto = redondear(Number(req.body.monto));
   if (!req.file || !cuotaIds.length) return res.status(400).json({ error: "Selecciona una cuota y una imagen QR" });
-  if (!(monto > 0)) { await fs.rm(req.file.path, { force: true }); return res.status(400).json({ error: "Registra un importe válido para el QR especial" }); }
   const cuotas = await Cuota.find({ _id: { $in: cuotaIds }, saldo: { $gt: 0 }, fechaEliminado: null });
   if (!cuotas.length) { await fs.rm(req.file.path, { force: true }); return res.status(404).json({ error: "No existen cuotas seleccionadas con saldo pendiente" }); }
+  // Compatibilidad con la interfaz anterior: cuando se selecciona una sola
+  // persona y aún no llega el campo monto, el QR cubre su saldo exacto.
+  const montoIngresado = Number(req.body.monto);
+  const monto = redondear(montoIngresado > 0 ? montoIngresado : cuotas.length === 1 ? cuotas[0].saldo : 0);
+  if (!(monto > 0)) { await fs.rm(req.file.path, { force: true }); return res.status(400).json({ error: "Registra un importe válido para el QR especial" }); }
   if (cuotas.some((cuota) => monto > cuota.saldo)) { await fs.rm(req.file.path, { force: true }); return res.status(409).json({ error: `El importe del QR no puede superar el saldo pendiente de Bs ${Math.min(...cuotas.map((cuota) => cuota.saldo)).toFixed(2)}` }); }
   const carpeta = path.resolve(process.cwd(), "public", "uploads", "qr-pagos", "saldos");
   await fs.mkdir(carpeta, { recursive: true });
