@@ -73,8 +73,11 @@ export async function obtenerConfiguracion(req: Request, res: Response) {
     else {
       const verificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
       const origen = cuota.tipoOrigenTarifa || "INTERNO"; const plan = String(cuota.numeroCuotasElegidas) as Plan;
-      const actual = cuota.qrSaldoPersonal || objeto.qrPlanes?.[origen]?.[plan]?.[verificados];
-      objeto.qrPlanes = actual ? { [origen]: { [plan]: Array.from({ length: verificados + 1 }, (_, i) => i === verificados ? actual : undefined) } } : {};
+      const indiceActual = cuota.qrSaldoPersonal
+        ? Math.min(verificados, cuota.numeroCuotasElegidas - 1)
+        : verificados;
+      const actual = cuota.qrSaldoPersonal || objeto.qrPlanes?.[origen]?.[plan]?.[indiceActual];
+      objeto.qrPlanes = actual ? { [origen]: { [plan]: Array.from({ length: cuota.numeroCuotasElegidas }, (_, i) => i === indiceActual ? actual : undefined) } } : {};
     }
   }
   return res.json({ configuracion: objeto, terminosAceptados: Boolean(aceptada), aceptacion: aceptada });
