@@ -5,7 +5,7 @@ import { sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaServ
 
 export async function habilitarCuotasMasivas(req: Request, res: Response) {
   try {
-    const tarifaInterno = Number(req.body.tarifaInterno ?? 750);
+    const tarifaInterno = Number(req.body.tarifaInterno ?? 770);
     const tarifaExterno = Number(req.body.tarifaExterno ?? 850);
     const fechaVencimiento = req.body.fechaVencimiento || undefined;
     if (tarifaInterno <= 0 || tarifaExterno <= 0) return res.status(400).json({ error: "Las tarifas deben ser mayores a cero" });

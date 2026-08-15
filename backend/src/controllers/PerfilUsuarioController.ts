@@ -2504,14 +2504,10 @@ export class PerfilUsuarioController {
       }
 
       const ahora = new Date();
-
-      if (perfil.bloqueadoHasta && perfil.bloqueadoHasta > ahora) {
-        return res.status(403).json({
-          codigo: "BLOQUEO_TEMPORAL",
-          error: "La cuenta está bloqueada temporalmente",
-          bloqueadoHasta: perfil.bloqueadoHasta,
-        });
-      }
+      // Compatibilidad con bloqueos temporales creados por versiones
+      // anteriores: se limpian al siguiente intento de inicio de sesión.
+      perfil.bloqueadoHasta = null;
+      perfil.intentosFallidos = 0;
 
       const passwordCorrecto = await bcrypt.compare(
         passwordIngresado,
@@ -2520,11 +2516,6 @@ export class PerfilUsuarioController {
 
       if (!passwordCorrecto) {
         perfil.intentosFallidos += 1;
-
-        if (perfil.intentosFallidos >= 5) {
-          perfil.bloqueadoHasta = new Date(Date.now() + 15 * 60 * 1000);
-        }
-
         await perfil.save();
 
         return res.status(401).json({
@@ -2683,28 +2674,6 @@ export class PerfilUsuarioController {
       await registrarAuditoria(req, { usuarioId: req.usuario?._id, accion: "RESTABLECER_PASSWORD", modulo: "AUTENTICACION", entidad: "PerfilUsuario", entidadId: perfil._id, descripcion: `El administrador generó una contraseña temporal para ${perfil.email}` });
       return res.json({ message: "Contraseña temporal generada", passwordTemporal, usuario: `${perfil.nombres} ${perfil.apellidoPaterno}`.trim() });
     } catch (error) { return responderError(res, error, "No se pudo generar la contraseña temporal"); }
-  };
-
-  static desbloquearCuenta = async (req: Request, res: Response) => {
-    try {
-      const id = validarIdParametro(req.params.id);
-      const perfil = await PerfilUsuario.findOne({ _id: id, estado: { $ne: "ELIMINADO" } });
-      if (!perfil) return res.status(404).json({ error: "Usuario no encontrado" });
-
-      const estadoAnterior = perfil.estado;
-      const estabaBloqueada = estadoAnterior === "BLOQUEADO" || Boolean(perfil.bloqueadoHasta) || perfil.intentosFallidos > 0;
-      if (!estabaBloqueada) return res.status(400).json({ error: "La cuenta no se encuentra bloqueada" });
-
-      if (perfil.estado === "BLOQUEADO") perfil.estado = "ACTIVO";
-      perfil.intentosFallidos = 0;
-      perfil.bloqueadoHasta = null;
-      perfil.usuarioEdit = req.usuario?._id ?? undefined;
-      perfil.fechaEdit = new Date();
-      await perfil.save();
-
-      await registrarAuditoria(req, { usuarioId: req.usuario?._id, accion: "DESBLOQUEAR_CUENTA", modulo: "AUTENTICACION", entidad: "PerfilUsuario", entidadId: perfil._id, descripcion: `Se desbloqueó la cuenta de ${perfil.email}`, datosAntes: { estado: estadoAnterior }, datosDespues: { estado: perfil.estado, intentosFallidos: 0, bloqueadoHasta: null } });
-      return res.json({ message: "Cuenta desbloqueada correctamente", perfil: { estado: perfil.estado, intentosFallidos: perfil.intentosFallidos, bloqueadoHasta: perfil.bloqueadoHasta } });
-    } catch (error) { return responderError(res, error, "No se pudo desbloquear la cuenta"); }
   };
 
   /* =========================================

@@ -376,12 +376,6 @@ export default function PerfilUsuarioView() {
               "PENDIENTE",
           ).length,
 
-        bloqueados:
-          perfiles.filter(
-            (perfil) =>
-              perfil.estado ===
-              "BLOQUEADO",
-          ).length,
       }),
       [
         perfiles,
@@ -540,7 +534,7 @@ export default function PerfilUsuarioView() {
 
       {/* CARDS */}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-3">
         <Card
           titulo="Total"
           valor={
@@ -562,12 +556,6 @@ export default function PerfilUsuarioView() {
           }
         />
 
-        <Card
-          titulo="Bloqueados"
-          valor={
-            estadisticas.bloqueados
-          }
-        />
       </section>
 
       <section className="rounded-3xl border border-[#d9c8aa] bg-[#fffaf0] p-5">

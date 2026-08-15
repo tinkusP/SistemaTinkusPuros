@@ -397,7 +397,7 @@ export default function PerfilUsuarioDetalleModal({
                 </Bloque>
                 <Bloque titulo="Estado de la cuenta" icono={<ShieldCheck />}>
                   <select value={estadoSeleccionado} onChange={(event) => setEstadoSeleccionado(event.target.value as typeof estadoSeleccionado)} className="w-full rounded-xl border border-[#d8c7af] bg-white px-4 py-3 font-bold text-slate-800">
-                    {(["PENDIENTE", "ACTIVO", "BLOQUEADO", "INACTIVO"] as const).map((estado) => <option key={estado} value={estado}>{estado}</option>)}
+                    {(["PENDIENTE", "ACTIVO", "INACTIVO"] as const).map((estado) => <option key={estado} value={estado}>{estado}</option>)}
                   </select>
                   <button type="button" onClick={() => guardarEstado.mutate()} disabled={guardarEstado.isPending || estadoSeleccionado === perfil.estado} className="mt-3 w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{guardarEstado.isPending ? "Guardando..." : estadoSeleccionado === "ACTIVO" && perfil.estado !== "ACTIVO" ? "Activar y guardar" : "Guardar estado"}</button>
                   {perfil.estado === "ACTIVO" && preregistroConsulta.isLoading && <p className="mt-3 rounded-xl bg-slate-100 p-3 text-center text-sm font-semibold text-slate-600">Verificando preregistro...</p>}
@@ -812,26 +812,6 @@ export default function PerfilUsuarioDetalleModal({
                     ? "Requerido"
                     : "No requerido"
                 }
-              />
-
-              <Dato
-                icono={
-                  <ShieldCheck />
-                }
-                titulo="Intentos fallidos"
-                valor={String(
-                  perfil.intentosFallidos,
-                )}
-              />
-
-              <Dato
-                icono={
-                  <CalendarDays />
-                }
-                titulo="Bloqueado hasta"
-                valor={formatearFecha(
-                  perfil.bloqueadoHasta,
-                )}
               />
 
               <Dato

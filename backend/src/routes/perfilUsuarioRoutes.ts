@@ -20,7 +20,6 @@ const router = Router();
 const ESTADOS_EDITABLES = [
   "PENDIENTE",
   "ACTIVO",
-  "BLOQUEADO",
   "INACTIVO",
 ] as const;
 
@@ -488,7 +487,7 @@ const validacionesActualizacion = [
     .optional()
     .isIn([...ESTADOS_EDITABLES])
     .withMessage(
-      "El estado debe ser PENDIENTE, ACTIVO, BLOQUEADO o INACTIVO. Para eliminar use DELETE.",
+      "El estado debe ser PENDIENTE, ACTIVO o INACTIVO. Para eliminar use DELETE.",
     ),
 
   body("emailVerificado")
@@ -999,15 +998,6 @@ router.post(
   param("id").isMongoId().withMessage("ID de usuario no válido"),
   handleInputErrors,
   PerfilUsuarioController.generarPasswordTemporal,
-);
-
-router.patch(
-  "/desbloquear/:id",
-  authenticate,
-  soloAdministracion,
-  param("id").isMongoId().withMessage("ID de usuario no válido"),
-  handleInputErrors,
-  PerfilUsuarioController.desbloquearCuenta,
 );
 
 /**

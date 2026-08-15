@@ -73,7 +73,7 @@ export async function obtenerConfiguracion(req: Request, res: Response) {
     else {
       const verificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
       const origen = cuota.tipoOrigenTarifa || "INTERNO"; const plan = String(cuota.numeroCuotasElegidas) as Plan;
-      const actual = objeto.qrPlanes?.[origen]?.[plan]?.[verificados];
+      const actual = cuota.qrSaldoPersonal || objeto.qrPlanes?.[origen]?.[plan]?.[verificados];
       objeto.qrPlanes = actual ? { [origen]: { [plan]: Array.from({ length: verificados + 1 }, (_, i) => i === verificados ? actual : undefined) } } : {};
     }
   }

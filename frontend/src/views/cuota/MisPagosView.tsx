@@ -32,7 +32,7 @@ export default function MisPagosView() {
   const pagosVerificados = q.data?.pagos.filter((pago) => pago.estadoRevision === "VERIFICADO").length ?? 0;
   const pagoPendiente = q.data?.pagos.some((pago) => pago.estadoRevision === "PENDIENTE") ?? false;
   const numeroCuotas = cuota?.numeroCuotasElegidas;
-  const montoActual = cuota && numeroCuotas ? calcularMontoActual(cuota.montoTotal, cuota.saldo, numeroCuotas, pagosVerificados) : 0;
+  const montoActual = cuota && numeroCuotas ? (cuota.qrSaldoPersonal ? cuota.saldo : calcularMontoActual(cuota.montoTotal, cuota.saldo, numeroCuotas, pagosVerificados)) : 0;
   const numeroPagoActual = Math.min(pagosVerificados + 1, numeroCuotas ?? 1);
   const configuracion = configQr.data?.configuracion;
   const origen = cuota?.tipoOrigenTarifa ?? (cuota?.montoTotal === 850 ? "EXTERNO" : "INTERNO");

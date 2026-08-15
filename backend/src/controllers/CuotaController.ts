@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import fs from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
 import Cuota from "../models/Cuota";
 import DetalleCuota from "../models/DetalleCuota";
 import Preregistro from "../models/Preregistro";
@@ -13,6 +15,7 @@ import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
 import Fraterno from "../models/Fraterno";
 import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
 import { sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
+import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil tipoOrigen" }, { path: "gestionId", select: "nombre anio" }] };
 const esAdministrador = usuarioEsAdministrador;
@@ -28,7 +31,7 @@ async function programarSiguientePago(cuotaId: string) {
   if (!cuota || cuota.saldo <= 0 || !cuota.numeroCuotasElegidas || cuota.numeroCuotasElegidas === 1) return;
   const pagosVerificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
   if (pagosVerificados >= cuota.numeroCuotasElegidas) return;
-  const dias = cuota.numeroCuotasElegidas === 3 ? 7 : 14;
+  const dias = 7;
   cuota.fechaVencimiento = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
   await cuota.save();
   const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
@@ -111,6 +114,33 @@ export const listarCuotas = async (_req: Request, res: Response) => {
     resumenPorCuota.set(llave, resumen);
   }
   res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, verificados: 0, conBaucher: 0 } })) });
+};
+export const listarPagosAdmin = async (_req: Request, res: Response) => {
+  const pagos = await DetalleCuota.find({ fechaEliminado: null })
+    .populate({ path: "cuotaId", select: "preregistroId tipoOrigenTarifa montoTotal montoPagado saldo", populate: { path: "preregistroId", select: "numeroPreRegistro usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci telefono" } } })
+    .sort({ fechaCreado: -1 })
+    .lean();
+  return res.json({ pagos });
+};
+export const asignarQrSaldo = async (req: Request, res: Response) => {
+  const idsEntrada = typeof req.body.cuotaIds === "string" ? JSON.parse(req.body.cuotaIds) : req.body.cuotaIds;
+  const cuotaIds = Array.isArray(idsEntrada) ? [...new Set(idsEntrada.map(String))] : [];
+  if (!req.file || !cuotaIds.length) return res.status(400).json({ error: "Selecciona al menos una cuota y una imagen QR" });
+  const cuotas = await Cuota.find({ _id: { $in: cuotaIds }, saldo: { $gt: 0 }, fechaEliminado: null });
+  if (!cuotas.length) { await fs.rm(req.file.path, { force: true }); return res.status(404).json({ error: "No existen cuotas seleccionadas con saldo pendiente" }); }
+  const saldos = new Set(cuotas.map((cuota) => cuota.saldo.toFixed(2)));
+  if (saldos.size > 1) { await fs.rm(req.file.path, { force: true }); return res.status(409).json({ error: "Para asignar un mismo QR masivamente, todos los usuarios seleccionados deben tener el mismo saldo" }); }
+  const carpeta = path.resolve(process.cwd(), "public", "uploads", "qr-pagos", "saldos");
+  await fs.mkdir(carpeta, { recursive: true });
+  const nombre = `QR_SALDO_${Date.now()}.webp`;
+  const salida = path.join(carpeta, nombre);
+  await sharp(req.file.path).rotate().resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true }).webp({ quality: 90 }).toFile(salida);
+  await fs.rm(req.file.path, { force: true });
+  const ruta = `/uploads/qr-pagos/saldos/${nombre}`;
+  await subirArchivoProcesado(ruta, salida, "image/webp");
+  await Cuota.updateMany({ _id: { $in: cuotas.map((cuota) => cuota._id) } }, { $set: { qrSaldoPersonal: ruta, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } });
+  await registrarAuditoria(req, { accion: "ASIGNAR_QR_SALDO", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se asignó un QR especial de saldo a ${cuotas.length} cuota(s)`, datosDespues: { cuotaIds: cuotas.map((cuota) => cuota._id), ruta } });
+  return res.json({ message: `QR de Bs ${cuotas[0].saldo.toFixed(2)} asignado a ${cuotas.length} usuario(s)`, actualizadas: cuotas.length, ruta });
 };
 export const obtenerMiCuota = async (req: Request, res: Response) => {
   const preregistros = await Preregistro.find({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado");

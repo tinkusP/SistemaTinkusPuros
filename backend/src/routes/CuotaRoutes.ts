@@ -3,9 +3,10 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { crearCuota, detalleCuota, editarPlanCuotasAdmin, elegirPlanCuotas, eliminarPago, listarCuotas, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
+import { asignarQrSaldo, crearCuota, detalleCuota, editarPlanCuotasAdmin, elegirPlanCuotas, eliminarPago, listarCuotas, listarPagosAdmin, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
+import { uploadQrPago } from "../middleware/uploadQrPago";
 const router = Router(); const id = param("id").isMongoId();
 /** @openapi
  * /api/cuotas:
@@ -13,6 +14,8 @@ const router = Router(); const id = param("id").isMongoId();
  *   post: { tags: [Cuotas], summary: Crear cuota para un preregistro, security: [{ bearerAuth: [] }], responses: { 201: { description: Creada }, 409: { description: Ya existe } } }
  */
 router.get("/", authenticate, soloAdministracion, listarCuotas);
+router.get("/pagos/todos", authenticate, soloAdministracion, listarPagosAdmin);
+router.post("/qr-saldo", authenticate, soloAdministracion, uploadQrPago.single("qrSaldo"), asignarQrSaldo);
 /** @openapi
  * /api/cuotas/habilitar-masivo:
  *   post:

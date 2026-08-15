@@ -79,6 +79,11 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "👥",
   },
   {
+    nombre: "Pagos",
+    ruta: "/cuotas",
+    icono: "💳",
+  },
+  {
     nombre: "Tokens de registro",
     ruta: "/tokens-registro",
     icono: "🔐",

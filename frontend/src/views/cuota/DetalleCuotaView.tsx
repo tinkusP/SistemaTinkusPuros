@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -18,6 +18,7 @@ export default function DetalleCuotaView() {
   const [prorroga, setProrroga] = useState({ horas: 24, motivo: "" });
   const [planElegido, setPlanElegido] = useState<1 | 2 | 3>(1);
   const q = useQuery({ queryKey: ["cuota", id], queryFn: () => obtenerCuota(id) }); const refrescar = () => qc.invalidateQueries({ queryKey: ["cuota", id] });
+  useEffect(()=>{if(q.data?.cuota.numeroCuotasElegidas)setPlanElegido(q.data.cuota.numeroCuotasElegidas)},[q.data?.cuota.numeroCuotasElegidas]);
   const registrar = useMutation({ mutationFn: () => registrarPago(id, form), onSuccess: async () => { toast.success("Pago enviado para revisión"); setForm({ ...form, monto: 0, montoEfectivo: 0, montoQr: 0, baucher: null }); await refrescar(); }, onError: (e) => toast.error(e instanceof Error ? e.message : "Error") });
   const ampliar = useMutation({ mutationFn: () => prorrogarPrimeraCuota(id, prorroga), onSuccess: async (respuesta) => { toast.success(respuesta.message); setProrroga((previa) => ({ ...previa, motivo: "" })); await refrescar(); }, onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo ampliar el plazo") });
   const editarPlan = useMutation({ mutationFn: () => editarPlanCuotasAdmin(id, planElegido), onSuccess: async () => { toast.success("Plan de cuotas actualizado"); await refrescar(); }, onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo editar el plan") });
