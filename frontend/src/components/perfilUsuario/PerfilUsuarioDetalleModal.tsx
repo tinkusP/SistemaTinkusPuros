@@ -27,6 +27,7 @@ import { habilitarGuiaPorUsuario } from "@/api/GuiaApi";
 import AsignarEstadoPreregistroModal from "@/components/preregistro/AsignarEstadoPreregistroModal";
 import { obtenerPreregistros } from "@/api/PreregistroApi";
 import { formatearFechaCivil } from "@/utils/fechaCivil";
+import { editarPlanCuotasAdmin, listarCuotas } from "@/api/CuotaApi";
 
 import {
   esGestionPoblada,
@@ -237,6 +238,7 @@ export default function PerfilUsuarioDetalleModal({
   const [aprobacionVisible, setAprobacionVisible] = useState(false);
   const [decisionPreregistroVisible, setDecisionPreregistroVisible] = useState(false);
   const [preregistroAprobado, setPreregistroAprobado] = useState(false);
+  const [planCuotas, setPlanCuotas] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
     if (perfil) {
@@ -284,6 +286,34 @@ export default function PerfilUsuarioDetalleModal({
     queryFn: () => obtenerPreregistros({ usuarioId: perfil!._id, limite: 100 }),
     enabled: Boolean(abierto && perfil?._id && perfil?.estado === "ACTIVO"),
     retry: false,
+  });
+
+  const cuotasConsulta = useQuery({
+    queryKey: ["cuotas"],
+    queryFn: listarCuotas,
+    enabled: Boolean(abierto && perfil?._id),
+    retry: false,
+  });
+  const cuotaPerfil = cuotasConsulta.data?.find((cuota) => cuota.preregistroId.usuarioId?._id === perfil?._id);
+  const planActual = cuotaPerfil?.numeroCuotasElegidas;
+
+  useEffect(() => {
+    setPlanCuotas(planActual ?? 1);
+  }, [planActual, perfil?._id]);
+
+  const actualizarPlan = useMutation({
+    mutationFn: () => {
+      if (!cuotaPerfil) throw new Error("El usuario todavía no tiene una cuota vinculada");
+      return editarPlanCuotasAdmin(cuotaPerfil._id, planCuotas);
+    },
+    onSuccess: async () => {
+      toast.success(`Plan actualizado a ${planCuotas} cuota${planCuotas === 1 ? "" : "s"}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cuotas"] }),
+        queryClient.invalidateQueries({ queryKey: ["mi-cuota"] }),
+      ]);
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo actualizar el plan de cuotas"),
   });
 
   if (
@@ -414,6 +444,13 @@ export default function PerfilUsuarioDetalleModal({
                     {preregistroVigente.observacion && <div className="mt-3 rounded-lg bg-amber-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Observación</p><p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{preregistroVigente.observacion}</p>{numeroWhatsApp&&<a href={`https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Hola ${nombreCompleto(perfil)},\n\nTu preregistro tiene la siguiente observación:\n${preregistroVigente.observacion}\n\nPor favor corrige tus datos o documentos para continuar.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-lg bg-[#25D366] px-3 py-2 text-xs font-black text-white">Enviar observación por WhatsApp</a>}</div>}
                   </div>}
                   {!preregistroConsulta.isLoading && !preregistroVigente && <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-center text-sm text-slate-500">No existe un preregistro vigente.</p>}
+                </Bloque>
+                <Bloque titulo="Plan de pagos" icono={<CreditCard />}>
+                  {cuotasConsulta.isLoading ? <p className="rounded-xl bg-slate-100 p-3 text-center text-sm font-semibold text-slate-600">Cargando cuota...</p> : cuotaPerfil ? <div className="space-y-3">
+                    <p className="text-sm text-slate-600">Plan actual: <strong>{planActual ? `${planActual} cuota${planActual === 1 ? "" : "s"}` : "sin elegir"}</strong>. Los pagos y comprobantes registrados se conservarán.</p>
+                    <label className="block"><span className="mb-1 block text-xs font-bold uppercase text-slate-500">Cantidad de cuotas</span><select value={planCuotas} onChange={(event) => setPlanCuotas(Number(event.target.value) as 1 | 2 | 3)} className="w-full rounded-xl border border-[#d8c7af] bg-white px-4 py-3 font-bold text-slate-800"><option value={1}>1 cuota</option><option value={2}>2 cuotas</option><option value={3}>3 cuotas</option></select></label>
+                    <button type="button" onClick={() => actualizarPlan.mutate()} disabled={actualizarPlan.isPending || planActual === planCuotas} className="w-full rounded-xl bg-[#841534] px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{actualizarPlan.isPending ? "Guardando..." : "Actualizar plan de pagos"}</button>
+                  </div> : <p className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-3 text-center text-sm font-semibold text-amber-900">Primero debe existir un preregistro aprobado con una cuota vinculada.</p>}
                 </Bloque>
               </section>
 
