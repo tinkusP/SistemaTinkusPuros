@@ -125,11 +125,12 @@ export const listarPagosAdmin = async (_req: Request, res: Response) => {
 export const asignarQrSaldo = async (req: Request, res: Response) => {
   const idsEntrada = typeof req.body.cuotaIds === "string" ? JSON.parse(req.body.cuotaIds) : req.body.cuotaIds;
   const cuotaIds = Array.isArray(idsEntrada) ? [...new Set(idsEntrada.map(String))] : [];
-  if (!req.file || !cuotaIds.length) return res.status(400).json({ error: "Selecciona al menos una cuota y una imagen QR" });
+  const monto = redondear(Number(req.body.monto));
+  if (!req.file || !cuotaIds.length) return res.status(400).json({ error: "Selecciona una cuota y una imagen QR" });
+  if (!(monto > 0)) { await fs.rm(req.file.path, { force: true }); return res.status(400).json({ error: "Registra un importe válido para el QR especial" }); }
   const cuotas = await Cuota.find({ _id: { $in: cuotaIds }, saldo: { $gt: 0 }, fechaEliminado: null });
   if (!cuotas.length) { await fs.rm(req.file.path, { force: true }); return res.status(404).json({ error: "No existen cuotas seleccionadas con saldo pendiente" }); }
-  const saldos = new Set(cuotas.map((cuota) => cuota.saldo.toFixed(2)));
-  if (saldos.size > 1) { await fs.rm(req.file.path, { force: true }); return res.status(409).json({ error: "Para asignar un mismo QR masivamente, todos los usuarios seleccionados deben tener el mismo saldo" }); }
+  if (cuotas.some((cuota) => monto > cuota.saldo)) { await fs.rm(req.file.path, { force: true }); return res.status(409).json({ error: `El importe del QR no puede superar el saldo pendiente de Bs ${Math.min(...cuotas.map((cuota) => cuota.saldo)).toFixed(2)}` }); }
   const carpeta = path.resolve(process.cwd(), "public", "uploads", "qr-pagos", "saldos");
   await fs.mkdir(carpeta, { recursive: true });
   const nombre = `QR_SALDO_${Date.now()}.webp`;
@@ -138,9 +139,9 @@ export const asignarQrSaldo = async (req: Request, res: Response) => {
   await fs.rm(req.file.path, { force: true });
   const ruta = `/uploads/qr-pagos/saldos/${nombre}`;
   await subirArchivoProcesado(ruta, salida, "image/webp");
-  await Cuota.updateMany({ _id: { $in: cuotas.map((cuota) => cuota._id) } }, { $set: { qrSaldoPersonal: ruta, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } });
-  await registrarAuditoria(req, { accion: "ASIGNAR_QR_SALDO", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se asignó un QR especial de saldo a ${cuotas.length} cuota(s)`, datosDespues: { cuotaIds: cuotas.map((cuota) => cuota._id), ruta } });
-  return res.json({ message: `QR de Bs ${cuotas[0].saldo.toFixed(2)} asignado a ${cuotas.length} usuario(s)`, actualizadas: cuotas.length, ruta });
+  await Cuota.updateMany({ _id: { $in: cuotas.map((cuota) => cuota._id) } }, { $set: { qrSaldoPersonal: ruta, montoQrSaldoPersonal: monto, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } });
+  await registrarAuditoria(req, { accion: "ASIGNAR_QR_SALDO", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se asignó un QR especial de Bs ${monto.toFixed(2)} a ${cuotas.length} cuota(s)`, datosDespues: { cuotaIds: cuotas.map((cuota) => cuota._id), monto, ruta } });
+  return res.json({ message: `QR de Bs ${monto.toFixed(2)} asignado correctamente`, actualizadas: cuotas.length, ruta });
 };
 export const obtenerMiCuota = async (req: Request, res: Response) => {
   const preregistroVigente = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado aprobado observacion").sort({ fechaRegistro: -1 });
@@ -307,7 +308,9 @@ export const registrarPago = async (req: Request, res: Response) => {
     if (pagoPendiente) return res.status(409).json({ error: "Ya existe un pago pendiente de revisión" });
     if (!cuota.numeroCuotasElegidas) return res.status(409).json({ error: "Primero debes elegir si pagarás en 1, 2 o 3 cuotas" });
     const pagosVerificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
-    const montoEsperado = montoCuotaActual(cuota.montoTotal, cuota.saldo, cuota.numeroCuotasElegidas, pagosVerificados);
+    const montoEsperado = cuota.qrSaldoPersonal
+      ? Math.min(cuota.montoQrSaldoPersonal ?? cuota.saldo, cuota.saldo)
+      : montoCuotaActual(cuota.montoTotal, cuota.saldo, cuota.numeroCuotasElegidas, pagosVerificados);
     if (Math.abs(montoEsperado - montoSolicitado) >= 0.01) return res.status(400).json({ error: `El monto de la cuota actual debe ser Bs ${montoEsperado.toFixed(2)}` });
     const numeroPago = await DetalleCuota.countDocuments({ cuotaId: cuota._id });
     const pago = await DetalleCuota.create({ cuotaId: cuota._id, numeroPago: numeroPago + 1, monto: montoSolicitado, metodoPago: "QR", montoEfectivo: 0, montoQr: montoSolicitado, baucherImagen: rutaComprobante(req.file), nombrePagador: req.body.nombrePagador, fechaPago: req.body.fechaPago, usuarioCreador: req.usuario?._id });
@@ -341,6 +344,14 @@ export const revisarPago = async (req: Request, res: Response) => {
   }
   const pago = await DetalleCuota.findByIdAndUpdate(antes._id, { $set: { estadoRevision: req.body.estadoRevision, observacionRevision: req.body.observacionRevision, respaldoAdminImagen: respaldo, fechaRevision: new Date(), usuarioRevisor: req.usuario?._id } }, { new: true, runValidators: true });
   await recalcular(String(req.params.id));
+  if (req.body.estadoRevision === "VERIFICADO" && antes.estadoRevision !== "VERIFICADO") {
+    const cuotaActualizada = await Cuota.findById(req.params.id);
+    if (cuotaActualizada?.qrSaldoPersonal && cuotaActualizada.montoQrSaldoPersonal && Math.abs(cuotaActualizada.montoQrSaldoPersonal - antes.monto) < 0.01) {
+      cuotaActualizada.qrSaldoPersonal = undefined;
+      cuotaActualizada.montoQrSaldoPersonal = undefined;
+      await cuotaActualizada.save();
+    }
+  }
   if (req.body.estadoRevision === "VERIFICADO" && antes.estadoRevision !== "VERIFICADO") await programarSiguientePago(String(req.params.id));
   if (pago) await registrarAuditoria(req, { accion: "REVISAR_PAGO", modulo: "CUOTAS", entidad: "DetalleCuota", entidadId: pago._id, descripcion: `Pago marcado como ${pago.estadoRevision}`, datosAntes: antes, datosDespues: pago.toObject() });
   return res.json({ message: "Pago revisado", pago });

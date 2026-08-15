@@ -62,7 +62,10 @@ export async function sincronizarCuotaPreregistro(
   cuota.tarifaAplicada = tarifaAplicada;
   cuota.montoTotal = tarifaAplicada;
   cuota.primeraCuotaMonto = Math.min(configuracion.primeraCuota || 300, tarifaAplicada);
-  if (tipoAnterior !== tipoOrigenTarifa || montoAnterior !== tarifaAplicada) cuota.qrSaldoPersonal = undefined;
+  if (tipoAnterior !== tipoOrigenTarifa || montoAnterior !== tarifaAplicada) {
+    cuota.qrSaldoPersonal = undefined;
+    cuota.montoQrSaldoPersonal = undefined;
+  }
   // Los registros anteriores a DetalleCuota pueden tener un montoPagado
   // válido sin detalles asociados. En ese caso se conserva el saldo histórico.
   cuota.montoPagado = redondear(pagosVerificados[0]?.cantidadDetalles ? pagosVerificados[0].totalVerificado : cuota.montoPagado);

@@ -8,6 +8,7 @@ export interface CuotaType extends Document {
   primeraCuotaMonto?: number;
   numeroCuotasElegidas?: 1 | 2 | 3;
   qrSaldoPersonal?: string;
+  montoQrSaldoPersonal?: number;
   montoPagado: number;
   saldo: number;
   estado: EstadoCuota;
@@ -36,6 +37,7 @@ const schema = new Schema<CuotaType>({
   primeraCuotaMonto: { type: Number, min: 0.01 },
   numeroCuotasElegidas: { type: Number, enum: [1, 2, 3] },
   qrSaldoPersonal: String,
+  montoQrSaldoPersonal: { type: Number, min: 0.01 },
   montoPagado: { type: Number, min: 0, default: 0 },
   saldo: { type: Number, min: 0, required: true },
   estado: { type: String, enum: ["PENDIENTE", "PAGO_PARCIAL", "PAGADA", "VENCIDA", "CANCELADA"], default: "PENDIENTE" },
