@@ -73,6 +73,41 @@ export async function sincronizarCuotaPreregistro(
   return { cuota, creada: false, actualizada, tipoAnterior, montoAnterior };
 }
 
+export async function reactivarCuotaPreregistroAprobado(
+  preregistroId: string | Types.ObjectId,
+  usuarioEditor?: unknown,
+) {
+  const resultado = await sincronizarCuotaPreregistro(preregistroId, {
+    crearSiFalta: true,
+    usuarioCreador: usuarioEditor,
+  });
+  if (!resultado) return null;
+
+  const cuota = resultado.cuota;
+  if (!cuota.cupoLiberado) return resultado;
+
+  const preregistro = await Preregistro.findById(preregistroId).select("gestionId estado aprobado");
+  if (!preregistro || preregistro.estado !== "APROBADO" || !preregistro.aprobado) return resultado;
+
+  const configuracion = await ConfiguracionPago.findOne({ gestionId: preregistro.gestionId, activo: true }).select("plazoPrimeraCuotaHoras");
+  const ahora = new Date();
+  const horas = configuracion?.plazoPrimeraCuotaHoras ?? 72;
+  cuota.cupoLiberado = false;
+  cuota.fechaLiberacionCupo = undefined;
+  cuota.fechaSolicitudProrroga = undefined;
+  // Si el plazo ya había comenzado antes de pasar a lista de espera, la nueva
+  // aprobación concede un plazo completo para que el usuario pueda pagar.
+  if (cuota.fechaInicioPlazo) {
+    cuota.fechaInicioPlazo = ahora;
+    cuota.fechaVencimiento = new Date(ahora.getTime() + horas * 60 * 60 * 1000);
+  }
+  cuota.observacion = "Cuota reactivada al aprobar nuevamente el preregistro.";
+  cuota.fechaEditado = ahora;
+  cuota.usuarioEditor = usuarioEditor as Types.ObjectId | undefined;
+  await cuota.save();
+  return { ...resultado, cuota, actualizada: true };
+}
+
 export async function sincronizarCuotasUsuario(usuarioId: string | Types.ObjectId, usuarioEditor?: unknown) {
   const preregistros = await Preregistro.find({ usuarioId, fechaEliminado: null, estado: "APROBADO", aprobado: true }).select("_id");
   const resultados = await Promise.all(preregistros.map((preregistro) => sincronizarCuotaPreregistro(preregistro._id, { crearSiFalta: true, usuarioCreador: usuarioEditor })));

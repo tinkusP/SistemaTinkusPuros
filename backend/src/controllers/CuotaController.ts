@@ -14,7 +14,7 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
 import Fraterno from "../models/Fraterno";
 import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
-import { sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
+import { reactivarCuotaPreregistroAprobado, sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil tipoOrigen" }, { path: "gestionId", select: "nombre anio" }] };
@@ -143,8 +143,7 @@ export const asignarQrSaldo = async (req: Request, res: Response) => {
   return res.json({ message: `QR de Bs ${cuotas[0].saldo.toFixed(2)} asignado a ${cuotas.length} usuario(s)`, actualizadas: cuotas.length, ruta });
 };
 export const obtenerMiCuota = async (req: Request, res: Response) => {
-  const preregistros = await Preregistro.find({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado");
-  const preregistroVigente = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("estado aprobado observacion").sort({ fechaRegistro: -1 });
+  const preregistroVigente = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).select("_id estado aprobado observacion").sort({ fechaRegistro: -1 });
   if (preregistroVigente && (preregistroVigente.estado !== "APROBADO" || !preregistroVigente.aprobado)) {
     return res.status(423).json({
       error: preregistroVigente.estado === "OBSERVADO" ? MENSAJE_PREREGISTRO_OBSERVADO : "Tu preregistro todavía no está aprobado. La opción de pagos se habilitará después de la aprobación de Administración.",
@@ -153,7 +152,13 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
       observacion: preregistroVigente.observacion,
     });
   }
-  let cuota = await Cuota.findOne({ preregistroId: { $in: preregistros.map((p) => p._id) }, fechaEliminado: null }).populate(poblar).sort({ fechaCreado: -1 });
+  let cuota = preregistroVigente
+    ? await Cuota.findOne({ preregistroId: preregistroVigente._id, fechaEliminado: null }).populate(poblar)
+    : null;
+  if (preregistroVigente?.estado === "APROBADO" && preregistroVigente.aprobado && cuota?.cupoLiberado) {
+    const reparada = await reactivarCuotaPreregistroAprobado(preregistroVigente._id, req.usuario?._id);
+    if (reparada) cuota = await Cuota.findById(reparada.cuota._id).populate(poblar);
+  }
   if (!cuota) {
     const creada = await asegurarCuotaPostulante(req.usuario?._id);
     if (creada) cuota = await Cuota.findById(creada._id).populate(poblar);
@@ -162,7 +167,7 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
   const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).sort({ fechaPago: -1 });
   const tienePrimerPagoValido = pagos.some((p) => p.estadoRevision === "VERIFICADO");
   const tienePagoEnRevision = pagos.some((p) => p.estadoRevision === "PENDIENTE");
-  let listaEspera = cuota.cupoLiberado || preregistros.some((p) => p.estado === "LISTA_ESPERA");
+  let listaEspera = cuota.cupoLiberado;
   if (!tienePrimerPagoValido && !tienePagoEnRevision && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) {
     await pasarAListaEspera(cuota);
     listaEspera = true;

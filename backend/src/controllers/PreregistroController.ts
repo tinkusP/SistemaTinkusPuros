@@ -6,6 +6,7 @@ import Preregistro, { type EstadoPreregistro } from "../models/Preregistro";
 import PostulanteGuia from "../models/PostulanteGuia";
 import Fraterno from "../models/Fraterno";
 import { registrarAuditoria } from "../services/AuditoriaService";
+import { reactivarCuotaPreregistroAprobado } from "../services/SincronizacionCuotaService";
 
 const populate = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono sexo estado fotoPerfil fechaCreado tipoOrigen" },
@@ -199,24 +200,30 @@ export const actualizarPreregistro = async (req: Request, res: Response) => {
     const preregistro = await Preregistro.findOne({ _id: req.params.id, fechaEliminado: null });
     if (!preregistro) return res.status(404).json({ error: "Preregistro no encontrado" });
     const datosAntes = preregistro.toObject();
-    if (req.body.estado === "APROBADO" && preregistro.estado !== "APROBADO") {
+    const eraAprobado = preregistro.estado === "APROBADO";
+    if (req.body.estado === "APROBADO" && !eraAprobado) {
       const [gestion, usuario] = await Promise.all([Gestion.findById(preregistro.gestionId), PerfilUsuario.findById(preregistro.usuarioId)]);
       if (!gestion || !usuario) return res.status(409).json({ error: "No se pudo verificar la gestión o el usuario" });
       const capacidad = await verificarCupoPorSexo(gestion, usuario, preregistro._id);
       if (!capacidad.disponible) return res.status(409).json({ error: `No hay cupo disponible para ${capacidad.grupo.toLowerCase()}s (${capacidad.ocupados}/${capacidad.maximo}). Seleccione LISTA_ESPERA.` });
     }
     for (const campo of permitido) if (req.body[campo] !== undefined) preregistro.set(campo, req.body[campo]);
+    if (req.body.estado === "APROBADO" && req.body.observacion === undefined) preregistro.observacion = undefined;
     if (req.body.estado !== undefined || req.body.observacion !== undefined) {
       preregistro.fechaRevision = new Date();
       preregistro.usuarioRevisor = req.usuario?._id;
     }
-    if (req.body.estado === "APROBADO" && preregistro.estado !== "APROBADO") {
+    if (req.body.estado === "APROBADO" && !eraAprobado) {
       preregistro.fechaAprobacion = new Date();
       preregistro.usuarioAprobador = req.usuario?._id;
     }
     preregistro.fechaEditado = new Date();
     preregistro.usuarioEditor = req.usuario?._id;
     await preregistro.save();
+    if (preregistro.estado === "APROBADO") {
+      const cuota = await reactivarCuotaPreregistroAprobado(preregistro._id, req.usuario?._id);
+      if (!cuota) return res.status(409).json({ error: "El preregistro fue aprobado, pero no se pudo vincular su cuota. Verifique que el usuario esté activo y exista una configuración de pagos vigente." });
+    }
     await preregistro.populate(populate);
     const estadoFinal = String(preregistro.estado);
     await registrarAuditoria(req, {
