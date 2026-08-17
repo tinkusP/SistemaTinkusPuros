@@ -18,9 +18,9 @@ export type ResultadoSincronizacionCuota = {
 
 export async function sincronizarCuotaPreregistro(
   preregistroId: string | Types.ObjectId,
-  opciones: { crearSiFalta?: boolean; usuarioCreador?: unknown; fechaVencimiento?: Date; tarifaInterno?: number; tarifaExterno?: number } = {},
+  opciones: { crearSiFalta?: boolean; permitirNoAprobado?: boolean; usuarioCreador?: unknown; fechaVencimiento?: Date; tarifaInterno?: number; tarifaExterno?: number } = {},
 ): Promise<ResultadoSincronizacionCuota | null> {
-  const preregistro = await Preregistro.findOne({ _id: preregistroId, fechaEliminado: null, estado: "APROBADO", aprobado: true }).select("usuarioId gestionId");
+  const preregistro = await Preregistro.findOne({ _id: preregistroId, fechaEliminado: null, ...(opciones.permitirNoAprobado ? {} : { estado: "APROBADO", aprobado: true }) }).select("usuarioId gestionId estado aprobado");
   if (!preregistro) return null;
   const [usuario, configuracion] = await Promise.all([
     PerfilUsuario.findOne({ _id: preregistro.usuarioId, estado: "ACTIVO", fechaEliminado: null }).select("tipoOrigen"),
@@ -46,7 +46,7 @@ export async function sincronizarCuotaPreregistro(
       montoPagado: 0,
       saldo: tarifaAplicada,
       fechaVencimiento: opciones.fechaVencimiento,
-      observacion: "Cuota vinculada al preregistro aprobado según el origen académico vigente.",
+      observacion: preregistro.aprobado ? "Cuota vinculada al preregistro aprobado según el origen académico vigente." : "Cuota preparada por Administración; se habilitará para el usuario cuando su preregistro sea aprobado.",
       usuarioCreador: opciones.usuarioCreador,
     });
     return { cuota, creada: true, actualizada: false };
