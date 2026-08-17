@@ -82,6 +82,10 @@ const ETAPAS_LISTADO: { id: EtapaListado; etiqueta: string }[] = [
 ];
 type ResponsableAlta = { _id: string; nombres: string; apellidoPaterno: string; apellidoMaterno?: string | null; email?: string | null };
 const esResponsablePoblado = (valor: unknown): valor is ResponsableAlta => Boolean(valor && typeof valor === "object" && "_id" in valor && "nombres" in valor);
+const SISTEMA_TINKUS_URL = "https://sistema-tinkus-puros.vercel.app";
+const GRUPO_COMUNICADOS_URL = "https://chat.whatsapp.com/ELnXOO5afYU8wjMhrpxjw9";
+const telefonoWhatsApp = (valor?: string | null) => { const digitos = String(valor ?? "").replace(/\D/g, "").replace(/^0+/, ""); return digitos.startsWith("591") ? digitos : digitos.length === 8 ? `591${digitos}` : ""; };
+const mensajeRecordatorioPago = (nombre: string) => [`Hola ${nombre},`, "Tu cuenta está ACTIVA y tu preregistro en Tinkus Puros y Naturales fue APROBADO.", "Te recordamos realizar el pago de tu primera cuota desde el sistema:", SISTEMA_TINKUS_URL, "Después de que Administración verifique tu pago, debes pasar por la medición de tu polera y chamarra.", "También puedes ingresar al grupo oficial de comunicados:", GRUPO_COMUNICADOS_URL].join("\n\n");
 
 export default function PerfilUsuarioView() {
   const location = useLocation();
@@ -672,6 +676,8 @@ export default function PerfilUsuarioView() {
                     const fechaAltaMostrada = preregistro?.fechaCreado ?? perfil.fechaAlta ?? (fraterno?.fechaIngreso || undefined);
                     const cuotaActual = preregistro ? cuotaPorPreregistro.get(preregistro._id) : undefined;
                     const cuota = etapaListado === "BAUCHER" || filtroPago === "BAUCHER_ENVIADO" ? cuotaConBaucherPorUsuario.get(perfil._id) ?? cuotaActual : cuotaActual;
+                    const telefonoRecordatorio = telefonoWhatsApp(perfil.telefono);
+                    const puedeRecordarPago = perfil.estado === "ACTIVO" && preregistro?.estado === "APROBADO" && (!cuota || (cuota.resumenPagos?.verificados ?? 0) === 0);
                     const gestion = preregistro && typeof preregistro.gestionId === "object" ? preregistro.gestionId : fraterno && typeof fraterno.gestionId === "object" ? fraterno.gestionId : undefined;
                     const situacion = fraterno ? (fraterno.situacion ?? fraterno.estado).replaceAll("_", " ") : postulanteGuia ? "POSTULANTE A GUÍA" : preregistro ? preregistro.estado.replaceAll("_", " ") : "SIN PREREGISTRO";
                     const vinculandoCuota = vincularCuota.isPending && vincularCuota.variables?.preregistroId === preregistro?._id;
@@ -753,6 +759,7 @@ export default function PerfilUsuarioView() {
                         <td className="p-4">
                           <div className="flex flex-wrap justify-center gap-2">
                             {fraterno ? <button type="button" onClick={() => setFraternoSeleccionado(fraterno)} className="rounded-lg bg-[#841534] px-4 py-2 font-black text-white transition hover:bg-[#641025]" title="Abrir gestión completa del fraterno">Gestionar</button> : null}
+                            {puedeRecordarPago ? (telefonoRecordatorio ? <a href={`https://wa.me/${telefonoRecordatorio}?text=${encodeURIComponent(mensajeRecordatorioPago([perfil.nombres, perfil.apellidoPaterno, perfil.apellidoMaterno].filter(Boolean).join(" ")))}`} target="_blank" rel="noreferrer" className="rounded-lg bg-[#25D366] px-3 py-2 text-xs font-black text-white" title={`Enviar recordatorio de primera cuota a ${perfil.nombres}`}>WhatsApp · recordar pago</a> : <span className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-black text-amber-900" title="Actualiza el teléfono para poder enviar el recordatorio">Aprobado sin teléfono</span>) : null}
                             {/* VER DETALLE COMPLETO */}
 
                             <button
