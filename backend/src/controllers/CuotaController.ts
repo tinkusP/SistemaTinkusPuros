@@ -264,17 +264,31 @@ export const prorrogarPrimeraCuota = async (req: Request, res: Response) => {
   return res.json({ message: tienePrimerPago ? `Siguiente cuota habilitada por ${horas} horas` : `Nuevo plazo de ${horas} horas habilitado; el usuario continúa en lista de espera`, cuota });
 };
 export const prorrogarCuotasVencidas = async (req: Request, res: Response) => {
-  const horas = Number(req.body.horas); const motivo = String(req.body.motivo ?? "").trim(); const ahora = new Date();
-  const cuotas = await Cuota.find({ saldo: { $gt: 0 }, fechaVencimiento: { $lt: ahora }, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
-  for (const cuota of cuotas) {
-    const tienePrimerPago = await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
-    if (!tienePrimerPago) await pasarAListaEspera(cuota, `Cupo liberado. Habilitación general de ${horas} horas: ${motivo}`);
-    cuota.fechaInicioPlazo = ahora; cuota.fechaVencimiento = new Date(ahora.getTime() + horas * 3600000); cuota.fechaProrroga = ahora; cuota.horasProrrogaAcumuladas = (cuota.horasProrrogaAcumuladas || 0) + horas; cuota.motivoProrroga = motivo; cuota.usuarioProrroga = req.usuario?._id; await cuota.save();
-    const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
-    if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Plazo general de pago habilitado", mensaje: `Administración habilitó ${horas} horas para registrar tu próximo pago.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" });
+  try {
+    const horas = Number(req.body.horas); const motivo = String(req.body.motivo ?? "").trim(); const ahora = new Date();
+    const vencimiento = new Date(ahora.getTime() + horas * 3600000);
+    const cuotas = await Cuota.find({ saldo: { $gt: 0 }, fechaVencimiento: { $lt: ahora }, fechaEliminado: null, estado: { $nin: ["PAGADA", "CANCELADA"] } });
+    let actualizadas = 0; const errores: string[] = [];
+    for (const cuota of cuotas) {
+      try {
+        const tienePrimerPago = Boolean(await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }));
+        if (!tienePrimerPago) await pasarAListaEspera(cuota, `Cupo liberado. Habilitación general de ${horas} horas: ${motivo}`);
+        await Cuota.updateOne({ _id: cuota._id }, { $set: { fechaInicioPlazo: ahora, fechaVencimiento: vencimiento, fechaProrroga: ahora, motivoProrroga: motivo, usuarioProrroga: req.usuario?._id, estado: cuota.montoPagado > 0 ? "PAGO_PARCIAL" : "PENDIENTE", fechaEditado: ahora, usuarioEditor: req.usuario?._id }, $inc: { horasProrrogaAcumuladas: horas } });
+        actualizadas += 1;
+        const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
+        if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Plazo general de pago habilitado", mensaje: `Administración habilitó ${horas} horas para registrar tu próximo pago.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" }).catch((error) => console.error("No se pudo crear notificación de prórroga", error));
+      } catch (error) {
+        console.error(`No se pudo prorrogar la cuota ${cuota._id}`, error);
+        errores.push(String(cuota._id));
+      }
+    }
+    await registrarAuditoria(req, { accion: "PRORROGA_MASIVA", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se ampliaron ${actualizadas} de ${cuotas.length} cuotas vencidas por ${horas} horas. Motivo: ${motivo}`, datosDespues: { actualizadas, omitidas: errores.length } });
+    const detalle = errores.length ? ` ${errores.length} registro(s) inconsistente(s) fueron omitidos sin detener el proceso.` : "";
+    return res.json({ message: `${actualizadas} cuenta(s) vencida(s) fueron habilitadas.${detalle}`, actualizadas, omitidas: errores.length });
+  } catch (error) {
+    console.error("No se pudo ejecutar la prórroga masiva", error);
+    return res.status(500).json({ error: "No se pudieron consultar las cuotas vencidas. Intente nuevamente." });
   }
-  await registrarAuditoria(req, { accion: "PRORROGA_MASIVA", modulo: "CUOTAS", entidad: "Cuota", descripcion: `Se ampliaron ${cuotas.length} cuotas vencidas por ${horas} horas. Motivo: ${motivo}` });
-  return res.json({ message: `${cuotas.length} cuenta(s) vencida(s) fueron habilitadas`, actualizadas: cuotas.length });
 };
 export const detalleCuota = async (req: Request, res: Response) => { const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null }).populate(poblar); if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" }); if (!esAdministrador(req) && !tienePermiso(req, "PAGOS_VER", "PAGOS_REVISAR", "VISTA_PAGOS") && !(await cuotaPerteneceAlUsuario(String(cuota._id), req.usuario?._id))) return res.status(403).json({ error: "No puedes consultar una cuota que no te pertenece" }); const pagos = await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).populate("usuarioRevisor", "nombres apellidoPaterno").sort({ fechaPago: -1 }); return res.json({ cuota, pagos }); };
 export const validarPlazoAntesDeSubir = async (req: Request, res: Response, next: () => void) => {

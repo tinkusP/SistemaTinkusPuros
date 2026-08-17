@@ -17,6 +17,8 @@ export default function EscanerQrView() {
   const puedeMarcarAsistencia = esAdministrador || permisos.has("ASISTENCIAS_GESTIONAR");
   const lector = useRef<Html5Qrcode | null>(null);
   const tokenLeido = useRef("");
+  const procesandoRef = useRef(false);
+  const ultimoTokenRef = useRef("");
   const [resultado, setResultado] = useState<IdentidadQr | null>(null);
   const [activo, setActivo] = useState(false);
   const [procesando, setProcesando] = useState(false);
@@ -27,7 +29,9 @@ export default function EscanerQrView() {
   const [guardandoTalla, setGuardandoTalla] = useState(false);
 
   const verificar = async (token: string) => {
-    if (procesando) return;
+    if (procesandoRef.current || token === ultimoTokenRef.current) return;
+    procesandoRef.current = true;
+    ultimoTokenRef.current = token;
     setProcesando(true);
     try {
       const identidad = await verificarCredencialQr(token);
@@ -39,8 +43,10 @@ export default function EscanerQrView() {
       await lector.current?.stop().catch(() => undefined);
       setActivo(false);
     } catch (e) {
+      await lector.current?.stop().catch(() => undefined);
+      setActivo(false);
       toast.error(e instanceof Error ? e.message : "QR inválido");
-    } finally { setProcesando(false); }
+    } finally { procesandoRef.current = false; setProcesando(false); }
   };
 
   const iniciar = async () => {
@@ -55,6 +61,7 @@ export default function EscanerQrView() {
     setResultado(null);
     setHoraMarcada(null);
     tokenLeido.current = "";
+    ultimoTokenRef.current = "";
     const qr = lector.current ?? new Html5Qrcode("lector-qr");
     lector.current = qr;
     try {
@@ -146,7 +153,7 @@ export default function EscanerQrView() {
           <EstadoPrimeraCuota pago={resultado.pago} />
           {puedeRegistrarTallas ? <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || !resultado.pago.primeraCuotaVerificada || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : !resultado.pago.primeraCuotaVerificada ? "Primera cuota pendiente de verificación" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section> : null}
           {puedeMarcarAsistencia ? (horaMarcada ? <div className="mt-5 rounded-xl bg-emerald-100 p-4 font-black text-emerald-800">ASISTENCIA MARCADA · {new Date(horaMarcada).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</div> : <button onClick={marcar} disabled={!resultado.valida || !u.fotoPerfil || marcando} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{marcando ? "Marcando..." : !u.fotoPerfil ? "No se puede validar: sin fotografía" : "Rostro verificado — Marcar asistencia"}</button>) : null}
-          <button onClick={() => { setResultado(null); setHoraMarcada(null); tokenLeido.current = ""; }} className="mt-3 rounded-xl border px-5 py-3 font-bold">Escanear otra persona</button>
+          <button onClick={() => { setResultado(null); setHoraMarcada(null); tokenLeido.current = ""; ultimoTokenRef.current = ""; }} className="mt-3 rounded-xl border px-5 py-3 font-bold">Escanear otra persona</button>
         </div>}
       </div>
     </section>
