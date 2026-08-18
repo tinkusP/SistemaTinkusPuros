@@ -129,6 +129,8 @@ export default function DashboardView() {
   ];
   const pagosPorVerificar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.pendientes ?? 0), 0);
   const pagosVerificados = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.verificados ?? 0), 0);
+  const montoPorVerificar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.montoPendiente ?? 0), 0);
+  const saldoTotalPorCobrar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + cuota.saldo, 0);
   const cargando = (puedeVerReportes && reporteQuery.isLoading) || (puedeVerUsuarios && usuariosQuery.isLoading) || (puedeVerPagos && cuotasQuery.isLoading);
 
   return (
@@ -166,8 +168,10 @@ export default function DashboardView() {
           <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#e9cf91]">Vista rápida</p><h2 className="mt-1 text-2xl font-black">Pagos</h2><p className="mt-1 text-sm text-white/75">Seguimiento de comprobantes recibidos en la gestión.</p></div>
           <Link to="/cuotas" className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-[#74122A]">Ver todos los pagos →</Link>
         </div>
-        <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+        <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
+          <Link to="/cuotas" className="rounded-2xl border border-sky-300 bg-sky-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">💰</span><span className="rounded-full bg-sky-200 px-3 py-1 text-xs font-black text-sky-900">GESTIÓN ACTUAL</span></div><p className="mt-4 text-3xl font-black text-sky-900">{cuotasQuery.isLoading ? "…" : `Bs ${saldoTotalPorCobrar.toFixed(2)}`}</p><h3 className="mt-1 font-black text-sky-950">Saldo total por cobrar</h3><p className="mt-1 text-sm text-sky-800">Deuda restante de las cuotas de esta gestión.</p></Link>
           <Link to="/cuotas?revision=PENDIENTE" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">⏳</span><span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-black text-amber-900">REQUIERE ACCIÓN</span></div><p className="mt-4 text-4xl font-black text-amber-900">{cuotasQuery.isLoading ? "…" : pagosPorVerificar}</p><h3 className="mt-1 font-black text-amber-950">Pagos por verificar</h3><p className="mt-1 text-sm text-amber-800">Comprobantes pendientes de revisión administrativa.</p></Link>
+          <Link to="/cuotas?revision=PENDIENTE" className="rounded-2xl border border-orange-300 bg-orange-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">🧾</span><span className="rounded-full bg-orange-200 px-3 py-1 text-xs font-black text-orange-900">NO COBRADO AÚN</span></div><p className="mt-4 text-3xl font-black text-orange-900">{cuotasQuery.isLoading ? "…" : `Bs ${montoPorVerificar.toFixed(2)}`}</p><h3 className="mt-1 font-black text-orange-950">Importe por verificar</h3><p className="mt-1 text-sm text-orange-800">Se sumará al cobrado solo después de aprobarse.</p></Link>
           <Link to="/cuotas?revision=VERIFICADO" className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-center justify-between"><span className="text-3xl">✅</span><span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-black text-emerald-900">APROBADOS</span></div><p className="mt-4 text-4xl font-black text-emerald-900">{cuotasQuery.isLoading ? "…" : pagosVerificados}</p><h3 className="mt-1 font-black text-emerald-950">Pagos verificados</h3><p className="mt-1 text-sm text-emerald-800">Comprobantes revisados y aceptados por administración.</p></Link>
         </div>
       </section> : null}

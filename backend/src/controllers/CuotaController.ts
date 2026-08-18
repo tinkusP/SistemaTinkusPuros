@@ -13,6 +13,7 @@ import Notificacion from "../models/Notificacion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { promoverAFraternoSiCorresponde } from "../services/FraternoService";
 import Fraterno from "../models/Fraterno";
+import Gestion from "../models/Gestion";
 import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
 import { reactivarCuotaPreregistroAprobado, sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
@@ -25,6 +26,10 @@ const tienePermiso = (req: Request, ...permisos: string[]) => {
   return permisos.some((permiso) => asignados.has(permiso));
 };
 const rutaComprobante = (archivo?: Express.Multer.File) => (archivo as (Express.Multer.File & { rutaPublica?: string }) | undefined)?.rutaPublica;
+async function obtenerGestionActualId() {
+  const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 }).select("_id").lean();
+  return gestion?._id;
+}
 async function recalcular(cuotaId: string) { const cuota = await Cuota.findById(cuotaId); if (!cuota) return; const pagos = await DetalleCuota.aggregate([{ $match: { cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null } }, { $group: { _id: null, total: { $sum: "$monto" } } }]); cuota.montoPagado = pagos[0]?.total ?? 0; await cuota.save(); await promoverAFraternoSiCorresponde(cuotaId); }
 async function programarSiguientePago(cuotaId: string) {
   const cuota = await Cuota.findById(cuotaId);
@@ -95,28 +100,34 @@ async function asegurarCuotaPostulante(usuarioId: unknown) {
 
 export const crearCuota = async (req: Request, res: Response) => { try { const resultado = await sincronizarCuotaPreregistro(req.body.preregistroId, { crearSiFalta: true, permitirNoAprobado: true, usuarioCreador: req.usuario?._id, fechaVencimiento: req.body.fechaVencimiento ? new Date(req.body.fechaVencimiento) : undefined }); if (!resultado) return res.status(409).json({ error: "La cuota requiere un usuario activo y una configuración de pagos vigente" }); const cuota = resultado.cuota; await cuota.populate(poblar); await registrarAuditoria(req, { accion: resultado.creada ? "CREAR" : "SINCRONIZAR_TARIFA", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: resultado.creada ? `Se vinculó una cuota ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}` : `Se sincronizó la cuota con la tarifa ${cuota.tipoOrigenTarifa} de Bs ${cuota.montoTotal}`, datosAntes: resultado.creada ? undefined : { tipoOrigenTarifa: resultado.tipoAnterior, montoTotal: resultado.montoAnterior }, datosDespues: cuota.toObject() }); return res.status(resultado.creada ? 201 : 200).json({ message: resultado.creada ? "Cuota vinculada correctamente" : "Cuota y tarifa sincronizadas", cuota }); } catch (e) { console.error(e); return res.status(500).json({ error: "No se pudo vincular o sincronizar la cuota" }); } };
 export const listarCuotas = async (_req: Request, res: Response) => {
-  const preregistrosActivos = await Preregistro.find({ fechaEliminado: null })
+  const gestionId = await obtenerGestionActualId();
+  if (!gestionId) return res.json({ cuotas: [] });
+  const preregistrosActivos = await Preregistro.find({ gestionId, fechaEliminado: null })
     .populate({ path: "usuarioId", match: { fechaEliminado: null }, select: "_id" })
     .select("_id usuarioId")
     .lean();
   const preregistrosVisibles = preregistrosActivos.filter((preregistro) => preregistro.usuarioId).map((preregistro) => preregistro._id);
   const cuotas = await Cuota.find({ fechaEliminado: null, preregistroId: { $in: preregistrosVisibles } }).populate(poblar).sort({ fechaCreado: -1 }).lean();
-  const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision baucherImagen fechaPago").lean();
-  const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; verificados: number; conBaucher: number; ultimoEnvio?: Date }>();
+  const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).select("cuotaId estadoRevision monto baucherImagen fechaPago").lean();
+  const resumenPorCuota = new Map<string, { cantidad: number; pendientes: number; montoPendiente: number; verificados: number; conBaucher: number; ultimoEnvio?: Date }>();
   for (const pago of pagos) {
     const llave = String(pago.cuotaId);
-    const resumen = resumenPorCuota.get(llave) ?? { cantidad: 0, pendientes: 0, verificados: 0, conBaucher: 0 };
+    const resumen = resumenPorCuota.get(llave) ?? { cantidad: 0, pendientes: 0, montoPendiente: 0, verificados: 0, conBaucher: 0 };
     resumen.cantidad += 1;
-    if (pago.estadoRevision === "PENDIENTE") resumen.pendientes += 1;
+    if (pago.estadoRevision === "PENDIENTE") { resumen.pendientes += 1; resumen.montoPendiente += pago.monto; }
     if (pago.estadoRevision === "VERIFICADO") resumen.verificados += 1;
     if (pago.baucherImagen) resumen.conBaucher += 1;
     if (!resumen.ultimoEnvio || pago.fechaPago > resumen.ultimoEnvio) resumen.ultimoEnvio = pago.fechaPago;
     resumenPorCuota.set(llave, resumen);
   }
-  res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, verificados: 0, conBaucher: 0 } })) });
+  res.json({ cuotas: cuotas.map((cuota) => ({ ...cuota, resumenPagos: resumenPorCuota.get(String(cuota._id)) ?? { cantidad: 0, pendientes: 0, montoPendiente: 0, verificados: 0, conBaucher: 0 } })) });
 };
 export const listarPagosAdmin = async (_req: Request, res: Response) => {
-  const pagos = await DetalleCuota.find({ fechaEliminado: null })
+  const gestionId = await obtenerGestionActualId();
+  if (!gestionId) return res.json({ pagos: [] });
+  const preregistros = await Preregistro.find({ gestionId, fechaEliminado: null }).select("_id").lean();
+  const cuotas = await Cuota.find({ preregistroId: { $in: preregistros.map((preregistro) => preregistro._id) }, fechaEliminado: null }).select("_id").lean();
+  const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null })
     .populate({ path: "cuotaId", select: "preregistroId tipoOrigenTarifa montoTotal montoPagado saldo", populate: { path: "preregistroId", select: "numeroPreRegistro usuarioId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci telefono" } } })
     .sort({ fechaCreado: -1 })
     .lean();
