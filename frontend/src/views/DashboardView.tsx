@@ -129,6 +129,7 @@ export default function DashboardView() {
   ];
   const pagosPorVerificar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.pendientes ?? 0), 0);
   const pagosVerificados = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.verificados ?? 0), 0);
+  const totalVerificado = (cuotasQuery.data ?? []).reduce((total, cuota) => total + cuota.montoPagado, 0);
   const montoPorVerificar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + (cuota.resumenPagos?.montoPendiente ?? 0), 0);
   const saldoTotalPorCobrar = (cuotasQuery.data ?? []).reduce((total, cuota) => total + cuota.saldo, 0);
   const cargando = (puedeVerReportes && reporteQuery.isLoading) || (puedeVerUsuarios && usuariosQuery.isLoading) || (puedeVerPagos && cuotasQuery.isLoading);
@@ -160,7 +161,7 @@ export default function DashboardView() {
         {puedeVerPreregistros && puedeVerReportes ? <Tarjeta titulo="Pendientes" valor={cargando ? "…" : estadosApi.get("PENDIENTE") ?? 0} descripcion="Preregistros pendientes de revisión" icono="⏳" ruta="/preregistros" /> : null}
         {puedeVerPreregistros && puedeVerReportes ? <Tarjeta titulo="Observados" valor={cargando ? "…" : estadosApi.get("OBSERVADO") ?? 0} descripcion="Deben regularizar información" icono="⚠️" ruta="/preregistros" /> : null}
         {puedeVerPreregistros && puedeVerReportes ? <Tarjeta titulo="Lista de espera" valor={cargando ? "…" : estadosApi.get("LISTA_ESPERA") ?? 0} descripcion="Postulantes esperando un cupo" icono="📋" ruta="/preregistros" /> : null}
-        {puedeVerPagos && puedeVerReportes ? <Tarjeta titulo="Cobrado verificado" valor={cargando ? "…" : `Bs ${(reporte?.finanzas.montoCobrado ?? 0).toFixed(2)}`} descripcion="Pagos verificados de la gestión" icono="💳" ruta="/cuotas" /> : null}
+        {puedeVerPagos && puedeVerReportes ? <Tarjeta titulo="Cobrado verificado" valor={cargando ? "…" : `Bs ${totalVerificado.toFixed(2)}`} descripcion="Mismo total verificado mostrado en Cuotas" icono="💳" ruta="/cuotas" /> : null}
       </section> : null}
 
       {puedeVerPagos ? <section className="overflow-hidden rounded-3xl border border-[#d3c9bb] bg-white shadow-sm dark:bg-[#262022]">
