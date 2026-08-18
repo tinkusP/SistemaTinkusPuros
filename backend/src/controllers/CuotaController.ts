@@ -283,10 +283,11 @@ export const prorrogarCuotasVencidas = async (req: Request, res: Response) => {
     for (const cuota of cuotas) {
       try {
         const tienePrimerPago = Boolean(await DetalleCuota.exists({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }));
-        if (!tienePrimerPago) await pasarAListaEspera(cuota, `Cupo liberado. Habilitación general de ${horas} horas: ${motivo}`);
+        const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId estado aprobado");
+        const conservaAprobacion = preregistro?.estado === "APROBADO" && preregistro.aprobado;
+        if (!tienePrimerPago && !conservaAprobacion) await pasarAListaEspera(cuota, `Cupo liberado. Habilitación general de ${horas} horas: ${motivo}`);
         await Cuota.updateOne({ _id: cuota._id }, { $set: { fechaInicioPlazo: ahora, fechaVencimiento: vencimiento, fechaProrroga: ahora, motivoProrroga: motivo, usuarioProrroga: req.usuario?._id, estado: cuota.montoPagado > 0 ? "PAGO_PARCIAL" : "PENDIENTE", fechaEditado: ahora, usuarioEditor: req.usuario?._id }, $inc: { horasProrrogaAcumuladas: horas } });
         actualizadas += 1;
-        const preregistro = await Preregistro.findById(cuota.preregistroId).select("usuarioId");
         if (preregistro?.usuarioId) await Notificacion.create({ usuarioId: preregistro.usuarioId, titulo: "Plazo general de pago habilitado", mensaje: `Administración habilitó ${horas} horas para registrar tu próximo pago.`, tipo: "ADVERTENCIA", enlace: "/mis-pagos" }).catch((error) => console.error("No se pudo crear notificación de prórroga", error));
       } catch (error) {
         console.error(`No se pudo prorrogar la cuota ${cuota._id}`, error);
