@@ -62,6 +62,7 @@ const distribucionPlan = (montoTotal: number, numeroCuotas: number) => {
   return [primera, segunda, redondear(total - primera - segunda)];
 };
 const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: number, pagosVerificados: number) => {
+  if (pagosVerificados === numeroCuotas - 1) return redondear(saldo);
   const importes = distribucionPlan(montoTotal, numeroCuotas);
   return Math.min(importes[pagosVerificados] ?? redondear(saldo), redondear(saldo));
 };
@@ -233,13 +234,15 @@ export const solicitarQrPago = async (req: Request, res: Response) => {
   const numeroCuotas = Number(req.body.numeroCuotas || cuota.numeroCuotasElegidas);
   const numeroPago = Number(req.body.numeroPago);
   if (![1, 2, 3].includes(numeroCuotas) || numeroPago < 1 || numeroPago > numeroCuotas) return res.status(400).json({ error: "Plan o número de pago inválido" });
+  const pagosVerificados = await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null });
+  const montoSolicitado = montoCuotaActual(cuota.montoTotal, cuota.saldo, numeroCuotas, pagosVerificados);
   const roles = await Rol.find({ $or: [{ codigo: { $in: ["ADMINISTRADOR", "COORDINADOR", "CORDINADOR"] } }, { nombre: { $in: [/^administrador$/i, /^coordinador$/i, /^cordinador$/i] } }], estado: true, fechaEliminado: null }).select("_id");
   const destinatarios = await PerfilUsuario.find({ roles: { $in: roles.map((rol) => rol._id) }, estado: "ACTIVO", fechaEliminado: null }).select("_id");
   const usuario = cuota.preregistroId?.usuarioId;
   const nombre = [usuario?.nombres, usuario?.apellidoPaterno].filter(Boolean).join(" ") || "Un usuario";
   const titulo = "Solicitud de QR de pago";
-  const mensaje = `${nombre}${usuario?.ci ? ` (CI ${usuario.ci})` : ""} necesita el QR de la cuota ${numeroPago} de su plan de ${numeroCuotas} pago(s), tarifa ${cuota.tipoOrigenTarifa ?? "sin clasificar"}.`;
-  await Notificacion.insertMany(destinatarios.map((destinatario) => ({ usuarioId: destinatario._id, titulo, mensaje, tipo: "ADVERTENCIA", enlace: "/tokens-registro" })), { ordered: false });
+  const mensaje = `${nombre}${usuario?.ci ? ` (CI ${usuario.ci})` : ""} necesita un QR por Bs ${montoSolicitado.toFixed(2)} para la cuota ${numeroPago} de su plan de ${numeroCuotas} pago(s), tarifa ${cuota.tipoOrigenTarifa ?? "sin clasificar"}.`;
+  await Notificacion.insertMany(destinatarios.map((destinatario) => ({ usuarioId: destinatario._id, titulo, mensaje, tipo: "ADVERTENCIA", enlace: `/cuotas/${cuota._id}` })), { ordered: false });
   await registrarAuditoria(req, { accion: "SOLICITAR_QR", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: mensaje });
   return res.json({ message: destinatarios.length ? "Administración recibió tu solicitud de QR" : "La solicitud quedó registrada; no hay administradores activos para notificar" });
 };
