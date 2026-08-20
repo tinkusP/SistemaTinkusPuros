@@ -36,8 +36,9 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
 export const miIndumentaria = async (req: Request, res: Response) => {
   const preregistro = await Preregistro.findOne({ usuarioId: req.usuario?._id, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id");
   const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id primeraCuotaMonto montoPagado saldo estado") : null;
-  const primerPago = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, numeroPago: 1, fechaEliminado: null }).select("estadoRevision baucherImagen") : null;
-  const pago = { tieneCuota: Boolean(cuota), envioBaucher: Boolean(primerPago?.baucherImagen), primeraCuotaVerificada: primerPago?.estadoRevision === "VERIFICADO", estadoPrimeraCuota: primerPago?.estadoRevision ?? "NO_ENVIADA" };
+  const primerPago = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, fechaEliminado: null }).sort({ numeroPago: 1, fechaPago: 1 }).select("estadoRevision baucherImagen") : null;
+  const pagoVerificado = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }).sort({ numeroPago: 1, fechaPago: 1 }).select("estadoRevision baucherImagen") : null;
+  const pago = { tieneCuota: Boolean(cuota), envioBaucher: Boolean(primerPago?.baucherImagen), primeraCuotaVerificada: Boolean(pagoVerificado), estadoPrimeraCuota: pagoVerificado?.estadoRevision ?? primerPago?.estadoRevision ?? "NO_ENVIADA" };
   const fraterno = await Fraterno.findOne({
     usuarioId: req.usuario?._id,
     fechaEliminado: null,
@@ -64,7 +65,7 @@ export const guardarTallaUsuario = async (req: Request, res: Response) => {
   const fraterno = await Fraterno.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id");
   const preregistro = await Preregistro.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id");
   const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id") : null;
-  const primeraCuota = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, numeroPago: 1, estadoRevision: "VERIFICADO", fechaEliminado: null }).select("_id") : null;
+  const primeraCuota = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }).select("_id") : null;
   if (!primeraCuota) return res.status(409).json({ error: cuota ? "La primera cuota todavía no fue verificada; no se pueden registrar tallas" : "El usuario no tiene una cuota vinculada; regularízala antes de registrar tallas" });
   const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
   const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };

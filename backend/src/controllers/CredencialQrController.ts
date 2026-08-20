@@ -33,11 +33,11 @@ export async function verificarCredencialQr(req: Request, res: Response) {
     const preregistro = await Preregistro.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id numeroPreRegistro estado");
     const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id primeraCuotaMonto montoTotal montoPagado saldo estado") : null;
     const pagos = cuota ? await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).select("numeroPago monto estadoRevision baucherImagen fechaPago").sort({ numeroPago: 1, fechaPago: 1 }).lean() : [];
-    const primerPago = pagos.find((pago) => pago.numeroPago === 1);
+    const primerPago = pagos.find((pago) => pago.estadoRevision === "VERIFICADO") ?? pagos[0];
     const pago = {
       tieneCuota: Boolean(cuota),
       envioBaucher: pagos.some((detalle) => Boolean(detalle.baucherImagen)),
-      primeraCuotaVerificada: primerPago?.estadoRevision === "VERIFICADO",
+      primeraCuotaVerificada: pagos.some((detalle) => detalle.estadoRevision === "VERIFICADO"),
       estadoPrimeraCuota: primerPago?.estadoRevision ?? "NO_ENVIADA",
       primeraCuotaMonto: cuota?.primeraCuotaMonto ?? null,
       montoPagado: cuota?.montoPagado ?? 0,
