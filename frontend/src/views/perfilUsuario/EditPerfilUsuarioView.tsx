@@ -685,24 +685,7 @@ export default function EditarPerfilUsuarioAdminView() {
               "Perfil actualizado correctamente",
           );
 
-          await Promise.all([
-            queryClient.invalidateQueries(
-              {
-                queryKey: [
-                  "perfilusuarios",
-                ],
-              },
-            ),
-
-            queryClient.invalidateQueries(
-              {
-                queryKey: [
-                  "perfilusuario",
-                  id,
-                ],
-              },
-            ),
-          ]);
+          await queryClient.invalidateQueries();
 
           navigate(rutaRetorno);
         },

@@ -257,7 +257,7 @@ export default function PerfilUsuarioDetalleModal({
         formData: { estado: estadoSeleccionado },
       });
     },
-    onSuccess: (respuesta) => {
+    onSuccess: async (respuesta) => {
       if (!perfil) return;
       if (estadoSeleccionado === "ACTIVO" && perfil.estado !== "ACTIVO") {
         setAprobacionVisible(true);
@@ -265,6 +265,7 @@ export default function PerfilUsuarioDetalleModal({
         toast.success(respuesta.message || "Estado actualizado correctamente");
       }
       actualizado?.({ ...perfil, ...respuesta.perfil, documentos: perfil.documentos } as PerfilUsuarioDetalleType);
+      await queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "No se pudo actualizar el estado"),
   });
