@@ -10,13 +10,15 @@ import {
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
-type RegistroTalla = { fraternoId: string; nombre: string; ci: string; telefono?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
-type RegistroFormacion = { id: string; nombre: string; ci: string; telefono?: string; email?: string; bloque?: string; estado: string; puntajeTotal?: number };
+type DatosNombre = { nombres?: string; apellidoPaterno?: string; apellidoMaterno?: string; nombre: string };
+type RegistroTalla = DatosNombre & { fraternoId: string; ci: string; telefono?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
+type RegistroFormacion = DatosNombre & { id: string; ci: string; telefono?: string; email?: string; bloque?: string; estado: string; puntajeTotal?: number };
 
 const campos: Campo[] = [
   { id: "nro", titulo: "N°", valor: (_, i) => i + 1 },
   { id: "nombre", titulo: "Nombre y apellidos", valor: (p) => p.nombre },
   { id: "ci", titulo: "CI", valor: (p) => p.ci },
+  { id: "telefono", titulo: "Celular", valor: (p) => p.telefono || "" },
   { id: "genero", titulo: "Género", valor: (p) => p.genero },
   { id: "email", titulo: "Correo", valor: (p) => p.email },
   { id: "facultad", titulo: "Facultad", valor: (p) => p.facultad },
@@ -37,13 +39,16 @@ const secciones: { id: SeccionReporte; etiqueta: string }[] = [
 ];
 
 const formato = (bytes: number) => bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(2)} GB` : bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
+const textoOrden = (persona: DatosNombre) => [persona.apellidoPaterno, persona.apellidoMaterno, persona.nombres].filter(Boolean).join(" ") || persona.nombre;
+const ordenarPorApellidos = <T extends DatosNombre>(registros: T[]) => [...registros].sort((a, b) => textoOrden(a).localeCompare(textoOrden(b), "es", { sensitivity: "base" }));
+const nombreArchivo = (titulo: string) => `${titulo.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "reporte"}.xlsx`;
 
 export default function ReportesView() {
   const q = useQuery({ queryKey: ["reporte-ejecutivo"], queryFn: obtenerReporteEjecutivo });
   const formacion = useQuery({ queryKey: ["reporte-formacion"], queryFn: obtenerReporteFormacion });
   const alm = useQuery({ queryKey: ["almacenamiento"], queryFn: obtenerAlmacenamiento, refetchInterval: 60000 });
   const tallas = useQuery({ queryKey: ["reporte-tallas"], queryFn: obtenerReporteTallas });
-  const [seleccion, setSeleccion] = useState(["nro", "nombre", "ci", "total", "pagado", "saldo", "firma"]);
+  const [seleccion, setSeleccion] = useState(["nro", "nombre", "ci", "telefono", "total", "pagado", "saldo", "firma"]);
   const [seccionesSeleccionadas, setSeccionesSeleccionadas] = useState<Set<SeccionReporte>>(() => new Set(["GENERAL"]));
   const [titulo, setTitulo] = useState("PLANILLA DE CONTROL DE FRATERNOS");
   const [buscar, setBuscar] = useState("");
@@ -53,9 +58,11 @@ export default function ReportesView() {
 
   const visibles = campos.filter((campo) => seleccion.includes(campo.id));
   const textoBusqueda = buscar.trim().toLowerCase();
-  const personas = useMemo(() => (q.data?.personas || []).filter((persona) => `${persona.nombre} ${persona.ci} ${persona.email}`.toLowerCase().includes(textoBusqueda)), [q.data, textoBusqueda]);
-  const filtrarFormacion = (registros: RegistroFormacion[]) => registros.filter((registro) => `${registro.nombre} ${registro.ci} ${registro.email}`.toLowerCase().includes(textoBusqueda));
-  const registrosTalla = ((tallas.data?.registros || []) as RegistroTalla[]).filter((registro) => (bloque === "TODOS" || registro.bloque === bloque) && `${registro.nombre} ${registro.ci}`.toLowerCase().includes(textoBusqueda));
+  const personas = useMemo(() => ordenarPorApellidos((q.data?.personas || []).filter((persona) => `${persona.nombre} ${persona.ci} ${persona.telefono || ""} ${persona.email}`.toLowerCase().includes(textoBusqueda))), [q.data, textoBusqueda]);
+  const filtrarFormacion = (registros: RegistroFormacion[]) => ordenarPorApellidos(registros.filter((registro) => `${registro.nombre} ${registro.ci} ${registro.telefono || ""} ${registro.email}`.toLowerCase().includes(textoBusqueda)));
+  const registrosTalla = ordenarPorApellidos(((tallas.data?.registros || []) as RegistroTalla[]).filter((registro) => (bloque === "TODOS" || registro.bloque === bloque) && `${registro.nombre} ${registro.ci} ${registro.telefono || ""}`.toLowerCase().includes(textoBusqueda)));
+  const postulantesFiltrados = filtrarFormacion((formacion.data?.postulantes || []) as RegistroFormacion[]);
+  const guiasFiltrados = filtrarFormacion((formacion.data?.guias || []) as RegistroFormacion[]);
   const bloques = [...new Set(((tallas.data?.registros || []) as RegistroTalla[]).map((registro) => registro.bloque))];
   const todoSeleccionado = seccionesSeleccionadas.size === secciones.length;
 
@@ -75,6 +82,35 @@ export default function ReportesView() {
     };
     lector.readAsDataURL(archivo);
   };
+  const exportarExcel = async () => {
+    const { default: ExcelJS } = await import("exceljs");
+    const libro = new ExcelJS.Workbook();
+    libro.creator = "Fraternidad Tinkus Puros";
+    libro.created = new Date();
+    const agregarHoja = (nombre: string, encabezados: string[], filas: (string | number)[][]) => {
+      const hoja = libro.addWorksheet(nombre);
+      hoja.addRow(encabezados);
+      filas.forEach((fila) => hoja.addRow(fila));
+      hoja.views = [{ state: "frozen", ySplit: 1 }];
+      hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: encabezados.length } };
+      const cabecera = hoja.getRow(1);
+      cabecera.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cabecera.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF74122A" } };
+      hoja.columns.forEach((columna) => { columna.width = Math.min(45, Math.max(12, ...filas.map((fila) => String(fila[columna.number - 1] ?? "").length + 2))); });
+    };
+    if (seccionesSeleccionadas.has("GENERAL")) agregarHoja("Preregistros", visibles.map((campo) => campo.titulo), personas.map((persona, indice) => visibles.map((campo) => campo.valor(persona, indice))));
+    if (seccionesSeleccionadas.has("POSTULANTES_GUIA")) agregarHoja("Postulantes guia", ["N°", "Nombre y apellidos", "CI", "Celular", "Correo", "Estado", "Puntaje total", "Firma"], postulantesFiltrados.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.email || "", registro.estado, registro.puntajeTotal ?? "", ""]));
+    if (seccionesSeleccionadas.has("GUIAS")) agregarHoja("Guias", ["N°", "Nombre y apellidos", "CI", "Celular", "Correo", "Bloque", "Estado", "Firma"], guiasFiltrados.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.email || "", registro.bloque || "", registro.estado, ""]));
+    const filasTallas = (tipo: "POLERAS" | "CHAMARRAS") => registrosTalla.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.bloque, tipo === "POLERAS" ? registro.tallaPolera || "" : registro.tallaChamarra || "", ""]);
+    if (seccionesSeleccionadas.has("POLERAS")) agregarHoja("Poleras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla polera", "Firma"], filasTallas("POLERAS"));
+    if (seccionesSeleccionadas.has("CHAMARRAS")) agregarHoja("Chamarras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla chamarra", "Firma"], filasTallas("CHAMARRAS"));
+    const contenido = await libro.xlsx.writeBuffer();
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(new Blob([contenido], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    enlace.download = nombreArchivo(titulo);
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+  };
 
   if (q.isLoading) return <p className="p-8 text-center">Generando reporte...</p>;
   if (!q.data) return <p className="p-6 text-red-700">{q.error?.message}</p>;
@@ -92,7 +128,7 @@ export default function ReportesView() {
           <input value={titulo} onChange={(evento) => setTitulo(evento.target.value)} className="rounded-xl border p-3 font-bold" aria-label="Título del reporte"/>
           <label className="rounded-xl border p-3 text-sm font-bold">Logo izquierdo<input type="file" accept="image/*" onChange={(evento) => cargarLogo(evento.target.files?.[0], "LOGO_REPORTES", setLogoIzquierdo)} className="mt-2 block w-full text-xs"/></label>
           <label className="rounded-xl border p-3 text-sm font-bold">Logo derecho (reemplaza “UMSA LA MEJOR”)<input type="file" accept="image/*" onChange={(evento) => cargarLogo(evento.target.files?.[0], "LOGO_REPORTES_DERECHO", setLogoDerecho)} className="mt-2 block w-full text-xs"/></label>
-          <input value={buscar} onChange={(evento) => setBuscar(evento.target.value)} className="rounded-xl border p-3" placeholder="Filtrar por nombre, CI o correo"/>
+          <input value={buscar} onChange={(evento) => setBuscar(evento.target.value)} className="rounded-xl border p-3" placeholder="Filtrar por nombre, CI, celular o correo"/>
           <select value={bloque} onChange={(evento) => setBloque(evento.target.value)} className="rounded-xl border p-3"><option>TODOS</option>{bloques.map((nombre) => <option key={nombre}>{nombre}</option>)}</select>
         </div>
         <p className="mt-4 text-xs font-black uppercase tracking-wider text-[#735f55]">Columnas de la lista de preregistros</p>
@@ -102,6 +138,7 @@ export default function ReportesView() {
           <label className={`rounded-xl border px-4 py-2 font-bold ${todoSeleccionado ? "bg-[#74122A] text-white" : ""}`}><input type="checkbox" className="mr-2" checked={todoSeleccionado} onChange={alternarTodo}/>Todos</label>
           {secciones.map((seccion) => <label key={seccion.id} className={`rounded-xl border px-4 py-2 font-bold ${seccionesSeleccionadas.has(seccion.id) ? "bg-[#74122A] text-white" : ""}`}><input type="checkbox" className="mr-2" checked={seccionesSeleccionadas.has(seccion.id)} onChange={() => alternarSeccion(seccion.id)}/>{seccion.etiqueta}</label>)}
           <button type="button" onClick={() => window.print()} disabled={!seccionesSeleccionadas.size} className="rounded-xl bg-emerald-700 px-5 py-2 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Imprimir selección</button>
+          <button type="button" onClick={() => void exportarExcel()} disabled={!seccionesSeleccionadas.size} className="rounded-xl bg-blue-700 px-5 py-2 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Exportar a Excel</button>
         </div>
       </div>
     </section>
@@ -112,8 +149,8 @@ export default function ReportesView() {
       </header>
       <div className="space-y-8">
         {seccionesSeleccionadas.has("GENERAL") && <Seccion titulo="Lista de preregistros" cantidad={personas.length}><TablaGeneral personas={personas} visibles={visibles}/></Seccion>}
-        {seccionesSeleccionadas.has("POSTULANTES_GUIA") && <Seccion titulo="Postulantes a guía" cantidad={filtrarFormacion((formacion.data?.postulantes || []) as RegistroFormacion[]).length}><TablaFormacion registros={filtrarFormacion((formacion.data?.postulantes || []) as RegistroFormacion[])} tipo="POSTULANTES"/></Seccion>}
-        {seccionesSeleccionadas.has("GUIAS") && <Seccion titulo="Guías" cantidad={filtrarFormacion((formacion.data?.guias || []) as RegistroFormacion[]).length}><TablaFormacion registros={filtrarFormacion((formacion.data?.guias || []) as RegistroFormacion[])} tipo="GUIAS"/></Seccion>}
+        {seccionesSeleccionadas.has("POSTULANTES_GUIA") && <Seccion titulo="Postulantes a guía" cantidad={postulantesFiltrados.length}><TablaFormacion registros={postulantesFiltrados} tipo="POSTULANTES"/></Seccion>}
+        {seccionesSeleccionadas.has("GUIAS") && <Seccion titulo="Guías" cantidad={guiasFiltrados.length}><TablaFormacion registros={guiasFiltrados} tipo="GUIAS"/></Seccion>}
         {seccionesSeleccionadas.has("POLERAS") && <Seccion titulo="Reporte de poleras" cantidad={registrosTalla.length}><TablaTallas registros={registrosTalla} tipo="POLERAS"/></Seccion>}
         {seccionesSeleccionadas.has("CHAMARRAS") && <Seccion titulo="Reporte de chamarras" cantidad={registrosTalla.length}><TablaTallas registros={registrosTalla} tipo="CHAMARRAS"/></Seccion>}
       </div>
