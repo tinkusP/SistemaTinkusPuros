@@ -9,6 +9,10 @@ import DetalleCuota from "../models/DetalleCuota";
 import { registrarAuditoria } from "../services/AuditoriaService";
 
 const secreto = () => process.env.JWT_SECRET || "";
+const distribuirPlan = (total: number, cantidad: number) => {
+  const base = Math.floor((total * 100) / cantidad) / 100;
+  return Array.from({ length: cantidad }, (_, indice) => indice === cantidad - 1 ? Number((total - base * (cantidad - 1)).toFixed(2)) : base);
+};
 
 export async function miCredencialQr(req: Request, res: Response) {
   if (req.usuario?.estado !== "ACTIVO") return res.status(403).json({ error: "La cuenta debe estar activa para generar su credencial" });
@@ -31,19 +35,33 @@ export async function verificarCredencialQr(req: Request, res: Response) {
     const fraterno = await Fraterno.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id numeroFraterno estado");
     const talla = await TallaFraterno.findOne({ $or: [{ usuarioId: usuario._id }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] }).select("tallaPolera tallaChamarra fechaActualizado");
     const preregistro = await Preregistro.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id numeroPreRegistro estado");
-    const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id primeraCuotaMonto montoTotal montoPagado saldo estado") : null;
+    const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id primeraCuotaMonto numeroCuotasElegidas montoTotal montoPagado saldo estado") : null;
     const pagos = cuota ? await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).select("numeroPago monto estadoRevision baucherImagen fechaPago").sort({ numeroPago: 1, fechaPago: 1 }).lean() : [];
-    const primerPago = pagos.find((pago) => pago.estadoRevision === "VERIFICADO") ?? pagos[0];
+    const primerPago = pagos.find((pago) => pago.numeroPago === 1) ?? pagos[0];
+    const numeroCuotas = cuota ? Math.max(1, cuota.numeroCuotasElegidas ?? 1) : 0;
+    const montosPlan = numeroCuotas ? distribuirPlan(cuota!.montoTotal, numeroCuotas) : [];
+    const detalleCuotas = montosPlan.map((montoProgramado, indice) => {
+      const numero = indice + 1;
+      const detalle = pagos.find((item) => item.numeroPago === numero);
+      const estado = !detalle ? "PENDIENTE" : detalle.estadoRevision === "VERIFICADO" ? "PAGADO" : detalle.estadoRevision === "PENDIENTE" ? "EN_REVISION" : detalle.estadoRevision;
+      return { numero, montoProgramado, montoRegistrado: detalle?.monto ?? 0, estado, fechaPago: detalle?.fechaPago ?? null };
+    });
+    const cuotasPagadas = detalleCuotas.filter((detalle) => detalle.estado === "PAGADO").length;
+    const estadoGeneral = !cuota || cuota.montoPagado <= 0 ? "SIN_PAGOS" : cuota.saldo <= 0 || cuota.estado === "PAGADA" ? "PAGO_COMPLETO" : "PAGO_PARCIAL";
     const pago = {
       tieneCuota: Boolean(cuota),
       envioBaucher: pagos.some((detalle) => Boolean(detalle.baucherImagen)),
-      primeraCuotaVerificada: pagos.some((detalle) => detalle.estadoRevision === "VERIFICADO"),
+      primeraCuotaVerificada: primerPago?.estadoRevision === "VERIFICADO",
       estadoPrimeraCuota: primerPago?.estadoRevision ?? "NO_ENVIADA",
       primeraCuotaMonto: cuota?.primeraCuotaMonto ?? null,
       montoPagado: cuota?.montoPagado ?? 0,
       saldo: cuota?.saldo ?? null,
       estadoCuota: cuota?.estado ?? null,
       numeroPreRegistro: preregistro?.numeroPreRegistro ?? null,
+      numeroCuotas,
+      cuotasPagadas,
+      estadoGeneral,
+      detalleCuotas,
     };
     await registrarAuditoria(req, { accion: "ESCANEAR_QR", modulo: "CREDENCIALES", entidad: "PerfilUsuario", entidadId: usuario._id, descripcion: `Se verificó la identidad de ${usuario.ci}` });
     return res.json({ valida: usuario.estado === "ACTIVO", usuario: { _id: usuario._id, nombres: usuario.nombres, apellidoPaterno: usuario.apellidoPaterno, apellidoMaterno: usuario.apellidoMaterno, ci: usuario.ci, fotoPerfil: usuario.fotoPerfil, email: usuario.email, estado: usuario.estado, roles: usuario.roles }, fraterno, talla, pago });

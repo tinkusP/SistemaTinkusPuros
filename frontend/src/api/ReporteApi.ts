@@ -20,7 +20,7 @@ export type PersonaReporte = {
 };
 export type Reporte = { generadoEn: string; gestion: { _id: string; nombre: string; anio: number }; resumen: Record<string, number>; finanzas: Record<string, number>; distribuciones: Record<string, { nombre: string; total: number }[]>; personas: PersonaReporte[] };
 export type EstadoAlmacenamiento = { archivos: { total: number; bytes: number }; comprobantes: { total: number; bytes: number; promedioBytes: number }; disco: { disponibleBytes: number }; alerta: string };
-export type RegistroTallaReporte = { fraternoId: string; nombres?: string; apellidoPaterno?: string; apellidoMaterno?: string; nombre: string; ci: string; telefono?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
+export type RegistroTallaReporte = { fraternoId: string; nombres?: string; apellidoPaterno?: string; apellidoMaterno?: string; nombre: string; ci: string; telefono?: string; genero?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
 export type RegistroFormacionReporte = { id: string; nombres?: string; apellidoPaterno?: string; apellidoMaterno?: string; nombre: string; ci: string; telefono?: string; email?: string; bloque?: string; estado: string; puntajeTotal?: number };
 export async function obtenerReporteEjecutivo() { try { return (await api.get<Reporte>("/reportes/ejecutivo")).data; } catch (e) { throw new Error(obtenerMensajeError(e, "No se pudo generar el reporte")); } }
 export async function obtenerAlmacenamiento() { try { return (await api.get<EstadoAlmacenamiento>("/reportes/almacenamiento")).data; } catch (e) { throw new Error(obtenerMensajeError(e, "No se pudo medir el almacenamiento")); } }

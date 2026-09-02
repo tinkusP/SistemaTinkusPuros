@@ -2,7 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": { "builder": "RAILPACK", "buildCommand": "npm run build" },
   "deploy": {
-    "preDeployCommand": ["node backend/dist/scripts/migrarArchivosPorCi.js"],
+    "preDeployCommand": ["node backend/dist/scripts/migrarArchivosPorCi.js", "node backend/dist/scripts/migrarPermisosYBloquesGuia.js"],
     "startCommand": "npm start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,

@@ -8,6 +8,7 @@ import Gestion from "../models/Gestion";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import Preregistro from "../models/Preregistro";
 import DetalleCuota from "../models/DetalleCuota";
+import { normalizarGeneroBloque } from "../services/BloqueService";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -24,13 +25,26 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
   await asegurarPrendasPrincipales(req.usuario?._id);
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
   const [tallas, prendas, entregas, cuotas, configuracionTallas] = await Promise.all([
-    TallaFraterno.find().populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci").populate({ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }),
+    TallaFraterno.find().populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci sexo").populate({ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo" } }),
     PrendaIndumentaria.find().sort({ nombre: 1 }),
     EntregaIndumentaria.find().populate(poblarEntrega).sort({ fechaEntrega: -1 }),
     Cuota.find({ fechaEliminado: null }).select("preregistroId montoTotal montoPagado saldo estado"),
     gestion ? ConfiguracionPago.findOne({ gestionId: gestion._id }).select("registroTallasHabilitado fechaLimiteRegistroTallas") : null,
   ]);
-  res.json({ tallas, prendas, entregas, cuotas, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
+  const acumulado: Record<"POLERA" | "CHAMARRA", Record<"HOMBRE" | "MUJER", Map<string, number>>> = { POLERA: { HOMBRE: new Map(), MUJER: new Map() }, CHAMARRA: { HOMBRE: new Map(), MUJER: new Map() } };
+  for (const registro of tallas as any[]) {
+    const usuario = registro.fraternoId?.usuarioId ?? registro.usuarioId;
+    const genero = normalizarGeneroBloque(usuario?.sexo);
+    if (!genero) continue;
+    for (const [prenda, talla] of [["POLERA", registro.tallaPolera], ["CHAMARRA", registro.tallaChamarra]] as const) {
+      const valor = String(talla ?? "").trim().toUpperCase();
+      if (!valor || valor === "SIN DEFINIR") continue;
+      acumulado[prenda][genero].set(valor, (acumulado[prenda][genero].get(valor) ?? 0) + 1);
+    }
+  }
+  const resumenTallas = Object.fromEntries((["POLERA", "CHAMARRA"] as const).map((prenda) => [prenda, Object.fromEntries((["HOMBRE", "MUJER"] as const).map((genero) => { const tallasOrdenadas = Array.from(acumulado[prenda][genero]).sort(([a], [b]) => a.localeCompare(b, "es", { numeric: true })); return [genero, { tallas: tallasOrdenadas.map(([talla, cantidad]) => ({ talla, cantidad })), total: tallasOrdenadas.reduce((suma, [, cantidad]) => suma + cantidad, 0) }]; }))]));
+  const totalGeneral = (["POLERA", "CHAMARRA"] as const).reduce((total, prenda) => total + (["HOMBRE", "MUJER"] as const).reduce((subtotal, genero) => subtotal + Array.from(acumulado[prenda][genero].values()).reduce((suma, cantidad) => suma + cantidad, 0), 0), 0);
+  res.json({ tallas, prendas, entregas, cuotas, resumenTallas: { ...resumenTallas, totalGeneral }, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
 };
 
 export const miIndumentaria = async (req: Request, res: Response) => {

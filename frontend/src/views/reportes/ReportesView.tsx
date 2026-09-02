@@ -11,7 +11,7 @@ import {
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
 type DatosNombre = { nombres?: string; apellidoPaterno?: string; apellidoMaterno?: string; nombre: string };
-type RegistroTalla = DatosNombre & { fraternoId: string; ci: string; telefono?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
+type RegistroTalla = DatosNombre & { fraternoId: string; ci: string; telefono?: string; genero?: string; bloque: string; tallaPolera?: string; tallaChamarra?: string };
 type RegistroFormacion = DatosNombre & { id: string; ci: string; telefono?: string; email?: string; bloque?: string; estado: string; puntajeTotal?: number };
 
 const campos: Campo[] = [
@@ -65,6 +65,11 @@ export default function ReportesView() {
   const guiasFiltrados = filtrarFormacion((formacion.data?.guias || []) as RegistroFormacion[]);
   const bloques = [...new Set(((tallas.data?.registros || []) as RegistroTalla[]).map((registro) => registro.bloque))];
   const todoSeleccionado = seccionesSeleccionadas.size === secciones.length;
+  const resumenPrenda = (campo: "tallaPolera" | "tallaChamarra") => {
+    const conteos = new Map<string, number>();
+    registrosTalla.forEach((registro) => { const genero = registro.genero || "NO REGISTRADO"; const talla = registro[campo] || "SIN TALLA"; const clave = `${genero}|${talla}`; conteos.set(clave, (conteos.get(clave) ?? 0) + 1); });
+    return [...conteos].map(([clave, cantidad]) => { const [genero, talla] = clave.split("|"); return { genero, talla, cantidad }; }).sort((a,b)=>`${a.genero} ${a.talla}`.localeCompare(`${b.genero} ${b.talla}`,"es"));
+  };
 
   const alternarSeccion = (seccion: SeccionReporte) => setSeccionesSeleccionadas((actuales) => {
     const siguientes = new Set(actuales);
@@ -102,8 +107,8 @@ export default function ReportesView() {
     if (seccionesSeleccionadas.has("POSTULANTES_GUIA")) agregarHoja("Postulantes guia", ["N°", "Nombre y apellidos", "CI", "Celular", "Correo", "Estado", "Puntaje total", "Firma"], postulantesFiltrados.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.email || "", registro.estado, registro.puntajeTotal ?? "", ""]));
     if (seccionesSeleccionadas.has("GUIAS")) agregarHoja("Guias", ["N°", "Nombre y apellidos", "CI", "Celular", "Correo", "Bloque", "Estado", "Firma"], guiasFiltrados.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.email || "", registro.bloque || "", registro.estado, ""]));
     const filasTallas = (tipo: "POLERAS" | "CHAMARRAS") => registrosTalla.map((registro, indice) => [indice + 1, registro.nombre, registro.ci, registro.telefono || "", registro.bloque, tipo === "POLERAS" ? registro.tallaPolera || "" : registro.tallaChamarra || "", ""]);
-    if (seccionesSeleccionadas.has("POLERAS")) agregarHoja("Poleras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla polera", "Firma"], filasTallas("POLERAS"));
-    if (seccionesSeleccionadas.has("CHAMARRAS")) agregarHoja("Chamarras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla chamarra", "Firma"], filasTallas("CHAMARRAS"));
+    if (seccionesSeleccionadas.has("POLERAS")) { agregarHoja("Poleras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla polera", "Firma"], filasTallas("POLERAS")); agregarHoja("Resumen poleras", ["Género", "Talla", "Cantidad"], resumenPrenda("tallaPolera").map(item=>[item.genero,item.talla,item.cantidad])); }
+    if (seccionesSeleccionadas.has("CHAMARRAS")) { agregarHoja("Chamarras", ["N°", "Nombre y apellidos", "CI", "Celular", "Bloque", "Talla chamarra", "Firma"], filasTallas("CHAMARRAS")); agregarHoja("Resumen chamarras", ["Género", "Talla", "Cantidad"], resumenPrenda("tallaChamarra").map(item=>[item.genero,item.talla,item.cantidad])); }
     const contenido = await libro.xlsx.writeBuffer();
     const enlace = document.createElement("a");
     enlace.href = URL.createObjectURL(new Blob([contenido], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -151,14 +156,15 @@ export default function ReportesView() {
         {seccionesSeleccionadas.has("GENERAL") && <Seccion titulo="Lista de preregistros" cantidad={personas.length}><TablaGeneral personas={personas} visibles={visibles}/></Seccion>}
         {seccionesSeleccionadas.has("POSTULANTES_GUIA") && <Seccion titulo="Postulantes a guía" cantidad={postulantesFiltrados.length}><TablaFormacion registros={postulantesFiltrados} tipo="POSTULANTES"/></Seccion>}
         {seccionesSeleccionadas.has("GUIAS") && <Seccion titulo="Guías" cantidad={guiasFiltrados.length}><TablaFormacion registros={guiasFiltrados} tipo="GUIAS"/></Seccion>}
-        {seccionesSeleccionadas.has("POLERAS") && <Seccion titulo="Reporte de poleras" cantidad={registrosTalla.length}><TablaTallas registros={registrosTalla} tipo="POLERAS"/></Seccion>}
-        {seccionesSeleccionadas.has("CHAMARRAS") && <Seccion titulo="Reporte de chamarras" cantidad={registrosTalla.length}><TablaTallas registros={registrosTalla} tipo="CHAMARRAS"/></Seccion>}
+        {seccionesSeleccionadas.has("POLERAS") && <Seccion titulo="Reporte de poleras" cantidad={registrosTalla.length}><ResumenPrenda items={resumenPrenda("tallaPolera")}/><TablaTallas registros={registrosTalla} tipo="POLERAS"/></Seccion>}
+        {seccionesSeleccionadas.has("CHAMARRAS") && <Seccion titulo="Reporte de chamarras" cantidad={registrosTalla.length}><ResumenPrenda items={resumenPrenda("tallaChamarra")}/><TablaTallas registros={registrosTalla} tipo="CHAMARRAS"/></Seccion>}
       </div>
     </section>}
   </main>;
 }
 
 function Seccion({ titulo, cantidad, children }: { titulo: string; cantidad: number; children: ReactNode }) { return <section className="break-inside-avoid pt-5"><h3 className="text-lg font-black uppercase text-[#74122A]">{titulo} ({cantidad})</h3>{cantidad ? children : <p className="mt-3 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No existen registros para esta selección.</p>}</section>; }
+function ResumenPrenda({items}:{items:Array<{genero:string;talla:string;cantidad:number}>}) { return <div className="mt-3 flex flex-wrap gap-2">{items.map(item=><span key={`${item.genero}-${item.talla}`} className="rounded-lg border bg-slate-50 px-3 py-2 text-xs font-bold">{item.genero} · {item.talla}: {item.cantidad}</span>)}</div>; }
 function TablaGeneral({ personas, visibles }: { personas: PersonaReporte[]; visibles: Campo[] }) { return <table className="mt-3 w-full border-collapse text-[11px]"><thead><tr>{visibles.map((campo) => <th className="border p-2" key={campo.id}>{campo.titulo}</th>)}</tr></thead><tbody>{personas.map((persona, indice) => <tr key={persona.usuarioId}>{visibles.map((campo) => <td className={`border p-2 ${campo.id === "firma" ? "h-12" : ""}`} key={campo.id}>{campo.valor(persona, indice)}</td>)}</tr>)}</tbody></table>; }
 function TablaTallas({ registros, tipo }: { registros: RegistroTalla[]; tipo: "POLERAS" | "CHAMARRAS" }) { const campo: "tallaPolera" | "tallaChamarra" = tipo === "POLERAS" ? "tallaPolera" : "tallaChamarra"; return <table className="mt-3 w-full border-collapse text-xs"><thead><tr>{["N°", "Nombre", "CI", "Celular", "Bloque", tipo === "POLERAS" ? "Talla polera" : "Talla chamarra", "Firma"].map((titulo) => <th className="border p-2" key={titulo}>{titulo}</th>)}</tr></thead><tbody>{registros.map((registro, indice) => <tr key={registro.fraternoId}><td className="border p-2">{indice + 1}</td><td className="border p-2">{registro.nombre}</td><td className="border p-2">{registro.ci}</td><td className="border p-2">{registro.telefono}</td><td className="border p-2">{registro.bloque}</td><td className="border p-2 font-bold">{registro[campo]}</td><td className="h-12 border p-2"/></tr>)}</tbody></table>; }
 function TablaFormacion({ registros, tipo }: { registros: RegistroFormacion[]; tipo: "GUIAS" | "POSTULANTES" }) { return <table className="mt-3 w-full border-collapse text-xs"><thead><tr>{["N°", "Nombre y apellidos", "CI", "Celular", "Correo", tipo === "GUIAS" ? "Bloque" : "Estado", tipo === "GUIAS" ? "Estado" : "Puntaje total", "Firma"].map((titulo) => <th className="border p-2" key={titulo}>{titulo}</th>)}</tr></thead><tbody>{registros.map((registro, indice) => <tr key={registro.id}><td className="border p-2">{indice + 1}</td><td className="border p-2 font-bold">{registro.nombre}</td><td className="border p-2">{registro.ci}</td><td className="border p-2">{registro.telefono}</td><td className="border p-2">{registro.email}</td><td className="border p-2">{tipo === "GUIAS" ? registro.bloque : registro.estado}</td><td className="border p-2">{tipo === "GUIAS" ? registro.estado : registro.puntajeTotal}</td><td className="h-12 border p-2"/></tr>)}</tbody></table>; }
