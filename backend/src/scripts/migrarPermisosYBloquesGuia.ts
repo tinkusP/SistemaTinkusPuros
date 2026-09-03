@@ -4,7 +4,7 @@ import Bloque from "../models/Bloque";
 import Rol from "../models/Rol";
 import DetalleBloque from "../models/DetalleBloque";
 import { normalizarGeneroBloque } from "../services/BloqueService";
-import { asegurarIndiceGuiaBloqueDisperso, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
+import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 
 const PERMISOS_GUIA = [
   "VISTA_COMUNICADOS",
@@ -39,6 +39,7 @@ async function ejecutar() {
   const bloqueCollection=mongoose.connection.collection("bloques");
   await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
   await asegurarIndiceGuiaBloqueDisperso();
+  await asegurarIndiceGuiasBloqueParcial();
   const guiaCollection=mongoose.connection.collection("guias");
   await asegurarIndicePostulanteGuiaDisperso();
   if(!(await guiaCollection.indexExists("usuarioId_1")))await guiaCollection.createIndex({usuarioId:1},{unique:true,name:"usuarioId_1"});

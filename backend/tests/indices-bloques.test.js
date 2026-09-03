@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { esIndiceGuiaPrincipal, esIndicePostulanteGuia } = require("../dist/services/IndiceBloqueService");
+const { esIndiceGuiaPrincipal, esIndiceGuiasBloque, esIndicePostulanteGuia } = require("../dist/services/IndiceBloqueService");
 
 test("identifica el índice heredado de guía aunque tenga otro nombre", () => {
   assert.equal(esIndiceGuiaPrincipal({ key: { guiaId: 1 } }), true);
@@ -11,4 +11,9 @@ test("identifica el índice heredado de guía aunque tenga otro nombre", () => {
 test("identifica el índice heredado de postulante aunque tenga otro nombre", () => {
   assert.equal(esIndicePostulanteGuia({ key: { postulanteGuiaId: 1 } }), true);
   assert.equal(esIndicePostulanteGuia({ key: { usuarioId: 1 } }), false);
+});
+
+test("identifica el índice heredado del arreglo de guías", () => {
+  assert.equal(esIndiceGuiasBloque({ key: { guiasIds: 1 } }), true);
+  assert.equal(esIndiceGuiasBloque({ key: { guiaId: 1 } }), false);
 });

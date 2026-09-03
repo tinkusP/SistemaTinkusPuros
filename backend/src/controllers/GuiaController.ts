@@ -9,7 +9,7 @@ import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import TallaFraterno from "../models/TallaFraterno";
 import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
-import { asegurarIndiceGuiaBloqueDisperso, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
+import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
 const normalizarGenero = normalizarGeneroBloque;
 export const listarGuias = async (_req: Request, res: Response) => {
@@ -65,18 +65,25 @@ async function crearBloqueAdministrativo(req: Request, res: Response) {
   if(guia&&!genero)return res.status(409).json({error:"El guía debe tener registrado su sexo"});
   const datosBloque={ nombre, ...(guia?{guiaId:guia._id}:{}), guiasIds: guia?[guia._id]:[], gestionId, cantidadGuiasHombres: genero === "HOMBRE" ? 1 : 0, cantidadGuiasMujeres: genero === "MUJER" ? 1 : 0, usuarioCreador: req.usuario?._id };
   try {
-    let bloque;
-    try { bloque=await Bloque.create(datosBloque); }
-    catch(error){
-      const duplicado=error as {code?:number;keyPattern?:Record<string,number>;keyValue?:Record<string,unknown>};
-      if(duplicado.code===11000&&!guia&&(duplicado.keyPattern?.guiaId||duplicado.keyValue?.guiaId===null)){await asegurarIndiceGuiaBloqueDisperso();bloque=await Bloque.create(datosBloque);}else throw error;
+    let bloque: any;
+    for(let intento=0;intento<3&&!bloque;intento+=1){
+      try { bloque=await Bloque.create(datosBloque); }
+      catch(error){
+        const duplicado=error as {code?:number;keyPattern?:Record<string,number>;keyValue?:Record<string,unknown>};
+        if(duplicado.code!==11000||guia)throw error;
+        if(duplicado.keyPattern?.guiaId||duplicado.keyValue?.guiaId===null)await asegurarIndiceGuiaBloqueDisperso();
+        else if(duplicado.keyPattern?.guiasIds||Object.hasOwn(duplicado.keyValue??{},"guiasIds"))await asegurarIndiceGuiasBloqueParcial();
+        else throw error;
+      }
     }
+    if(!bloque)throw new Error("No se pudo crear el bloque después de reparar sus índices");
     await registrarAuditoria(req, { accion: "CREAR_BLOQUE", modulo: "BLOQUES", entidad: "Bloque", entidadId: bloque._id, descripcion: `Administración creó el bloque ${bloque.nombre}`, datosDespues: { guiaId: guia?._id??null, gestionId } });
     return res.status(201).json({ message: "Bloque creado", bloque });
   } catch (error) {
     const duplicado=error as {code?:number;keyPattern?:Record<string,number>;keyValue?:Record<string,unknown>};
     if(duplicado.code===11000&&duplicado.keyPattern?.nombre)return res.status(409).json({error:`Ya existe un bloque llamado ${nombre} en esta gestión.`});
     if(duplicado.code===11000&&duplicado.keyPattern?.guiaId)return res.status(409).json({error:"El guía seleccionado ya pertenece a otro bloque."});
+    if(duplicado.code===11000&&duplicado.keyPattern?.guiasIds)return res.status(409).json({error:"Uno de los guías seleccionados ya pertenece a otro bloque."});
     return res.status(409).json({ error: error instanceof Error ? error.message : "No se pudo crear el bloque" });
   }
 }

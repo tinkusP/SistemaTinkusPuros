@@ -14,7 +14,7 @@ const schema = new Schema({
 }, { versionKey: false, collection: "bloques" });
 schema.index({ nombre: 1, gestionId: 1 }, { unique: true });
 schema.index({ guiaId: 1 }, { unique: true, sparse: true, name: "guiaId_1" });
-schema.index({ guiasIds: 1 }, { unique: true, sparse: true });
+schema.index({ guiasIds: 1 }, { unique: true, name: "guiasIds_1", partialFilterExpression: { "guiasIds.0": { $exists: true } } });
 schema.pre("validate", function () {
   if (!this.guiasIds?.length && this.guiaId) this.guiasIds = [this.guiaId];
   if (this.guiaId && !this.guiasIds.some((id: mongoose.Types.ObjectId) => id.equals(this.guiaId))) this.guiasIds.unshift(this.guiaId);
