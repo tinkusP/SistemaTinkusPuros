@@ -7,6 +7,7 @@ import ConfiguracionPago from "../models/ConfiguracionPago";
 import AceptacionTerminosPago from "../models/AceptacionTerminosPago";
 import Preregistro from "../models/Preregistro";
 import { registrarAuditoria } from "../services/AuditoriaService";
+import { FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
 
 const poblar = [
   { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil" },
@@ -77,12 +78,15 @@ export async function miFraternidad(req: Request, res: Response) {
 export async function miBloque(req: Request, res: Response) {
   const fraterno = await Fraterno.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO", fechaEliminado: null }).populate(poblar).sort({ fechaIngreso: -1 });
   if (!fraterno) return res.status(404).json({ error: "Tu cuenta todavía no tiene un registro activo de fraterno" });
-  const asignacion = await DetalleBloque.findOne({ fraternoId: fraterno._id }).populate({
+  const asignacion = await DetalleBloque.findOne({ fraternoId: fraterno._id, ...FILTRO_ASIGNACION_ACTIVA }).populate({
     path: "bloqueId",
+    match: { estado: "ACTIVO" },
     populate: [
       { path: "guiaId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" } },
       { path: "guiasIds", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" } },
     ],
   });
-  return res.json({ fraterno, bloque: (asignacion as any)?.bloqueId ?? null, asignado: Boolean(asignacion) });
+  const bloque = (asignacion as any)?.bloqueId ?? null;
+  if (asignacion && !bloque) await DetalleBloque.updateOne({ _id: asignacion._id }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } });
+  return res.json({ fraterno, bloque, asignado: Boolean(bloque) });
 }

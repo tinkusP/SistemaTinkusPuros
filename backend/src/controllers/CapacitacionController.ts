@@ -4,6 +4,7 @@ import Fraterno from "../models/Fraterno";
 import Guia from "../models/Guia";
 import Bloque from "../models/Bloque";
 import DetalleBloque from "../models/DetalleBloque";
+import { FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
 
 const escaparRegex = (valor: string) => valor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -30,7 +31,7 @@ export async function buscarUsuariosCapacitacion(req: Request, res: Response) {
     ? await Bloque.find({ $or: [{ guiaId: { $in: registros.map((r) => r._id) } }, { guiasIds: { $in: registros.map((r) => r._id) } }] }).select("nombre guiaId guiasIds").lean()
     : [];
   const asignaciones = tipo === "FRATERNO"
-    ? await DetalleBloque.find({ fraternoId: { $in: registros.map((r) => r._id) } }).select("fraternoId bloqueId").populate("bloqueId", "nombre").lean()
+    ? await DetalleBloque.find({ fraternoId: { $in: registros.map((r) => r._id) }, ...FILTRO_ASIGNACION_ACTIVA }).select("fraternoId bloqueId").populate({ path: "bloqueId", match: { estado: "ACTIVO" }, select: "nombre" }).lean()
     : [];
   const usuarios = perfiles.filter((perfil) => permitidos.has(String(perfil._id))).map((perfil) => {
     const registro = permitidos.get(String(perfil._id)) as { _id: unknown; numeroFraterno?: string };

@@ -5,6 +5,7 @@ import Rol from "../models/Rol";
 import DetalleBloque from "../models/DetalleBloque";
 import { normalizarGeneroBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
+import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
 
 const PERMISOS_GUIA = [
   "VISTA_COMUNICADOS",
@@ -36,6 +37,7 @@ async function ejecutar() {
   for (const indice of indices) {
     if (indice.key?.fila || indice.key?.columna) await detalleCollection.dropIndex(indice.name!);
   }
+  await asegurarIndiceAsignacionActiva();
   const bloqueCollection=mongoose.connection.collection("bloques");
   await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
   await asegurarIndiceGuiaBloqueDisperso();
@@ -50,7 +52,7 @@ async function ejecutar() {
     const idsUnicos = Array.from(new Map(guias.map((guia: any) => [String(guia._id), guia])).values()) as any[];
     const cantidadGuiasHombres = idsUnicos.filter((guia) => normalizarGeneroBloque(guia.usuarioId?.sexo) === "HOMBRE").length;
     const cantidadGuiasMujeres = idsUnicos.filter((guia) => normalizarGeneroBloque(guia.usuarioId?.sexo) === "MUJER").length;
-    const [cantidadHombres, cantidadMujeres] = await Promise.all([DetalleBloque.countDocuments({ bloqueId: bloque._id, genero: "HOMBRE" }), DetalleBloque.countDocuments({ bloqueId: bloque._id, genero: "MUJER" })]);
+    const [cantidadHombres, cantidadMujeres] = await Promise.all([DetalleBloque.countDocuments({ bloqueId: bloque._id, genero: "HOMBRE", ...FILTRO_ASIGNACION_ACTIVA }), DetalleBloque.countDocuments({ bloqueId: bloque._id, genero: "MUJER", ...FILTRO_ASIGNACION_ACTIVA })]);
     await Bloque.updateOne({ _id: bloque._id }, { $set: { guiasIds: idsUnicos.map((guia) => guia._id), cantidadGuiasHombres, cantidadGuiasMujeres, cantidadHombres, cantidadMujeres } });
   }
 
