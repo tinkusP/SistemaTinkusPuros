@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { capacidadSector, LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarDimensionesBloque } = require("../dist/services/BloqueService");
+const { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante } = require("../dist/services/BloqueService");
+const { distribuirPlanPagos, montoCuotaActual } = require("../dist/services/PlanPagosService");
 
 test("normaliza los valores de género usados actualmente", () => {
   assert.equal(normalizarGeneroBloque("masculino"), "HOMBRE");
@@ -9,18 +10,35 @@ test("normaliza los valores de género usados actualmente", () => {
 });
 
 test("aplica los límites duros de 40 hombres, 80 mujeres y 120 integrantes", () => {
-  assert.equal(capacidadSector("HOMBRE", 50, 10), 40);
-  assert.equal(capacidadSector("MUJER", 50, 10), 80);
+  assert.equal(LIMITES_BLOQUE.HOMBRE, 40);
+  assert.equal(LIMITES_BLOQUE.MUJER, 80);
   assert.equal(LIMITES_BLOQUE.TOTAL, 120);
+  assert.equal(LIMITES_BLOQUE.GUIAS_POR_GENERO, 2);
 });
 
-test("rechaza dimensiones que superan la capacidad permitida", () => {
-  assert.equal(validarDimensionesBloque({ filasHombres: 20, columnasHombres: 2, filasMujeres: 20, columnasMujeres: 4 }), null);
-  assert.match(validarDimensionesBloque({ filasHombres: 21, columnasHombres: 2, filasMujeres: 20, columnasMujeres: 4 }), /40/);
-  assert.match(validarDimensionesBloque({ filasHombres: 20, columnasHombres: 2, filasMujeres: 21, columnasMujeres: 4 }), /80/);
+test("reutiliza los importes reales de los planes de una, dos y tres cuotas", () => {
+  assert.deepEqual(distribuirPlanPagos(770, 1), [770]);
+  assert.deepEqual(distribuirPlanPagos(770, 2), [385, 385]);
+  assert.deepEqual(distribuirPlanPagos(770, 3), [300, 235, 235]);
+  assert.deepEqual(distribuirPlanPagos(850, 3), [300, 275, 275]);
+  assert.equal(montoCuotaActual(770, 200, 3, 2), 200);
 });
 
 test("devuelve el mensaje exacto cuando un sector está lleno", () => {
   assert.equal(mensajeCupoCompleto("HOMBRE"), "Cupo de hombres completo: 40/40.");
   assert.equal(mensajeCupoCompleto("MUJER"), "Cupo de mujeres completo: 80/80.");
+});
+
+test("admite dos guías por género y bloquea al tercero", () => {
+  assert.equal(validarCupoGuia("HOMBRE", 1), null);
+  assert.match(validarCupoGuia("HOMBRE", 2), /2 guías hombres/);
+  assert.equal(validarCupoGuia("MUJER", 1), null);
+  assert.match(validarCupoGuia("MUJER", 2), /2 guías mujeres/);
+});
+
+test("admite 40 hombres y 80 mujeres, pero bloquea el siguiente", () => {
+  assert.equal(validarCupoIntegrante("HOMBRE", 39), null);
+  assert.equal(validarCupoIntegrante("HOMBRE", 40), "Cupo de hombres completo: 40/40.");
+  assert.equal(validarCupoIntegrante("MUJER", 79), null);
+  assert.equal(validarCupoIntegrante("MUJER", 80), "Cupo de mujeres completo: 80/80.");
 });

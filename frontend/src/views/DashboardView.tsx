@@ -52,7 +52,7 @@ const accesosRapidos = [
   { titulo: "Tokens", descripcion: "Consultar los tokens de registro autorizados.", ruta: "/tokens-registro", icono: "🔐", permiso: "VISTA_TOKENS" },
   { titulo: "Postulantes a guía", descripcion: "Consultar postulantes habilitados a guía.", ruta: "/postulantes-guia", icono: "🪶", permiso: "VISTA_POSTULANTES_GUIA" },
   { titulo: "Asistencia a guía", descripcion: "Consultar asistencia de postulantes a guía.", ruta: "/asistencias-postulantes-guia", icono: "📋", permiso: "VISTA_ASISTENCIA_GUIA" },
-  { titulo: "Guías y bloques", descripcion: "Consultar guías, bloques y posiciones.", ruta: "/guias-bloques", icono: "🧭", permiso: "VISTA_GUIAS_BLOQUES" },
+  { titulo: "Guías y bloques", descripcion: "Administrar guías e integrantes por bloque.", ruta: "/guias-bloques", icono: "🧭", permiso: "VISTA_GUIAS_BLOQUES" },
   { titulo: "Tallas e indumentaria", descripcion: "Administrar tallas y entregas.", ruta: "/indumentaria", icono: "👕", permiso: "VISTA_INDUMENTARIA" },
   { titulo: "Anuncios", descripcion: "Consultar comunicaciones institucionales.", ruta: "/anuncios", icono: "📢", permiso: "VISTA_ANUNCIOS" },
   { titulo: "Auditoría", descripcion: "Consultar el historial de operaciones.", ruta: "/auditoria", icono: "🔎", permiso: "VISTA_AUDITORIA" },

@@ -17,6 +17,7 @@ import Gestion from "../models/Gestion";
 import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
 import { reactivarCuotaPreregistroAprobado, sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
+import { montoCuotaActual, redondearMonto as redondear } from "../services/PlanPagosService";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil tipoOrigen" }, { path: "gestionId", select: "nombre anio" }] };
 const esAdministrador = usuarioEsAdministrador;
@@ -49,24 +50,6 @@ async function programarSiguientePago(cuotaId: string) {
   });
 }
 async function cuotaPerteneceAlUsuario(cuotaId: string, usuarioId: unknown) { const cuota = await Cuota.findOne({ _id: cuotaId, fechaEliminado: null }).populate<{ preregistroId: { usuarioId: { toString(): string } } }>("preregistroId", "usuarioId"); return cuota && String(cuota.preregistroId.usuarioId) === String(usuarioId); }
-const redondear = (valor: number) => Number(valor.toFixed(2));
-const distribucionPlan = (montoTotal: number, numeroCuotas: number) => {
-  const total = redondear(montoTotal);
-  if (numeroCuotas === 1) return [total];
-  if (numeroCuotas === 2) {
-    const primera = redondear(total / 2);
-    return [primera, redondear(total - primera)];
-  }
-  const primera = Math.min(300, total);
-  const segunda = redondear((total - primera) / 2);
-  return [primera, segunda, redondear(total - primera - segunda)];
-};
-const montoCuotaActual = (montoTotal: number, saldo: number, numeroCuotas: number, pagosVerificados: number) => {
-  if (pagosVerificados === numeroCuotas - 1) return redondear(saldo);
-  const importes = distribucionPlan(montoTotal, numeroCuotas);
-  return Math.min(importes[pagosVerificados] ?? redondear(saldo), redondear(saldo));
-};
-
 const MENSAJE_PREREGISTRO_OBSERVADO = "Tienes una observación pendiente en tu preregistro. Regularízala con Administración y espera su aprobación para acceder a la opción de pagos.";
 
 async function validarPreregistroAprobado(cuota: { preregistroId: unknown }) {

@@ -7,12 +7,9 @@ import Preregistro from "../models/Preregistro";
 import Cuota from "../models/Cuota";
 import DetalleCuota from "../models/DetalleCuota";
 import { registrarAuditoria } from "../services/AuditoriaService";
+import { distribuirPlanPagos } from "../services/PlanPagosService";
 
 const secreto = () => process.env.JWT_SECRET || "";
-const distribuirPlan = (total: number, cantidad: number) => {
-  const base = Math.floor((total * 100) / cantidad) / 100;
-  return Array.from({ length: cantidad }, (_, indice) => indice === cantidad - 1 ? Number((total - base * (cantidad - 1)).toFixed(2)) : base);
-};
 
 export async function miCredencialQr(req: Request, res: Response) {
   if (req.usuario?.estado !== "ACTIVO") return res.status(403).json({ error: "La cuenta debe estar activa para generar su credencial" });
@@ -39,7 +36,7 @@ export async function verificarCredencialQr(req: Request, res: Response) {
     const pagos = cuota ? await DetalleCuota.find({ cuotaId: cuota._id, fechaEliminado: null }).select("numeroPago monto estadoRevision baucherImagen fechaPago").sort({ numeroPago: 1, fechaPago: 1 }).lean() : [];
     const primerPago = pagos.find((pago) => pago.numeroPago === 1) ?? pagos[0];
     const numeroCuotas = cuota ? Math.max(1, cuota.numeroCuotasElegidas ?? 1) : 0;
-    const montosPlan = numeroCuotas ? distribuirPlan(cuota!.montoTotal, numeroCuotas) : [];
+    const montosPlan = numeroCuotas ? distribuirPlanPagos(cuota!.montoTotal, numeroCuotas) : [];
     const detalleCuotas = montosPlan.map((montoProgramado, indice) => {
       const numero = indice + 1;
       const detalle = pagos.find((item) => item.numeroPago === numero);

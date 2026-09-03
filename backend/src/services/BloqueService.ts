@@ -15,24 +15,17 @@ export function normalizarGeneroBloque(valor: unknown): GeneroBloque | null {
   return null;
 }
 
-export function capacidadSector(genero: GeneroBloque, filas: number, columnas: number) {
-  return Math.min(filas * columnas, LIMITES_BLOQUE[genero]);
-}
-
-export function validarDimensionesBloque(datos: {
-  filasHombres: number;
-  columnasHombres: number;
-  filasMujeres: number;
-  columnasMujeres: number;
-}) {
-  const capacidadHombres = datos.filasHombres * datos.columnasHombres;
-  const capacidadMujeres = datos.filasMujeres * datos.columnasMujeres;
-  if (capacidadHombres > LIMITES_BLOQUE.HOMBRE) return "La capacidad de hombres no puede superar 40";
-  if (capacidadMujeres > LIMITES_BLOQUE.MUJER) return "La capacidad de mujeres no puede superar 80";
-  return null;
-}
-
 export function mensajeCupoCompleto(genero: GeneroBloque) {
   const limite = LIMITES_BLOQUE[genero];
   return `Cupo de ${genero === "HOMBRE" ? "hombres" : "mujeres"} completo: ${limite}/${limite}.`;
+}
+
+export function validarCupoIntegrante(genero: GeneroBloque, cantidadActual: number) {
+  return cantidadActual < LIMITES_BLOQUE[genero] ? null : mensajeCupoCompleto(genero);
+}
+
+export function validarCupoGuia(genero: GeneroBloque, cantidadActual: number) {
+  return cantidadActual < LIMITES_BLOQUE.GUIAS_POR_GENERO
+    ? null
+    : `El bloque ya tiene 2 guías ${genero === "HOMBRE" ? "hombres" : "mujeres"}.`;
 }

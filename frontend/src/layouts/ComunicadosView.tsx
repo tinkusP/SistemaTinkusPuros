@@ -401,7 +401,7 @@ export default function ComunicadosView() {
                   )}
                   {esFraterno && (
                     <Link to="/mi-bloque" role="menuitem" onClick={() => setMenuUsuarioAbierto(false)} className="mt-1 block rounded-lg bg-emerald-100 px-3 py-2.5 text-sm font-black text-emerald-900 transition hover:bg-emerald-200">
-                      Mi bloque y posición
+                      Mi bloque
                     </Link>
                   )}
                   {tieneAccesoAdministrativo && (

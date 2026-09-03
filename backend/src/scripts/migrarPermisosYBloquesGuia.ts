@@ -10,7 +10,6 @@ const PERMISOS_GUIA = [
   "VISTA_PASOS",
   "VISTA_CANCIONERO",
   "VISTA_MI_BLOQUE_GUIA",
-  "BLOQUES_PROPIOS_CREAR",
   "BLOQUES_PROPIOS_GESTIONAR",
   "BLOQUES_PROPIOS_EXPORTAR",
 ];
@@ -23,12 +22,22 @@ async function ejecutar() {
   await Rol.updateOne(
     { codigo: "GUIA" },
     {
-      $set: { nombre: "Guía", descripcion: "Organiza y administra únicamente su bloque", estado: true, fechaEliminado: null },
-      $addToSet: { permisos: { $each: PERMISOS_GUIA } },
+      $set: { nombre: "Guía", descripcion: "Organiza únicamente el bloque asignado por Administración", estado: true, fechaEliminado: null, permisos: PERMISOS_GUIA },
       $setOnInsert: { codigo: "GUIA", esRolSistema: true },
     },
     { upsert: true },
   );
+
+  const detalleCollection = mongoose.connection.collection("detalle_bloques");
+  await detalleCollection.updateMany({}, { $unset: { fila: "", columna: "" } });
+  const indices = await detalleCollection.indexes();
+  for (const indice of indices) {
+    if (indice.key?.fila || indice.key?.columna) await detalleCollection.dropIndex(indice.name!);
+  }
+  const bloqueCollection=mongoose.connection.collection("bloques");
+  await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
+  const indiceGuia=(await bloqueCollection.indexes()).find(indice=>indice.name==="guiaId_1");
+  if(indiceGuia&&!indiceGuia.sparse){await bloqueCollection.dropIndex("guiaId_1");await bloqueCollection.createIndex({guiaId:1},{unique:true,sparse:true,name:"guiaId_1"});}
 
   const bloques = await Bloque.find().populate({ path: "guiasIds", populate: { path: "usuarioId", select: "sexo" } }).populate({ path: "guiaId", populate: { path: "usuarioId", select: "sexo" } });
   for (const bloque of bloques as any[]) {

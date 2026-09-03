@@ -74,15 +74,15 @@ export async function miFraternidad(req: Request, res: Response) {
   return res.json({ fraterno });
 }
 
-export async function miBloqueYPosicion(req: Request, res: Response) {
+export async function miBloque(req: Request, res: Response) {
   const fraterno = await Fraterno.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO", fechaEliminado: null }).populate(poblar).sort({ fechaIngreso: -1 });
   if (!fraterno) return res.status(404).json({ error: "Tu cuenta todavía no tiene un registro activo de fraterno" });
-  const posicion = await DetalleBloque.findOne({ fraternoId: fraterno._id }).populate({
+  const asignacion = await DetalleBloque.findOne({ fraternoId: fraterno._id }).populate({
     path: "bloqueId",
     populate: [
-      { path: "guiaId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono" } },
-      { path: "guiasIds", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono" } },
+      { path: "guiaId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" } },
+      { path: "guiasIds", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" } },
     ],
   });
-  return res.json({ fraterno, posicion });
+  return res.json({ fraterno, bloque: (asignacion as any)?.bloqueId ?? null, asignado: Boolean(asignacion) });
 }
