@@ -1,12 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante } = require("../dist/services/BloqueService");
+const { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, normalizarNombreBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } = require("../dist/services/BloqueService");
 const { distribuirPlanPagos, montoCuotaActual } = require("../dist/services/PlanPagosService");
 
 test("normaliza los valores de género usados actualmente", () => {
   assert.equal(normalizarGeneroBloque("masculino"), "HOMBRE");
   assert.equal(normalizarGeneroBloque("Femenino"), "MUJER");
   assert.equal(normalizarGeneroBloque("sin registrar"), null);
+});
+
+test("normaliza y valida el nombre antes de actualizar únicamente ese campo", () => {
+  assert.equal(normalizarNombreBloque("  Los   guerreros "), "LOS GUERREROS");
+  assert.equal(validarNombreBloque(" ").error, "El nombre debe tener entre 2 y 100 caracteres");
+  assert.equal(validarNombreBloque("BLOQUE DE PRUEBA").error, null);
+  assert.notEqual(validarNombreBloque("X".repeat(101)).error, null);
 });
 
 test("aplica los límites duros de 40 hombres, 80 mujeres y 120 integrantes", () => {

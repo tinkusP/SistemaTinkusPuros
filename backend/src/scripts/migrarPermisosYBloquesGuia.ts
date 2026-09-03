@@ -38,6 +38,10 @@ async function ejecutar() {
   await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
   const indiceGuia=(await bloqueCollection.indexes()).find(indice=>indice.name==="guiaId_1");
   if(indiceGuia&&!indiceGuia.sparse){await bloqueCollection.dropIndex("guiaId_1");await bloqueCollection.createIndex({guiaId:1},{unique:true,sparse:true,name:"guiaId_1"});}
+  const guiaCollection=mongoose.connection.collection("guias");
+  const indicePostulante=(await guiaCollection.indexes()).find(indice=>indice.name==="postulanteGuiaId_1");
+  if(indicePostulante&&!indicePostulante.sparse){await guiaCollection.dropIndex("postulanteGuiaId_1");await guiaCollection.createIndex({postulanteGuiaId:1},{unique:true,sparse:true,name:"postulanteGuiaId_1"});}
+  if(!(await guiaCollection.indexExists("usuarioId_1")))await guiaCollection.createIndex({usuarioId:1},{unique:true,name:"usuarioId_1"});
 
   const bloques = await Bloque.find().populate({ path: "guiasIds", populate: { path: "usuarioId", select: "sexo" } }).populate({ path: "guiaId", populate: { path: "usuarioId", select: "sexo" } });
   for (const bloque of bloques as any[]) {

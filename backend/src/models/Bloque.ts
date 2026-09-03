@@ -1,7 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import { LIMITES_BLOQUE } from "../services/BloqueService";
 const schema = new Schema({
-  nombre: { type: String, required: true, trim: true, uppercase: true },
+  nombre: { type: String, required: true, trim: true, uppercase: true, minlength: 2, maxlength: 100 },
   guiaId: { type: Schema.Types.ObjectId, ref: "Guia" },
   guiasIds: [{ type: Schema.Types.ObjectId, ref: "Guia", required: true }],
   cantidadGuiasHombres: { type: Number, min: 0, default: 0 },

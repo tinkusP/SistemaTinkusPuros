@@ -8,6 +8,17 @@ export const LIMITES_BLOQUE = {
   GUIAS_TOTAL: 4,
 } as const;
 
+export function normalizarNombreBloque(valor: unknown) {
+  return String(valor ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+export function validarNombreBloque(valor: unknown) {
+  const nombre = normalizarNombreBloque(valor);
+  return nombre.length >= 2 && nombre.length <= 100
+    ? { nombre, error: null }
+    : { nombre, error: "El nombre debe tener entre 2 y 100 caracteres" };
+}
+
 export function normalizarGeneroBloque(valor: unknown): GeneroBloque | null {
   const genero = String(valor ?? "").trim().toUpperCase();
   if (["HOMBRE", "MASCULINO", "VARON", "VARÓN", "M"].includes(genero)) return "HOMBRE";
