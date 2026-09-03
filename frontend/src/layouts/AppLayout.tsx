@@ -115,9 +115,19 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "🧭",
   },
   {
-    nombre: "Mi bloque de guía",
+    nombre: "Mi bloque",
     ruta: "/mi-bloque-guia",
     icono: "🎟️",
+  },
+  {
+    nombre: "Directorio de bloques",
+    ruta: "/directorio-bloques-guia",
+    icono: "🗂️",
+  },
+  {
+    nombre: "Mis fraternos",
+    ruta: "/mis-fraternos-guia",
+    icono: "🤝",
   },
   {
     nombre: "Tallas e indumentaria",
@@ -221,13 +231,14 @@ export default function AppLayout() {
           .trim()
           .toUpperCase()
       : "";
-  const permisoPorRuta:Record<string,string>={"/escaner-qr":"TALLAS_REGISTRAR","/tokens-registro":"TOKENS_GESTIONAR","/dashboard":"VISTA_DASHBOARD","/gestion":"VISTA_GESTIONES","/perfil-usuario":"VISTA_USUARIOS","/facultades":"VISTA_FACULTADES","/rol":"VISTA_ROLES","/preregistros":"VISTA_PREREGISTROS","/postulantes-guia":"VISTA_POSTULANTES_GUIA","/asistencias-postulantes-guia":"VISTA_ASISTENCIA_GUIA","/guias-bloques":"VISTA_GUIAS_BLOQUES","/indumentaria":"VISTA_INDUMENTARIA","/anuncios":"VISTA_ANUNCIOS","/auditoria":"VISTA_AUDITORIA","/cuotas":"VISTA_PAGOS","/asistencias":"VISTA_ASISTENCIAS","/fraternos":"VISTA_FRATERNOS","/traspasos":"VISTA_TRASPASOS","/pasos":"VISTA_PASOS","/cancionero":"VISTA_CANCIONERO","/reportes":"VISTA_REPORTES"};
+  const permisoPorRuta:Record<string,string>={"/escaner-qr":"TALLAS_REGISTRAR","/tokens-registro":"TOKENS_GESTIONAR","/dashboard":"VISTA_DASHBOARD","/gestion":"VISTA_GESTIONES","/perfil-usuario":"VISTA_USUARIOS","/facultades":"VISTA_FACULTADES","/rol":"VISTA_ROLES","/preregistros":"VISTA_PREREGISTROS","/postulantes-guia":"VISTA_POSTULANTES_GUIA","/asistencias-postulantes-guia":"VISTA_ASISTENCIA_GUIA","/guias-bloques":"VISTA_GUIAS_BLOQUES","/directorio-bloques-guia":"VISTA_DIRECTORIO_BLOQUES","/mi-bloque-guia":"VISTA_MI_BLOQUE_GUIA","/mis-fraternos-guia":"VISTA_MI_BLOQUE_GUIA","/indumentaria":"VISTA_INDUMENTARIA","/anuncios":"VISTA_ANUNCIOS","/auditoria":"VISTA_AUDITORIA","/cuotas":"VISTA_PAGOS","/asistencias":"VISTA_ASISTENCIAS","/fraternos":"VISTA_FRATERNOS","/traspasos":"VISTA_TRASPASOS","/pasos":"VISTA_PASOS","/cancionero":"VISTA_CANCIONERO","/reportes":"VISTA_REPORTES"};
   const esPropietarioRespaldo = String(usuario?.email ?? "").trim().toLowerCase() === "devdjcod@gmail.com";
   const tienePermisosOperativos = permisosUsuario.size > 0;
+  const rutasExclusivasGuia = new Set(["/mi-bloque-guia", "/directorio-bloques-guia", "/mis-fraternos-guia"]);
   const opcionesVisibles = esAdministrador
-    ? opcionesMenu.filter(opcion => (opcion.ruta !== "/mi-bloque-guia" || esGuia) && (opcion.ruta !== "/respaldo" || esPropietarioRespaldo))
+    ? opcionesMenu.filter(opcion => (!rutasExclusivasGuia.has(opcion.ruta) || esGuia) && (opcion.ruta !== "/respaldo" || esPropietarioRespaldo))
     : esGuia
-      ? opcionesMenu.filter(opcion => ["/comunicados", "/mi-bloque-guia", "/pasos", "/cancionero"].includes(opcion.ruta))
+      ? opcionesMenu.filter(opcion => ["/comunicados", "/mi-bloque-guia", "/directorio-bloques-guia", "/mis-fraternos-guia", "/pasos", "/cancionero"].includes(opcion.ruta))
       : opcionesMenu.filter(opcion => tienePermisosOperativos
         ? opcion.ruta === "/dashboard" || permisosUsuario.has(permisoPorRuta[opcion.ruta]) || (opcion.ruta === "/tokens-registro" && permisosUsuario.has("VISTA_TOKENS")) || (opcion.ruta === "/escaner-qr" && (permisosUsuario.has("ASISTENCIAS_GESTIONAR") || permisosUsuario.has("VISTA_ASISTENCIAS")))
         : ["/comunicados", "/pasos", "/cancionero"].includes(opcion.ruta));
@@ -277,7 +288,7 @@ export default function AppLayout() {
     return <Navigate to="/cambiar-password-obligatorio" replace />;
   }
 
-  if (!esAdministrador && esGuia && !["/mi-bloque-guia", "/pasos", "/cancionero", "/comunicados"].some(ruta => location.pathname.startsWith(ruta))) {
+  if (!esAdministrador && esGuia && !["/mi-bloque-guia", "/directorio-bloques-guia", "/mis-fraternos-guia", "/pasos", "/cancionero", "/comunicados"].some(ruta => location.pathname.startsWith(ruta))) {
     return <Navigate to="/mi-bloque-guia" replace />;
   }
 

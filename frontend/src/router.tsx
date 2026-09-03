@@ -54,6 +54,8 @@ import MisTallasView from "./views/indumentaria/MisTallasView";
 import AdminMiPerfilView from "./views/perfilUsuario/AdminMiPerfilView";
 import GuiaBloqueView from "./views/guia/GuiaBloqueView";
 import MiBloqueGuiaView from "./views/guia/MiBloqueGuiaView";
+import DirectorioBloquesGuiaView from "./views/guia/DirectorioBloquesGuiaView";
+import MisFraternosGuiaView from "./views/guia/MisFraternosGuiaView";
 import MiBloqueFraternoView from "./views/fraterno/MiBloqueFraternoView";
 import AsistenciaPostulanteGuiaView from "./views/guia/AsistenciaPostulanteGuiaView";
 import MiAsistenciaPostulanteGuiaView from "./views/guia/MiAsistenciaPostulanteGuiaView";
@@ -169,6 +171,8 @@ export default function Router() {
             <Route path="/postulantes-guia/:id" element={<DetallePostulanteGuiaView />} />
             <Route path="/guias-bloques" element={<GuiaBloqueView />} />
             <Route path="/mi-bloque-guia" element={<MiBloqueGuiaView />} />
+            <Route path="/directorio-bloques-guia" element={<DirectorioBloquesGuiaView />} />
+            <Route path="/mis-fraternos-guia" element={<MisFraternosGuiaView />} />
             <Route path="/anuncios" element={<AnuncioAdminView />} />
             <Route path="/auditoria" element={<AuditoriaView />} />
             <Route path="/cuotas" element={<CuotaView />} />
