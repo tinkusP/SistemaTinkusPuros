@@ -11,7 +11,7 @@ import TallaFraterno from "../models/TallaFraterno";
 import Preregistro from "../models/Preregistro";
 import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
-import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
+import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion } from "../services/AsignacionBloqueService";
 import { crearPreregistroParaUsuario } from "./PreregistroController";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
 const normalizarGenero = normalizarGeneroBloque;
@@ -100,9 +100,8 @@ async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGe
   const limite = LIMITES_BLOQUE[genero];
   const cantidad = await DetalleBloque.countDocuments({ bloqueId: bloque._id, genero, ...FILTRO_ASIGNACION_ACTIVA });
   const errorCupo=validarCupoIntegrante(genero,cantidad); if(errorCupo)return res.status(409).json({error:errorCupo});
-  const existente: any = await DetalleBloque.findOne({ fraternoId: fraterno._id, ...FILTRO_ASIGNACION_ACTIVA }).populate({ path: "bloqueId", match: { estado: "ACTIVO" }, select: "nombre estado" });
-  if (existente?.bloqueId) return res.status(409).json({ error: String(existente.bloqueId._id) === String(bloque._id) ? "Este fraterno ya está en tu bloque." : `Este fraterno ya pertenece al bloque ${existente.bloqueId.nombre}.` });
-  if (existente && !existente.bloqueId) await DetalleBloque.updateOne({ _id: existente._id }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } });
+  const existente: any = await obtenerAsignacionActivaValida(fraterno._id);
+  if (existente) { const resumen = resumirAsignacion(existente); return res.status(409).json({ error: String(existente.bloqueId._id) === String(bloque._id) ? "Este fraterno ya está en tu bloque." : `Este fraterno pertenece actualmente al bloque ${existente.bloqueId.nombre}.`, asignacion: resumen }); }
   const campoCantidad = genero === "HOMBRE" ? "cantidadHombres" : "cantidadMujeres";
   await Bloque.updateOne({ _id: bloque._id, [campoCantidad]: { $lt: cantidad } }, { $set: { [campoCantidad]: cantidad } });
   const reservado = await Bloque.findOneAndUpdate({ _id: bloque._id, [campoCantidad]: { $lt: limite } }, { $inc: { [campoCantidad]: 1 } }, { new: true });
@@ -114,7 +113,11 @@ async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGe
     return res.status(201).json({ message: "Fraterno agregado al bloque", detalle });
   } catch (error) {
     await Bloque.updateOne({ _id: bloque._id, [campoCantidad]: { $gt: 0 } }, { $inc: { [campoCantidad]: -1 } });
-    if ((error as { code?: number }).code === 11000) return res.status(409).json({ error: "El fraterno acaba de ser registrado en otro bloque." });
+    if ((error as { code?: number }).code === 11000) {
+      const ganadora: any = await obtenerAsignacionActivaValida(fraterno._id);
+      const resumen = resumirAsignacion(ganadora);
+      return res.status(409).json({ error: resumen ? `Este fraterno pertenece actualmente al bloque ${resumen.bloqueNombre}.` : "La asignación cambió durante la operación. Actualiza la búsqueda.", asignacion: resumen });
+    }
     return res.status(409).json({ error: error instanceof Error ? error.message : "No se pudo asignar el fraterno" });
   }
 }
@@ -159,16 +162,19 @@ export const buscarFraternosParaMiBloque = async (req: Request, res: Response) =
   const fraternoPorUsuario = new Map(fraternos.map((fraterno) => [String(fraterno.usuarioId?._id ?? fraterno.usuarioId), fraterno]));
   const preregistros: any[] = await Preregistro.find({ usuarioId: { $in: usuarios.map((usuario) => usuario._id) }, gestionId: bloque.gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 }).select("usuarioId numeroPreRegistro estado gestionId").lean();
   const preregistroPorUsuario = new Map(preregistros.map((item) => [String(item.usuarioId), item]));
-  const asignaciones: any[] = await DetalleBloque.find({ fraternoId: { $in: fraternos.map((fraterno) => fraterno._id) }, ...FILTRO_ASIGNACION_ACTIVA }).populate({ path: "bloqueId", match: { estado: "ACTIVO" }, select: "nombre estado" }).lean();
-  const asignacionPorFraterno = new Map(asignaciones.map((item) => [String(item.fraternoId), item.bloqueId]));
+  const asignaciones: any[] = await DetalleBloque.find({ fraternoId: { $in: fraternos.map((fraterno) => fraterno._id) }, ...FILTRO_ASIGNACION_ACTIVA }).populate({ path: "bloqueId", match: { estado: "ACTIVO" }, select: "nombre estado guiaId guiasIds", populate: [{ path: "guiasIds", populate: poblarGuia }, { path: "guiaId", populate: poblarGuia }] }).lean();
+  const asignacionPorFraterno = new Map(asignaciones.filter((item) => item.bloqueId).map((item) => [String(item.fraternoId), item]));
   const resultados = usuarios.map((usuario) => {
     const fraterno = fraternoPorUsuario.get(String(usuario._id));
-    const bloqueAsignado: any = fraterno ? asignacionPorFraterno.get(String(fraterno._id)) : null;
-    return fraterno ? { ...fraterno.toObject(), usuarioId: usuario, estadoFraterno: fraterno.estado, asignacion: bloqueAsignado ? { bloqueId: bloqueAsignado._id, bloqueNombre: bloqueAsignado.nombre, esMiBloque: String(bloqueAsignado._id) === String(bloque._id) } : null } : { _id: `usuario-${usuario._id}`, usuarioId: usuario, preregistroId: preregistroPorUsuario.get(String(usuario._id)) ?? null, estadoFraterno: "NO_REGISTRADO", asignacion: null };
+    const asignacionActual: any = fraterno ? asignacionPorFraterno.get(String(fraterno._id)) : null;
+    const resumen: any = resumirAsignacion(asignacionActual);
+    if (resumen) resumen.esMiBloque = String(resumen.bloqueId) === String(bloque._id);
+    return fraterno ? { ...fraterno.toObject(), usuarioId: usuario, estadoFraterno: fraterno.estado, asignacion: resumen } : { _id: `usuario-${usuario._id}`, usuarioId: usuario, preregistroId: preregistroPorUsuario.get(String(usuario._id)) ?? null, estadoFraterno: "NO_REGISTRADO", asignacion: null };
   });
   for (const fraterno of fraternos) if (!resultados.some((item: any) => String(item._id) === String(fraterno._id))) {
-    const bloqueAsignado: any = asignacionPorFraterno.get(String(fraterno._id));
-    resultados.push({ ...fraterno.toObject(), estadoFraterno: fraterno.estado, asignacion: bloqueAsignado ? { bloqueId: bloqueAsignado._id, bloqueNombre: bloqueAsignado.nombre, esMiBloque: String(bloqueAsignado._id) === String(bloque._id) } : null });
+    const resumen: any = resumirAsignacion(asignacionPorFraterno.get(String(fraterno._id)));
+    if (resumen) resumen.esMiBloque = String(resumen.bloqueId) === String(bloque._id);
+    resultados.push({ ...fraterno.toObject(), estadoFraterno: fraterno.estado, asignacion: resumen });
   }
   return res.json({ fraternos: resultados });
 };

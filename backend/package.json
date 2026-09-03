@@ -11,6 +11,7 @@
     "migrate:storage-ci": "ts-node src/scripts/migrarArchivosPorCi.ts",
     "migrate:planes-cuotas": "ts-node src/scripts/migrarPlanesCuotas.ts",
     "migrate:guias-bloques": "ts-node src/scripts/migrarPermisosYBloquesGuia.ts",
+    "audit:asignaciones-bloques": "ts-node src/scripts/auditarAsignacionesBloques.ts",
     "unlock:login-attempts": "ts-node src/scripts/desbloquearCuentasIntentos.ts"
   },
   "keywords": [],

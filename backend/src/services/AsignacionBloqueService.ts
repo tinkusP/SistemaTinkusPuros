@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import DetalleBloque from "../models/DetalleBloque";
 
 // `$ne` mantiene visibles las relaciones heredadas que aún no poseen el campo
 // `estado`; la migración las normaliza a ACTIVO antes de reconstruir el índice.
@@ -20,4 +21,36 @@ export async function asegurarIndiceAsignacionActiva() {
       { unique: true, name: "fraternoId_activo_1", partialFilterExpression: { estado: "ACTIVO", fechaEliminado: null } },
     );
   }
+}
+
+const poblacionGuias = {
+  path: "guiasIds",
+  populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" },
+};
+
+export async function obtenerAsignacionActivaValida(fraternoId: unknown) {
+  const asignaciones: any[] = await DetalleBloque.find({ fraternoId, ...FILTRO_ASIGNACION_ACTIVA }).sort({ fechaAsignacion: -1, _id: -1 }).populate({
+    path: "bloqueId",
+    match: { estado: "ACTIVO" },
+    select: "nombre estado guiaId guiasIds",
+    populate: [poblacionGuias, { path: "guiaId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno telefono sexo fotoPerfil" } }],
+  });
+  const valida = asignaciones.find((asignacion) => asignacion.bloqueId);
+  const invalidas = asignaciones.filter((asignacion) => !asignacion.bloqueId);
+  if (invalidas.length) await DetalleBloque.updateMany({ _id: { $in: invalidas.map((item) => item._id) } }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } });
+  return valida ?? null;
+}
+
+export function resumirAsignacion(asignacion: any) {
+  if (!asignacion?.bloqueId) return null;
+  const bloque = asignacion.bloqueId;
+  const guias = [...(bloque.guiasIds ?? [])];
+  if (bloque.guiaId && !guias.some((guia: any) => String(guia._id) === String(bloque.guiaId._id))) guias.unshift(bloque.guiaId);
+  return {
+    bloqueId: bloque._id,
+    bloqueNombre: bloque.nombre,
+    estado: asignacion.estado ?? "ACTIVO",
+    fechaAsignacion: asignacion.fechaAsignacion ?? null,
+    guias: guias.map((guia: any) => ({ _id: guia._id, usuarioId: guia.usuarioId })),
+  };
 }
