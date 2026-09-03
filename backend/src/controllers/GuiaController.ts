@@ -120,9 +120,12 @@ export const quitarIntegranteComoAdmin = async (req: Request, res: Response) => 
 export const obtenerMiBloque = async (req: Request, res: Response) => {
   const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" }).populate(poblarGuia);
   if (!guia) return res.status(403).json({ error: "Tu cuenta no está designada como guía" });
-  const bloque = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).populate({ path: "guiasIds", populate: poblarGuia });
+  const bloque = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] })
+    .populate({ path: "guiaId", populate: poblarGuia })
+    .populate({ path: "guiasIds", populate: poblarGuia });
   const detalles = bloque ? await DetalleBloque.find({ bloqueId: bloque._id }).populate({ path: "fraternoId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo ci email telefono" }, { path: "preregistroId", select: "numeroPreRegistro estado" }] }) : [];
-  const fraternosDocumentos = await Fraterno.find({ gestionId: guia.gestionId, estado: "ACTIVO", fechaEliminado: null }).populate({ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo ci email telefono" }).populate("preregistroId", "numeroPreRegistro estado");
+  const idsIntegrantes = detalles.map((item: any) => item.fraternoId?._id ?? item.fraternoId).filter(Boolean);
+  const fraternosDocumentos = await Fraterno.find({ _id: { $in: idsIntegrantes }, estado: "ACTIVO", fechaEliminado: null }).populate({ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo ci email telefono" }).populate("preregistroId", "numeroPreRegistro estado");
   const guiasGestion = await Guia.find({ gestionId: guia.gestionId, estado: "ACTIVO" }).populate(poblarGuia);
   const bloquesGestion = await Bloque.find({ gestionId: guia.gestionId }).select("nombre guiasIds guiaId");
   const ocupados = new Set(bloquesGestion.flatMap((item: any) => [item.guiaId, ...(item.guiasIds ?? [])].map(String)));
@@ -134,8 +137,27 @@ export const obtenerMiBloque = async (req: Request, res: Response) => {
   const cuotaPorPreregistro = new Map(cuotas.map((cuota) => [String(cuota.preregistroId), { ...cuota, cuotasPagadas: cantidadPagos.get(String(cuota._id)) ?? 0 }]));
   const tallas=await TallaFraterno.find({fraternoId:{$in:fraternosDocumentos.map(item=>item._id)}}).lean();const tallaPorFraterno=new Map(tallas.map(t=>[String(t.fraternoId),t]));
   const fraternos = fraternosDocumentos.map((item: any) => ({ ...item.toObject(), pago: cuotaPorPreregistro.get(String(item.preregistroId?._id ?? item.preregistroId)) ?? null, talla:tallaPorFraterno.get(String(item._id))??null }));
-  const asignacionesFraternos = await DetalleBloque.find({ fraternoId: { $in: fraternosDocumentos.map((item) => item._id) } }).populate({path:"bloqueId",select:"nombre guiasIds guiaId",populate:{path:"guiasIds",populate:poblarGuia}}).select("fraternoId bloqueId");
-  return res.json({ guia, bloque, detalles, fraternos, guiasDisponibles, guiasGestion, asignacionesGuias, asignacionesFraternos, limites: LIMITES_BLOQUE });
+  return res.json({ guia, bloque, detalles, fraternos, guiasDisponibles, guiasGestion, asignacionesGuias, limites: LIMITES_BLOQUE });
+};
+export const buscarFraternosParaMiBloque = async (req: Request, res: Response) => {
+  const termino = String(req.query.buscar ?? "").trim();
+  if (termino.length < 2) return res.status(400).json({ error: "Escribe al menos 2 caracteres para buscar" });
+  const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" });
+  if (!guia) return res.status(403).json({ error: "Tu cuenta no está designada como guía" });
+  const bloque = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).select("_id nombre gestionId");
+  if (!bloque) return res.status(404).json({ error: "Aún no tienes un bloque asignado" });
+  const expresion = new RegExp(termino.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const usuarios = await PerfilUsuario.find({ fechaEliminado: null, $or: [{ ci: expresion }, { nombres: expresion }, { apellidoPaterno: expresion }, { apellidoMaterno: expresion }] }).select("_id").limit(50).lean();
+  const fraternos = await Fraterno.find({ gestionId: bloque.gestionId, estado: "ACTIVO", fechaEliminado: null, $or: [{ usuarioId: { $in: usuarios.map((usuario) => usuario._id) } }, { numeroFraterno: expresion }] })
+    .populate("usuarioId", "nombres apellidoPaterno apellidoMaterno sexo ci email telefono")
+    .populate("preregistroId", "numeroPreRegistro estado")
+    .limit(30);
+  const asignaciones: any[] = await DetalleBloque.find({ fraternoId: { $in: fraternos.map((fraterno) => fraterno._id) } }).populate("bloqueId", "nombre").lean();
+  const asignacionPorFraterno = new Map(asignaciones.map((item) => [String(item.fraternoId), item.bloqueId]));
+  return res.json({ fraternos: fraternos.map((fraterno: any) => {
+    const bloqueAsignado: any = asignacionPorFraterno.get(String(fraterno._id));
+    return { ...fraterno.toObject(), asignacion: bloqueAsignado ? { bloqueId: bloqueAsignado._id, bloqueNombre: bloqueAsignado.nombre, esMiBloque: String(bloqueAsignado._id) === String(bloque._id) } : null };
+  }) });
 };
 export const obtenerDirectorioBloques = async (_req: Request, res: Response) => {
   const bloques = await Bloque.find({ estado: "ACTIVO" })
@@ -146,9 +168,20 @@ export const obtenerDirectorioBloques = async (_req: Request, res: Response) => 
       match: { estado: "ACTIVO" },
       populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo telefono fotoPerfil" },
     })
+    .populate({
+      path: "guiaId",
+      select: "usuarioId estado",
+      match: { estado: "ACTIVO" },
+      populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo telefono fotoPerfil" },
+    })
     .sort({ nombre: 1 })
     .lean();
-  return res.json({ bloques });
+  const directorio = bloques.map((bloque: any) => {
+    const guias = [...(bloque.guiasIds ?? [])];
+    if (bloque.guiaId && !guias.some((guia: any) => String(guia._id) === String(bloque.guiaId._id))) guias.unshift(bloque.guiaId);
+    return { _id: bloque._id, nombre: bloque.nombre, estado: bloque.estado, guiasIds: guias };
+  });
+  return res.json({ bloques: directorio });
 };
 export const moverGuiaComoAdmin = async (req: Request, res: Response) => {
   const guia = await Guia.findById(req.params.guiaId).populate("usuarioId", "sexo");

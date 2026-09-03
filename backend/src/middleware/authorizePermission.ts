@@ -8,8 +8,24 @@ type RolPoblado = {
   _id: unknown;
   nombre?: string;
   codigo?: string;
-  estado?: string;
+  estado?: boolean | string;
   permisos?: string[];
+};
+
+export const rolEstaActivo = (estado: RolPoblado["estado"]) =>
+  estado !== false && String(estado ?? "ACTIVO").toUpperCase() !== "INACTIVO";
+
+const PERMISOS_BASE_GUIA = new Set([
+  "VISTA_MI_BLOQUE_GUIA",
+  "VISTA_DIRECTORIO_BLOQUES",
+  "BLOQUES_PROPIOS_GESTIONAR",
+  "BLOQUES_PROPIOS_EXPORTAR",
+]);
+
+export const rolAutorizaPermiso = (rol: RolPoblado, permiso: string) => {
+  if (!rolEstaActivo(rol.estado)) return false;
+  if (Array.isArray(rol.permisos) && rol.permisos.includes(permiso)) return true;
+  return String(rol.codigo ?? "").toUpperCase() === "GUIA" && PERMISOS_BASE_GUIA.has(permiso);
 };
 
 export const authorizePermission = (
@@ -45,23 +61,7 @@ export const authorizePermission = (
       return;
     }
 
-    const tienePermiso = roles.some(
-      (rol) => {
-        if (
-          rol.estado &&
-          rol.estado !== "ACTIVO"
-        ) {
-          return false;
-        }
-
-        return (
-          Array.isArray(rol.permisos) &&
-          rol.permisos.includes(
-            permisoRequerido,
-          )
-        );
-      },
-    );
+    const tienePermiso = roles.some((rol) => rolAutorizaPermiso(rol, permisoRequerido));
 
     if (!tienePermiso) {
       res.status(403).json({
