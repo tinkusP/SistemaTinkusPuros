@@ -1,0 +1,15 @@
+import mongoose from "mongoose";
+
+export function esIndiceGuiaPrincipal(indice: { key?: Record<string, unknown> }) {
+  const campos = Object.keys(indice.key ?? {});
+  return campos.length === 1 && campos[0] === "guiaId";
+}
+
+export async function asegurarIndiceGuiaBloqueDisperso() {
+  const coleccion = mongoose.connection.collection("bloques");
+  const indice = (await coleccion.indexes()).find(esIndiceGuiaPrincipal);
+  if (indice && indice.unique === true && indice.sparse === true) return false;
+  if (indice?.name) await coleccion.dropIndex(indice.name);
+  await coleccion.createIndex({ guiaId: 1 }, { unique: true, sparse: true, name: "guiaId_1" });
+  return true;
+}

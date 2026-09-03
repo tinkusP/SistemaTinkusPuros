@@ -13,7 +13,7 @@ const schema = new Schema({
   usuarioCreador: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
 }, { versionKey: false, collection: "bloques" });
 schema.index({ nombre: 1, gestionId: 1 }, { unique: true });
-schema.index({ guiaId: 1 }, { unique: true, sparse: true });
+schema.index({ guiaId: 1 }, { unique: true, sparse: true, name: "guiaId_1" });
 schema.index({ guiasIds: 1 }, { unique: true, sparse: true });
 schema.pre("validate", function () {
   if (!this.guiasIds?.length && this.guiaId) this.guiasIds = [this.guiaId];

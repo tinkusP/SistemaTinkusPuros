@@ -4,6 +4,7 @@ import Bloque from "../models/Bloque";
 import Rol from "../models/Rol";
 import DetalleBloque from "../models/DetalleBloque";
 import { normalizarGeneroBloque } from "../services/BloqueService";
+import { asegurarIndiceGuiaBloqueDisperso } from "../services/IndiceBloqueService";
 
 const PERMISOS_GUIA = [
   "VISTA_COMUNICADOS",
@@ -37,8 +38,7 @@ async function ejecutar() {
   }
   const bloqueCollection=mongoose.connection.collection("bloques");
   await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
-  const indiceGuia=(await bloqueCollection.indexes()).find(indice=>indice.name==="guiaId_1");
-  if(indiceGuia&&!indiceGuia.sparse){await bloqueCollection.dropIndex("guiaId_1");await bloqueCollection.createIndex({guiaId:1},{unique:true,sparse:true,name:"guiaId_1"});}
+  await asegurarIndiceGuiaBloqueDisperso();
   const guiaCollection=mongoose.connection.collection("guias");
   const indicePostulante=(await guiaCollection.indexes()).find(indice=>indice.name==="postulanteGuiaId_1");
   if(indicePostulante&&!indicePostulante.sparse){await guiaCollection.dropIndex("postulanteGuiaId_1");await guiaCollection.createIndex({postulanteGuiaId:1},{unique:true,sparse:true,name:"postulanteGuiaId_1"});}
