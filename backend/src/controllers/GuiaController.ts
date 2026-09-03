@@ -8,6 +8,7 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import TallaFraterno from "../models/TallaFraterno";
+import Preregistro from "../models/Preregistro";
 import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
@@ -188,21 +189,36 @@ async function renombrar(req:Request,res:Response,bloque:any){const {nombre,erro
 export const renombrarMiBloque=async(req:Request,res:Response)=>{const guia=await Guia.findOne({usuarioId:req.usuario?._id,estado:"ACTIVO"});const bloque=guia?await Bloque.findOne({$or:[{guiaId:guia._id},{guiasIds:guia._id}]}):null;if(!bloque)return res.status(404).json({error:"No tienes un bloque asignado"});return renombrar(req,res,bloque);};
 export const renombrarBloqueComoAdmin=async(req:Request,res:Response)=>{const bloque=await Bloque.findById(req.params.bloqueId);if(!bloque)return res.status(404).json({error:"Bloque no encontrado"});return renombrar(req,res,bloque);};
 
+export const buscarCandidatoGuia = async (req: Request, res: Response) => {
+  const ci = String(req.query.ci ?? "").trim();
+  const usuario = await PerfilUsuario.findOne({ ci, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci sexo email telefono fotoPerfil estado").lean();
+  if (!usuario) return res.status(404).json({ error: "No existe un usuario registrado con ese CI" });
+  const [preregistro, fraterno, guia] = await Promise.all([
+    Preregistro.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaRegistro: -1 }).select("_id numeroPreRegistro estado gestionId").lean(),
+    Fraterno.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id numeroFraterno estado").lean(),
+    Guia.findOne({ usuarioId: usuario._id }).select("_id estado").lean(),
+  ]);
+  return res.json({ candidato: { usuario, preregistro, fraterno, guia, puedeConvertirse: Boolean(preregistro) } });
+};
+
 export const convertirFraternoEnGuia = async (req: Request, res: Response) => {
   const ci = String(req.body.ci ?? "").trim();
   const fraternoId = req.body.fraternoId;
-  const usuario = ci ? await PerfilUsuario.findOne({ ci, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci sexo email roles") : null;
-  const fraterno: any = await Fraterno.findOne({ ...(fraternoId ? { _id: fraternoId } : usuario ? { usuarioId: usuario._id } : {}), estado: "ACTIVO", fechaEliminado: null }).populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci sexo email roles");
-  if ((!ci && !fraternoId) || !fraterno?.usuarioId) return res.status(404).json({ error: "No se encontró un fraterno activo con ese CI" });
+  const usuarioPorCi = ci ? await PerfilUsuario.findOne({ ci, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci sexo email roles") : null;
+  const fraterno: any = fraternoId ? await Fraterno.findOne({ _id: fraternoId, fechaEliminado: null }).populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci sexo email roles") : null;
+  const usuario: any = fraterno?.usuarioId ?? usuarioPorCi;
+  if (!usuario) return res.status(404).json({ error: "No se encontró un usuario registrado con ese CI" });
+  const preregistro: any = await Preregistro.findOne({ usuarioId: usuario._id, fechaEliminado: null }).sort({ fechaRegistro: -1 });
+  if (!preregistro) return res.status(409).json({ error: "El usuario existe, pero todavía no tiene un preregistro y no puede ser designado guía." });
   const rol = await Rol.findOneAndUpdate({ codigo: "GUIA" }, { $set: { nombre: "Guía", estado: true, fechaEliminado: null, permisos: ["VISTA_COMUNICADOS", "VISTA_PASOS", "VISTA_CANCIONERO", "VISTA_MI_BLOQUE_GUIA", "VISTA_DIRECTORIO_BLOQUES", "BLOQUES_PROPIOS_GESTIONAR", "BLOQUES_PROPIOS_EXPORTAR"] }, $setOnInsert: { codigo: "GUIA", descripcion: "Organiza únicamente el bloque asignado por Administración", esRolSistema: true } }, { upsert: true, new: true });
-  const existente = await Guia.findOne({ $or: [{ usuarioId: fraterno.usuarioId._id }, { preregistroId: fraterno.preregistroId }] });
+  const existente = await Guia.findOne({ $or: [{ usuarioId: usuario._id }, { preregistroId: preregistro._id }] });
   if (existente) {
-    existente.usuarioId=fraterno.usuarioId._id; existente.preregistroId=fraterno.preregistroId; existente.gestionId=fraterno.gestionId; existente.estado="ACTIVO";
+    existente.usuarioId=usuario._id; existente.preregistroId=preregistro._id; existente.gestionId=preregistro.gestionId; existente.estado="ACTIVO";
     await existente.save();
-    await PerfilUsuario.updateOne({ _id: fraterno.usuarioId._id }, { $addToSet: { roles: rol._id } });
+    await PerfilUsuario.updateOne({ _id: usuario._id }, { $addToSet: { roles: rol._id } });
     return res.json({ message: "El registro de guía fue recuperado y ya está disponible en la lista.", guia: existente });
   }
-  const datos = { preregistroId: fraterno.preregistroId, usuarioId: fraterno.usuarioId._id, gestionId: fraterno.gestionId, usuarioCreador: req.usuario?._id };
+  const datos = { preregistroId: preregistro._id, usuarioId: usuario._id, gestionId: preregistro.gestionId, usuarioCreador: req.usuario?._id };
   try {
     let guia;
     try { guia = await Guia.create(datos); }
@@ -211,9 +227,9 @@ export const convertirFraternoEnGuia = async (req: Request, res: Response) => {
       if (duplicado.code === 11000 && (duplicado.keyPattern?.postulanteGuiaId || duplicado.keyValue?.postulanteGuiaId === null)) { await asegurarIndicePostulanteGuiaDisperso(); guia = await Guia.create(datos); }
       else throw error;
     }
-    await PerfilUsuario.updateOne({ _id: fraterno.usuarioId._id }, { $addToSet: { roles: rol._id } });
-    await registrarAuditoria(req, { accion: "CONVERTIR_FRATERNO_EN_GUIA", modulo: "GUIAS", entidad: "Guia", entidadId: guia._id, descripcion: `Administración convirtió en guía al fraterno CI ${fraterno.usuarioId.ci}`, datosDespues: { usuarioId: fraterno.usuarioId._id, fraternoId: fraterno._id } });
-    return res.status(201).json({ message: "Fraterno convertido en guía correctamente.", guia });
+    await PerfilUsuario.updateOne({ _id: usuario._id }, { $addToSet: { roles: rol._id } });
+    await registrarAuditoria(req, { accion: "CONVERTIR_USUARIO_EN_GUIA", modulo: "GUIAS", entidad: "Guia", entidadId: guia._id, descripcion: `Administración convirtió en guía al usuario CI ${usuario.ci}`, datosDespues: { usuarioId: usuario._id, fraternoId: fraterno?._id ?? null, preregistroId: preregistro._id } });
+    return res.status(201).json({ message: "Usuario convertido en guía correctamente.", guia });
   } catch (error) {
     const duplicado = error as { code?: number };
     return res.status(409).json({ error: duplicado.code === 11000 ? "Ya existe un registro relacionado con este usuario. Recarga la lista antes de continuar." : "No se pudo convertir el fraterno en guía" });
