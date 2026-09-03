@@ -3202,8 +3202,12 @@ static getPerfilUsuarioById = async (
         .select("_id tipoDocumento ruta estado observacion fechaCreado fechaEdit")
         .sort({ tipoDocumento: 1 });
 
+      const datosPerfil = perfil.toObject();
+      if (req.modoCapacitacion && req.tipoCapacitacion) {
+        datosPerfil.roles = (datosPerfil.roles as unknown as { codigo?: string }[]).filter((rol) => String(rol.codigo ?? "").toUpperCase() === req.tipoCapacitacion) as never;
+      }
       return res.status(200).json({
-        ...perfil.toObject(),
+        ...datosPerfil,
         documentos,
       });
     } catch (error) {

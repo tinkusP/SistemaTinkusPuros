@@ -63,5 +63,7 @@ export const corsConfig: CorsOptions = {
   allowedHeaders: [
     "Content-Type",
     "Authorization",
+    "X-Modo-Capacitacion-Usuario",
+    "X-Modo-Capacitacion-Tipo",
   ],
 };

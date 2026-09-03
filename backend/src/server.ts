@@ -95,6 +95,7 @@ import credencialQrRoutes from "./routes/CredencialQrRoutes";
 import reporteRoutes from "./routes/ReporteRoutes";
 import tokenRegistroRoutes from "./routes/TokenRegistroRoutes";
 import respaldoRoutes from "./routes/RespaldoRoutes";
+import capacitacionRoutes from "./routes/CapacitacionRoutes";
 import { servirArchivoR2 } from "./services/AlmacenamientoService";
 
 
@@ -205,6 +206,7 @@ app.use("/api/tokens-registro", tokenRegistroRoutes);
 app.use("/api/respaldo", respaldoRoutes);
 app.use("/api/indumentaria", indumentariaRoutes);
 app.use("/api/guias", guiaRoutes);
+app.use("/api/capacitacion", capacitacionRoutes);
 
 // Multer falla antes de entrar al controlador. Convertimos esos fallos en
 // respuestas claras para que el formulario indique qué archivo debe cambiar.

@@ -19,6 +19,7 @@ import {
 import "react-toastify/dist/ReactToastify.css";
 import { registrarCierreSesion } from "@/api/GuiaApi";
 import ThemeToggle from "@/components/ThemeToggle";
+import { obtenerVistaCapacitacion } from "@/utils/modoCapacitacion";
 
 import {
   useAuth,
@@ -46,6 +47,11 @@ const opcionesMenu: OpcionMenu[] = [
     nombre: "Reportes",
     ruta: "/reportes",
     icono: "📊",
+  },
+  {
+    nombre: "Modo capacitación",
+    ruta: "/modo-capacitacion",
+    icono: "🎓",
   },
   {
     nombre: "Respaldo total",
@@ -284,7 +290,7 @@ export default function AppLayout() {
     );
   }
 
-  if (usuario.requiereCambioPassword) {
+  if (usuario.requiereCambioPassword && !obtenerVistaCapacitacion()) {
     return <Navigate to="/cambiar-password-obligatorio" replace />;
   }
 

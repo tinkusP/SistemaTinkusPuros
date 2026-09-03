@@ -155,11 +155,13 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
   // cada ingreso para reparar también cambios de origen hechos antes de que
   // existiera la vinculación automática (incluidos sus saldo y QR).
   let cuota = null;
-  if (preregistroVigente?.estado === "APROBADO" && preregistroVigente.aprobado) {
+  if (req.modoCapacitacion && preregistroVigente) {
+    cuota = await Cuota.findOne({ preregistroId: preregistroVigente._id, fechaEliminado: null }).populate(poblar);
+  } else if (preregistroVigente?.estado === "APROBADO" && preregistroVigente.aprobado) {
     const sincronizada = await reactivarCuotaPreregistroAprobado(preregistroVigente._id, req.usuario?._id);
     if (sincronizada) cuota = await Cuota.findById(sincronizada.cuota._id).populate(poblar);
   }
-  if (!cuota) {
+  if (!cuota && !req.modoCapacitacion) {
     const creada = await asegurarCuotaPostulante(req.usuario?._id);
     if (creada) cuota = await Cuota.findById(creada._id).populate(poblar);
   }
@@ -168,7 +170,7 @@ export const obtenerMiCuota = async (req: Request, res: Response) => {
   const tienePrimerPagoValido = pagos.some((p) => p.estadoRevision === "VERIFICADO");
   const tienePagoEnRevision = pagos.some((p) => p.estadoRevision === "PENDIENTE");
   let listaEspera = cuota.cupoLiberado;
-  if (!tienePrimerPagoValido && !tienePagoEnRevision && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) {
+  if (!req.modoCapacitacion && !tienePrimerPagoValido && !tienePagoEnRevision && cuota.fechaVencimiento && cuota.fechaVencimiento < new Date()) {
     await pasarAListaEspera(cuota);
     listaEspera = true;
   }

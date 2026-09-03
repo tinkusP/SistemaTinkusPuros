@@ -65,6 +65,8 @@ import PasosVideoView from "./views/guia/PasosVideoView";
 import CancioneroView from "./views/guia/CancioneroView";
 import TokenRegistroView from "./views/tokens/TokenRegistroView";
 import RespaldoView from "./views/respaldo/RespaldoView";
+import ModoCapacitacionView from "./views/capacitacion/ModoCapacitacionView";
+import ModoCapacitacionBanner from "./components/ModoCapacitacionBanner";
 import PortalFormacionLayout from "./layouts/PortalFormacionLayout";
 const MiCredencialQrView=lazy(()=>import("./views/perfilUsuario/MiCredencialQrView"));
 const EscanerQrView=lazy(()=>import("./views/perfilUsuario/EscanerQrView"));
@@ -81,6 +83,7 @@ export default function Router() {
       }}
     >
       <AuthProvider>
+        <ModoCapacitacionBanner />
         <Routes>
           {/* =====================================
               AUTENTICACIÓN
@@ -184,6 +187,7 @@ export default function Router() {
             <Route path="/facultades" element={<FacultadesView />} />
             <Route path="/reportes" element={<ReportesView />} />
             <Route path="/respaldo" element={<RespaldoView />} />
+            <Route path="/modo-capacitacion" element={<ModoCapacitacionView />} />
             <Route path="/tokens-registro" element={<TokenRegistroView />} />
             <Route path="/indumentaria" element={<IndumentariaView />} />
             <Route path="/pasos" element={<PasosVideoView />} />

@@ -15,6 +15,7 @@ import { registrarCierreSesion } from "@/api/GuiaApi";
 import { listarAnuncios, leerNotificacion, misNotificaciones } from "@/api/GuiaApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ThemeToggle from "@/components/ThemeToggle";
+import { obtenerVistaCapacitacion } from "@/utils/modoCapacitacion";
 
 type TipoPublicacion =
   | "COMUNICADO"
@@ -284,7 +285,7 @@ export default function ComunicadosView() {
       tipoSeleccionado,
     ]);
 
-  if (usuario?.requiereCambioPassword) {
+  if (usuario?.requiereCambioPassword && !obtenerVistaCapacitacion()) {
     return <Navigate to="/cambiar-password-obligatorio" replace />;
   }
 

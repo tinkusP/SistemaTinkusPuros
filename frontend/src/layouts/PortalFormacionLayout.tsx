@@ -2,6 +2,7 @@ import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { BookOpenText, ChevronLeft, Footprints, Home, Music2 } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/hooks/useAuth";
+import { obtenerVistaCapacitacion } from "@/utils/modoCapacitacion";
 
 export default function PortalFormacionLayout() {
   const { data: usuario, isLoading, isError } = useAuth();
@@ -9,7 +10,7 @@ export default function PortalFormacionLayout() {
 
   if (isLoading) return <div className="grid min-h-screen place-items-center bg-[#eee8dc] font-bold text-[#74122A]">Preparando tu biblioteca…</div>;
   if (isError || !usuario) return <Navigate to="/auth/login" replace />;
-  if (usuario.requiereCambioPassword) return <Navigate to="/cambiar-password-obligatorio" replace />;
+  if (usuario.requiereCambioPassword && !obtenerVistaCapacitacion()) return <Navigate to="/cambiar-password-obligatorio" replace />;
 
   const esCancionero = location.pathname === "/mi-cancionero";
   return (

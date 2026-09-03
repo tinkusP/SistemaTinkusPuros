@@ -8,6 +8,7 @@ import Cuota from "../models/Cuota";
 import DetalleCuota from "../models/DetalleCuota";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { distribuirPlanPagos } from "../services/PlanPagosService";
+import { tipoCredencialQr } from "../services/CapacitacionService";
 
 const secreto = () => process.env.JWT_SECRET || "";
 
@@ -15,7 +16,7 @@ export async function miCredencialQr(req: Request, res: Response) {
   if (req.usuario?.estado !== "ACTIVO") return res.status(403).json({ error: "La cuenta debe estar activa para generar su credencial" });
   const versionQr = Number(req.usuario.credencialQrVersion ?? 0);
   const token = jwt.sign(
-    { sub: String(req.usuario._id), tipo: "CREDENCIAL_QR", versionQr },
+    { sub: String(req.usuario._id), tipo: tipoCredencialQr(Boolean(req.modoCapacitacion)), versionQr },
     secreto(),
     { noTimestamp: true, issuer: "tinkus-local" },
   );
