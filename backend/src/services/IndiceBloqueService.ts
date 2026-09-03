@@ -13,3 +13,17 @@ export async function asegurarIndiceGuiaBloqueDisperso() {
   await coleccion.createIndex({ guiaId: 1 }, { unique: true, sparse: true, name: "guiaId_1" });
   return true;
 }
+
+export function esIndicePostulanteGuia(indice: { key?: Record<string, unknown> }) {
+  const campos = Object.keys(indice.key ?? {});
+  return campos.length === 1 && campos[0] === "postulanteGuiaId";
+}
+
+export async function asegurarIndicePostulanteGuiaDisperso() {
+  const coleccion = mongoose.connection.collection("guias");
+  const indice = (await coleccion.indexes()).find(esIndicePostulanteGuia);
+  if (indice && indice.unique === true && indice.sparse === true) return false;
+  if (indice?.name) await coleccion.dropIndex(indice.name);
+  await coleccion.createIndex({ postulanteGuiaId: 1 }, { unique: true, sparse: true, name: "postulanteGuiaId_1" });
+  return true;
+}

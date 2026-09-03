@@ -4,7 +4,7 @@ import Bloque from "../models/Bloque";
 import Rol from "../models/Rol";
 import DetalleBloque from "../models/DetalleBloque";
 import { normalizarGeneroBloque } from "../services/BloqueService";
-import { asegurarIndiceGuiaBloqueDisperso } from "../services/IndiceBloqueService";
+import { asegurarIndiceGuiaBloqueDisperso, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 
 const PERMISOS_GUIA = [
   "VISTA_COMUNICADOS",
@@ -40,8 +40,7 @@ async function ejecutar() {
   await bloqueCollection.updateMany({},{$unset:{filasHombres:"",columnasHombres:"",filasMujeres:"",columnasMujeres:""}});
   await asegurarIndiceGuiaBloqueDisperso();
   const guiaCollection=mongoose.connection.collection("guias");
-  const indicePostulante=(await guiaCollection.indexes()).find(indice=>indice.name==="postulanteGuiaId_1");
-  if(indicePostulante&&!indicePostulante.sparse){await guiaCollection.dropIndex("postulanteGuiaId_1");await guiaCollection.createIndex({postulanteGuiaId:1},{unique:true,sparse:true,name:"postulanteGuiaId_1"});}
+  await asegurarIndicePostulanteGuiaDisperso();
   if(!(await guiaCollection.indexExists("usuarioId_1")))await guiaCollection.createIndex({usuarioId:1},{unique:true,name:"usuarioId_1"});
 
   const bloques = await Bloque.find().populate({ path: "guiasIds", populate: { path: "usuarioId", select: "sexo" } }).populate({ path: "guiaId", populate: { path: "usuarioId", select: "sexo" } });

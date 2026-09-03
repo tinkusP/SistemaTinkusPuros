@@ -9,7 +9,7 @@ import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import TallaFraterno from "../models/TallaFraterno";
 import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
-import { asegurarIndiceGuiaBloqueDisperso } from "../services/IndiceBloqueService";
+import { asegurarIndiceGuiaBloqueDisperso, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
 const normalizarGenero = normalizarGeneroBloque;
 export const listarGuias = async (_req: Request, res: Response) => {
@@ -181,6 +181,36 @@ async function renombrar(req:Request,res:Response,bloque:any){const {nombre,erro
 export const renombrarMiBloque=async(req:Request,res:Response)=>{const guia=await Guia.findOne({usuarioId:req.usuario?._id,estado:"ACTIVO"});const bloque=guia?await Bloque.findOne({$or:[{guiaId:guia._id},{guiasIds:guia._id}]}):null;if(!bloque)return res.status(404).json({error:"No tienes un bloque asignado"});return renombrar(req,res,bloque);};
 export const renombrarBloqueComoAdmin=async(req:Request,res:Response)=>{const bloque=await Bloque.findById(req.params.bloqueId);if(!bloque)return res.status(404).json({error:"Bloque no encontrado"});return renombrar(req,res,bloque);};
 
-export const convertirFraternoEnGuia=async(req:Request,res:Response)=>{const ci=String(req.body.ci??"").trim(),fraternoId=req.body.fraternoId;const usuario=ci?await PerfilUsuario.findOne({ci,fechaEliminado:null}).select("nombres apellidoPaterno apellidoMaterno ci sexo email roles"):null;const fraterno:any=await Fraterno.findOne({...(fraternoId?{_id:fraternoId}:usuario?{usuarioId:usuario._id}:{}),estado:"ACTIVO",fechaEliminado:null}).populate("usuarioId","nombres apellidoPaterno apellidoMaterno ci sexo email roles");if((!ci&&!fraternoId)||!fraterno||!fraterno.usuarioId)return res.status(404).json({error:"No se encontró un fraterno activo con ese CI"});const rol=await Rol.findOneAndUpdate({codigo:"GUIA"},{$set:{nombre:"Guía",estado:true,fechaEliminado:null,permisos:["VISTA_COMUNICADOS","VISTA_PASOS","VISTA_CANCIONERO","VISTA_MI_BLOQUE_GUIA","VISTA_DIRECTORIO_BLOQUES","BLOQUES_PROPIOS_GESTIONAR","BLOQUES_PROPIOS_EXPORTAR"]},$setOnInsert:{codigo:"GUIA",descripcion:"Organiza únicamente el bloque asignado por Administración",esRolSistema:true}},{upsert:true,new:true});const existente=await Guia.findOne({$or:[{usuarioId:fraterno.usuarioId._id},{preregistroId:fraterno.preregistroId}]});if(existente){existente.usuarioId=fraterno.usuarioId._id;existente.preregistroId=fraterno.preregistroId;existente.gestionId=fraterno.gestionId;existente.estado="ACTIVO";await existente.save();await PerfilUsuario.updateOne({_id:fraterno.usuarioId._id},{$addToSet:{roles:rol._id}});await registrarAuditoria(req,{accion:"REACTIVAR_GUIA",modulo:"GUIAS",entidad:"Guia",entidadId:existente._id,descripcion:`Administración reconcilió el registro de guía del CI ${fraterno.usuarioId.ci}`,datosDespues:{usuarioId:fraterno.usuarioId._id,estado:"ACTIVO"}});return res.json({message:"El registro de guía fue recuperado y ya está disponible en la lista.",guia:existente});}try{const guia=await Guia.create({preregistroId:fraterno.preregistroId,usuarioId:fraterno.usuarioId._id,gestionId:fraterno.gestionId,usuarioCreador:req.usuario?._id});await PerfilUsuario.updateOne({_id:fraterno.usuarioId._id},{$addToSet:{roles:rol._id}});await registrarAuditoria(req,{accion:"CONVERTIR_FRATERNO_EN_GUIA",modulo:"GUIAS",entidad:"Guia",entidadId:guia._id,descripcion:`Administración convirtió en guía al fraterno CI ${fraterno.usuarioId.ci}`,datosDespues:{usuarioId:fraterno.usuarioId._id,fraternoId:fraterno._id}});return res.status(201).json({message:"Fraterno convertido en guía correctamente.",guia});}catch(error){return res.status(409).json({error:(error as any)?.code===11000?"El registro del guía cambió durante la operación. Vuelve a intentarlo para recuperarlo.":"No se pudo convertir el fraterno en guía"});}};
+export const convertirFraternoEnGuia = async (req: Request, res: Response) => {
+  const ci = String(req.body.ci ?? "").trim();
+  const fraternoId = req.body.fraternoId;
+  const usuario = ci ? await PerfilUsuario.findOne({ ci, fechaEliminado: null }).select("nombres apellidoPaterno apellidoMaterno ci sexo email roles") : null;
+  const fraterno: any = await Fraterno.findOne({ ...(fraternoId ? { _id: fraternoId } : usuario ? { usuarioId: usuario._id } : {}), estado: "ACTIVO", fechaEliminado: null }).populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci sexo email roles");
+  if ((!ci && !fraternoId) || !fraterno?.usuarioId) return res.status(404).json({ error: "No se encontró un fraterno activo con ese CI" });
+  const rol = await Rol.findOneAndUpdate({ codigo: "GUIA" }, { $set: { nombre: "Guía", estado: true, fechaEliminado: null, permisos: ["VISTA_COMUNICADOS", "VISTA_PASOS", "VISTA_CANCIONERO", "VISTA_MI_BLOQUE_GUIA", "VISTA_DIRECTORIO_BLOQUES", "BLOQUES_PROPIOS_GESTIONAR", "BLOQUES_PROPIOS_EXPORTAR"] }, $setOnInsert: { codigo: "GUIA", descripcion: "Organiza únicamente el bloque asignado por Administración", esRolSistema: true } }, { upsert: true, new: true });
+  const existente = await Guia.findOne({ $or: [{ usuarioId: fraterno.usuarioId._id }, { preregistroId: fraterno.preregistroId }] });
+  if (existente) {
+    existente.usuarioId=fraterno.usuarioId._id; existente.preregistroId=fraterno.preregistroId; existente.gestionId=fraterno.gestionId; existente.estado="ACTIVO";
+    await existente.save();
+    await PerfilUsuario.updateOne({ _id: fraterno.usuarioId._id }, { $addToSet: { roles: rol._id } });
+    return res.json({ message: "El registro de guía fue recuperado y ya está disponible en la lista.", guia: existente });
+  }
+  const datos = { preregistroId: fraterno.preregistroId, usuarioId: fraterno.usuarioId._id, gestionId: fraterno.gestionId, usuarioCreador: req.usuario?._id };
+  try {
+    let guia;
+    try { guia = await Guia.create(datos); }
+    catch (error) {
+      const duplicado = error as { code?: number; keyPattern?: Record<string, number>; keyValue?: Record<string, unknown> };
+      if (duplicado.code === 11000 && (duplicado.keyPattern?.postulanteGuiaId || duplicado.keyValue?.postulanteGuiaId === null)) { await asegurarIndicePostulanteGuiaDisperso(); guia = await Guia.create(datos); }
+      else throw error;
+    }
+    await PerfilUsuario.updateOne({ _id: fraterno.usuarioId._id }, { $addToSet: { roles: rol._id } });
+    await registrarAuditoria(req, { accion: "CONVERTIR_FRATERNO_EN_GUIA", modulo: "GUIAS", entidad: "Guia", entidadId: guia._id, descripcion: `Administración convirtió en guía al fraterno CI ${fraterno.usuarioId.ci}`, datosDespues: { usuarioId: fraterno.usuarioId._id, fraternoId: fraterno._id } });
+    return res.status(201).json({ message: "Fraterno convertido en guía correctamente.", guia });
+  } catch (error) {
+    const duplicado = error as { code?: number };
+    return res.status(409).json({ error: duplicado.code === 11000 ? "Ya existe un registro relacionado con este usuario. Recarga la lista antes de continuar." : "No se pudo convertir el fraterno en guía" });
+  }
+};
 
 export const eliminarBloqueComoAdmin=async(req:Request,res:Response)=>{const bloque=await Bloque.findById(req.params.bloqueId);if(!bloque)return res.status(404).json({error:"Bloque no encontrado"});const datosAntes={nombre:bloque.nombre,guiasIds:bloque.guiasIds,cantidadHombres:bloque.cantidadHombres,cantidadMujeres:bloque.cantidadMujeres};const ejecutar=async(session?:mongoose.ClientSession)=>{await DetalleBloque.deleteMany({bloqueId:bloque._id},{session});await Bloque.deleteOne({_id:bloque._id},{session});};const session=await mongoose.startSession();try{try{await session.withTransaction(()=>ejecutar(session));}catch(error){const mensaje=String((error as Error).message);if(!/Transaction numbers are only allowed|replica set|mongos/i.test(mensaje))throw error;await ejecutar();}await registrarAuditoria(req,{accion:"ELIMINAR_BLOQUE",modulo:"BLOQUES",entidad:"Bloque",entidadId:bloque._id,descripcion:`Administración eliminó el bloque ${bloque.nombre}; sus guías e integrantes quedaron disponibles`,datosAntes});return res.json({message:"Bloque eliminado correctamente."});}catch{return res.status(409).json({error:"No se pudo eliminar el bloque de forma segura"});}finally{await session.endSession();}};
