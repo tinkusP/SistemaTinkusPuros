@@ -146,13 +146,7 @@ export const obtenerMiBloque = async (req: Request, res: Response) => {
   const fraternos = fraternosDocumentos.map((item: any) => ({ ...item.toObject(), pago: cuotaPorPreregistro.get(String(item.preregistroId?._id ?? item.preregistroId)) ?? null, talla:tallaPorFraterno.get(String(item._id))??null }));
   return res.json({ guia, bloque, detalles, fraternos, guiasDisponibles, guiasGestion, asignacionesGuias, limites: LIMITES_BLOQUE });
 };
-export const buscarFraternosParaMiBloque = async (req: Request, res: Response) => {
-  const termino = String(req.query.buscar ?? "").trim();
-  if (termino.length < 2) return res.status(400).json({ error: "Escribe al menos 2 caracteres para buscar" });
-  const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" });
-  if (!guia) return res.status(403).json({ error: "Tu cuenta no está designada como guía" });
-  const bloque = await Bloque.findOne({ estado: "ACTIVO", $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).select("_id nombre gestionId");
-  if (!bloque) return res.status(404).json({ error: "Aún no tienes un bloque asignado" });
+async function buscarUsuariosDisponiblesParaBloque(bloque: any, termino: string) {
   const expresion = new RegExp(termino.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
   const usuarios: any[] = await PerfilUsuario.find({ fechaEliminado: null, $or: [{ ci: expresion }, { nombres: expresion }, { apellidoPaterno: expresion }, { apellidoMaterno: expresion }] }).select("nombres apellidoPaterno apellidoMaterno ci sexo email telefono roles estado").populate("roles", "codigo nombre").limit(50).lean();
   const fraternos: any[] = await Fraterno.find({ gestionId: bloque.gestionId, fechaEliminado: null, $or: [{ usuarioId: { $in: usuarios.map((usuario) => usuario._id) } }, { numeroFraterno: expresion }] })
@@ -176,13 +170,24 @@ export const buscarFraternosParaMiBloque = async (req: Request, res: Response) =
     if (resumen) resumen.esMiBloque = String(resumen.bloqueId) === String(bloque._id);
     resultados.push({ ...fraterno.toObject(), estadoFraterno: fraterno.estado, asignacion: resumen });
   }
-  return res.json({ fraternos: resultados });
-};
-export const registrarFraternoEnMiBloque = async (req: Request, res: Response) => {
+  return resultados;
+}
+export const buscarFraternosParaMiBloque = async (req: Request, res: Response) => {
+  const termino = String(req.query.buscar ?? "").trim();
+  if (termino.length < 2) return res.status(400).json({ error: "Escribe al menos 2 caracteres para buscar" });
   const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" });
   if (!guia) return res.status(403).json({ error: "Tu cuenta no está designada como guía" });
-  const bloque = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }], estado: "ACTIVO" });
-  if (!bloque) return res.status(404).json({ error: "Aún no tienes un bloque activo asignado" });
+  const bloque = await Bloque.findOne({ estado: "ACTIVO", $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).select("_id nombre gestionId");
+  if (!bloque) return res.status(404).json({ error: "Aún no tienes un bloque asignado" });
+  return res.json({ fraternos: await buscarUsuariosDisponiblesParaBloque(bloque, termino) });
+};
+export const buscarUsuariosParaBloqueComoAdmin = async (req: Request, res: Response) => {
+  const termino = String(req.query.buscar ?? "").trim();
+  const bloque = await Bloque.findOne({ _id: req.query.bloqueId, estado: "ACTIVO" }).select("_id nombre gestionId");
+  if (!bloque) return res.status(404).json({ error: "Bloque activo no encontrado" });
+  return res.json({ fraternos: await buscarUsuariosDisponiblesParaBloque(bloque, termino) });
+};
+async function registrarUsuarioYAsignar(req: Request, res: Response, bloque: any) {
   const usuario: any = await PerfilUsuario.findOne({ _id: req.body.usuarioId, fechaEliminado: null }).select("_id ci sexo roles");
   if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
   let preregistro: any = await Preregistro.findOne({ usuarioId: usuario._id, gestionId: bloque.gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
@@ -208,6 +213,18 @@ export const registrarFraternoEnMiBloque = async (req: Request, res: Response) =
   await PerfilUsuario.updateOne({ _id: usuario._id }, { $addToSet: { roles: rol._id } });
   req.body.fraternoId = fraterno._id;
   return asignarFraterno(req, res, bloque);
+}
+export const registrarFraternoEnMiBloque = async (req: Request, res: Response) => {
+  const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" });
+  if (!guia) return res.status(403).json({ error: "Tu cuenta no está designada como guía" });
+  const bloque = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }], estado: "ACTIVO" });
+  if (!bloque) return res.status(404).json({ error: "Aún no tienes un bloque activo asignado" });
+  return registrarUsuarioYAsignar(req, res, bloque);
+};
+export const registrarFraternoEnBloqueComoAdmin = async (req: Request, res: Response) => {
+  const bloque = await Bloque.findOne({ _id: req.body.bloqueId, estado: "ACTIVO" });
+  if (!bloque) return res.status(404).json({ error: "Bloque activo no encontrado" });
+  return registrarUsuarioYAsignar(req, res, bloque);
 };
 export const obtenerDirectorioBloques = async (_req: Request, res: Response) => {
   const bloques = await Bloque.find({ estado: "ACTIVO" })
