@@ -1,0 +1,20 @@
+# Dependencias, compilaciones y metadatos locales
+.git/
+.vercel/
+.wrangler/
+**/node_modules/
+**/dist/
+logs-desarrollo/
+artifacts/
+
+# Respaldos y documentos personales que no forman parte del servicio
+*.zip
+*.gz
+*.pdf
+*.docx
+contactos_culturas.csv
+*atras.jpeg
+*cara.jpeg
+vidal.jpeg
+umsalogo.png
+frontend/public/Captura de pantalla_*.png
