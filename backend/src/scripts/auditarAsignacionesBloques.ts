@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Bloque from "../models/Bloque";
 import DetalleBloque from "../models/DetalleBloque";
 import Fraterno from "../models/Fraterno";
-import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
+import { asegurarIndiceAsignacionActiva, esIndiceAsignacionActivaCorrecto, esIndiceFraternoBloque, esIndicePosicionFisica, FILTRO_ASIGNACION_ACTIVA } from "../services/AsignacionBloqueService";
 
 async function ejecutar() {
   const uri = process.env.DATABASE_URL;
@@ -20,7 +20,9 @@ async function ejecutar() {
   }
   const duplicadas = [...porFraterno.entries()].filter(([, items]) => items.length > 1);
   const fraternosDuplicados = await Fraterno.aggregate([{ $match: { fechaEliminado: null } }, { $group: { _id: { usuarioId: "$usuarioId", gestionId: "$gestionId" }, ids: { $push: "$_id" }, total: { $sum: 1 } } }, { $match: { total: { $gt: 1 } } }]);
-  console.log(JSON.stringify({ modo: reparar ? "REPARACION_SEGURA" : "SOLO_LECTURA", asignacionesActivas: asignaciones.length, relacionesHuerfanas: huerfanas.map((item) => item._id), fraternosConVariasAsignaciones: duplicadas.map(([fraternoId, items]) => ({ fraternoId, asignaciones: items.map((item) => item._id) })), perfilesFraternoDuplicados: fraternosDuplicados }, null, 2));
+  const indices: any[] = await mongoose.connection.collection("detalle_bloques").indexes();
+  const indicesIncompatibles = indices.filter((indice) => esIndicePosicionFisica(indice) || (esIndiceFraternoBloque(indice) && !esIndiceAsignacionActivaCorrecto(indice)));
+  console.log(JSON.stringify({ modo: reparar ? "REPARACION_SEGURA" : "SOLO_LECTURA", asignacionesActivas: asignaciones.length, relacionesHuerfanas: huerfanas.map((item) => item._id), fraternosConVariasAsignaciones: duplicadas.map(([fraternoId, items]) => ({ fraternoId, asignaciones: items.map((item) => item._id) })), perfilesFraternoDuplicados: fraternosDuplicados, indicesIncompatibles: indicesIncompatibles.map((indice) => ({ nombre: indice.name, campos: indice.key, unico: indice.unique ?? false })) }, null, 2));
   if (reparar) {
     const retirar = [...huerfanas.map((item) => item._id), ...duplicadas.flatMap(([, items]) => items.slice(1).map((item) => item._id))];
     if (retirar.length) await DetalleBloque.updateMany({ _id: { $in: retirar } }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } });

@@ -8,14 +8,26 @@ export const FILTRO_ASIGNACION_ACTIVA = { estado: { $ne: "INACTIVO" }, fechaElim
 export const esIndiceFraternoBloque = (indice: { key?: Record<string, number> }) =>
   indice.key?.fraternoId === 1 && Object.keys(indice.key).length === 1;
 
+export const esIndicePosicionFisica = (indice: { key?: Record<string, number> }) =>
+  Boolean(indice.key && (Object.hasOwn(indice.key, "fila") || Object.hasOwn(indice.key, "columna")));
+
+export const esIndiceAsignacionActivaCorrecto = (indice: { key?: Record<string, number>; unique?: boolean; partialFilterExpression?: Record<string, unknown> }) =>
+  esIndiceFraternoBloque(indice) && indice.unique === true && indice.partialFilterExpression?.estado === "ACTIVO" && indice.partialFilterExpression?.fechaEliminado === null;
+
 export async function asegurarIndiceAsignacionActiva() {
   const coleccion = mongoose.connection.collection("detalle_bloques");
   await coleccion.updateMany({ estado: { $exists: false } }, { $set: { estado: "ACTIVO" } });
   const indices = await coleccion.indexes();
   for (const indice of indices) {
-    if (esIndiceFraternoBloque(indice as { key?: Record<string, number> }) && indice.name !== "fraternoId_activo_1") await coleccion.dropIndex(indice.name!);
+    if (esIndicePosicionFisica(indice as { key?: Record<string, number> })) {
+      await coleccion.dropIndex(indice.name!);
+      continue;
+    }
+    if (esIndiceFraternoBloque(indice as { key?: Record<string, number> }) && !esIndiceAsignacionActivaCorrecto(indice as any)) await coleccion.dropIndex(indice.name!);
   }
-  if (!(await coleccion.indexExists("fraternoId_activo_1"))) {
+  await coleccion.updateMany({}, { $unset: { fila: "", columna: "" } });
+  const finales = await coleccion.indexes();
+  if (!finales.some((indice) => esIndiceAsignacionActivaCorrecto(indice as any))) {
     await coleccion.createIndex(
       { fraternoId: 1 },
       { unique: true, name: "fraternoId_activo_1", partialFilterExpression: { estado: "ACTIVO", fechaEliminado: null } },
