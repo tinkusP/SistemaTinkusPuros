@@ -53,7 +53,7 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
   if (!gestion) return null;
 
   const usuarios: any[] = await PerfilUsuario.find({ fechaEliminado: null, estado: { $ne: "ELIMINADO" } })
-    .select("nombres apellidoPaterno apellidoMaterno ci sexo telefono email roles estado")
+    .select("nombres apellidoPaterno apellidoMaterno ci sexo telefono email roles estado fechaCreado")
     .populate({ path: "roles", select: "codigo nombre estado fechaEliminado" }).lean();
   const usuarioIds = usuarios.map((usuario) => usuario._id);
   const [fraternos, preregistros, configuracion, guias]: any[] = await Promise.all([
@@ -71,7 +71,7 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     DetalleBloque.find({ fraternoId: { $in: fraternoIds }, ...FILTRO_ASIGNACION_ACTIVA }).populate({ path: "bloqueId", match: { estado: "ACTIVO" }, select: "nombre" }).lean(),
     Bloque.find({ estado: "ACTIVO", gestionId: gestion._id, $or: [{ guiaId: { $in: guiaIds } }, { guiasIds: { $in: guiaIds } }] }).select("nombre guiaId guiasIds").lean(),
   ]);
-  const primerosPagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, numeroPago: 1, fechaEliminado: null }).lean();
+  const pagos = await DetalleCuota.find({ cuotaId: { $in: cuotas.map((cuota) => cuota._id) }, fechaEliminado: null }).sort({ numeroPago: 1, fechaPago: 1 }).lean();
 
   const fraternoPorUsuario = new Map(fraternos.map((fraterno) => [String(fraterno.usuarioId), fraterno]));
   const preregistroPorUsuario = new Map(preregistros.map((preregistro: any) => [String(preregistro.usuarioId), preregistro]));
@@ -79,7 +79,8 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
   const tallaPorFraterno = new Map(tallas.filter((talla: any) => talla.fraternoId).map((talla: any) => [String(talla.fraternoId), talla]));
   const tallaPorUsuario = new Map(tallas.filter((talla: any) => talla.usuarioId).map((talla: any) => [String(talla.usuarioId), talla]));
   const cuotaPorPreregistro = new Map(cuotas.map((cuota) => [String(cuota.preregistroId), cuota]));
-  const pagoPorCuota = new Map(primerosPagos.map((pago) => [String(pago.cuotaId), pago]));
+  const pagosPorCuota = new Map<string, any[]>();
+  pagos.forEach((pago: any) => pagosPorCuota.set(String(pago.cuotaId), [...(pagosPorCuota.get(String(pago.cuotaId)) ?? []), pago]));
   const bloquePorFraterno = new Map(asignaciones.filter((asignacion: any) => asignacion.bloqueId).map((asignacion: any) => [String(asignacion.fraternoId), asignacion.bloqueId]));
   const bloquePorGuia = new Map<string, any>();
   bloquesGuia.forEach((bloque: any) => [...(bloque.guiasIds ?? []), bloque.guiaId].filter(Boolean).forEach((id: any) => bloquePorGuia.set(String(id), bloque)));
@@ -92,7 +93,8 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     const participante = Boolean(preregistro);
     const talla: any = participante ? tallaPorFraterno.get(String(fraterno?._id)) ?? tallaPorUsuario.get(String(usuario._id)) : null;
     const cuota: any = participante ? cuotaPorPreregistro.get(String(preregistro._id)) : null;
-    const primerPago: any = cuota ? pagoPorCuota.get(String(cuota._id)) : null;
+    const pagosCuota: any[] = cuota ? pagosPorCuota.get(String(cuota._id)) ?? [] : [];
+    const primerPago: any = pagosCuota.find((pago) => pago.numeroPago === 1);
     const montoPrimeraCuota = participante ? redondearMonto(cuota?.primeraCuotaMonto ?? (cuota ? distribuirPlanPagos(cuota.montoTotal, cuota.numeroCuotasElegidas ?? 1)[0] : configuracion?.primeraCuota ?? 0)) : 0;
     const pagoEstado = estadoPrimeraCuota(participante, montoPrimeraCuota, primerPago);
     const primeraCuotaPagada = pagoEstado.pagada;
@@ -102,8 +104,18 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     const bloqueGuia: any = guia ? bloquePorGuia.get(String(guia._id)) : null;
     const bloque = bloqueGuia?.nombre ?? bloqueIntegrante?.nombre ?? "SIN BLOQUE";
     const asignacion = bloqueGuia ? `GUÍA DEL ${bloque}` : bloqueIntegrante ? `${esRol(roles, "ADMINISTRADOR") ? "ADMINISTRADOR / " : ""}FRATERNO DEL ${bloque}` : esRol(roles, "POSTULANTE") ? "POSTULANTE - SIN BLOQUE" : "SIN BLOQUE";
+    const pagosVerificados = pagosCuota.filter((pago) => pago.estadoRevision === "VERIFICADO");
+    const pagosPendientes = pagosCuota.filter((pago) => pago.estadoRevision === "PENDIENTE");
+    const numeroCuotas = participante ? Number(cuota?.numeroCuotasElegidas ?? 0) : 0;
+    const montoRegistradoTotal = redondearMonto(pagosCuota.reduce((total, pago) => total + Number(pago.monto ?? 0), 0));
+    const montoVerificadoTotal = redondearMonto(pagosVerificados.reduce((total, pago) => total + Number(pago.monto ?? 0), 0));
+    const estadoMedicion = !participante ? "NO APLICA" : tallaEstado.conTalla ? "TALLAS COMPLETAS" : tallaEstado.pendienteTalla === "AMBAS" ? "SIN MEDICIÓN" : "MEDICIÓN INCOMPLETA";
+    const sinPagoYSinTalla = participante && pagosCuota.length === 0 && !tallaEstado.conTalla;
+    const pagoSinTalla = participante && pagosVerificados.length > 0 && !tallaEstado.conTalla;
+    const prioridadSeguimiento = sinPagoYSinTalla ? "ALTA" : pagoSinTalla || pagosPendientes.length > 0 ? "MEDIA" : "BAJA";
+    const problemasCalidad = [!usuario.telefono && "TELÉFONO VACÍO", !usuario.ci && "CI VACÍO", !usuario.email && "CORREO VACÍO", !usuario.sexo && "SEXO VACÍO", roles.length === 0 && "SIN ROLES", participante && bloque === "SIN BLOQUE" && "SIN BLOQUE", estadoMedicion === "MEDICIÓN INCOMPLETA" && "TALLA PARCIAL", pagoEstado.primeraCuota === "PENDIENTE" && pagoEstado.saldoPrimeraCuota === 0 && "PAGO INCONSISTENTE"].filter(Boolean);
     return {
-      usuarioId: String(usuario._id), fraternoId: String(fraterno?._id ?? ""), nombre: nombreCompleto(usuario), ci: String(usuario.ci ?? ""), codigoFraterno: String(fraterno?.numeroFraterno ?? preregistro?.numeroPreRegistro ?? ""), sexo: usuario.sexo ?? "SIN REGISTRO", telefono: String(usuario.telefono ?? ""), whatsapp: whatsapp(usuario.telefono), correo: usuario.email ?? "", roles, tipoRegistro: tipoRegistro(roles, perfilFraterno), perfilFraterno, participante, estadoInscripcion: preregistro?.estado ?? "SIN INSCRIPCIÓN", estadoUsuario: usuario.estado ?? "SIN REGISTRO", bloque, asignacion, tallaPolera: participante ? talla?.tallaPolera ?? null : null, tallaChamarra: participante ? talla?.tallaChamarra ?? null : null, ...tallaEstado, ...pagoEstado, montoPrimeraCuota, montoPagadoPrimeraCuota: pagoEstado.montoVerificadoPrimeraCuota,
+      usuarioId: String(usuario._id), fraternoId: String(fraterno?._id ?? ""), nombre: nombreCompleto(usuario), ci: String(usuario.ci ?? ""), codigoFraterno: String(fraterno?.numeroFraterno ?? preregistro?.numeroPreRegistro ?? ""), sexo: usuario.sexo ?? "SIN REGISTRO", telefono: String(usuario.telefono ?? ""), whatsapp: whatsapp(usuario.telefono), correo: usuario.email ?? "", roles, tipoRegistro: tipoRegistro(roles, perfilFraterno), perfilFraterno, participante, estadoInscripcion: preregistro?.estado ?? "SIN INSCRIPCIÓN", estadoUsuario: usuario.estado ?? "SIN REGISTRO", bloque, asignacion, tallaPolera: participante ? talla?.tallaPolera ?? null : null, tallaChamarra: participante ? talla?.tallaChamarra ?? null : null, ...tallaEstado, estadoMedicion, ...pagoEstado, montoPrimeraCuota, montoPagadoPrimeraCuota: pagoEstado.montoVerificadoPrimeraCuota, planPagos: numeroCuotas ? `${numeroCuotas} CUOTA${numeroCuotas === 1 ? "" : "S"}` : participante ? "SIN PLAN" : "NO APLICA", numeroCuotas, cuotasPagadas: pagosVerificados.length, cuotasPendientes: Math.max(0, numeroCuotas - pagosVerificados.length), cuotasPorVerificar: pagosPendientes.length, montoRegistradoTotal, montoVerificadoTotal, saldoTotal: participante ? redondearMonto(cuota?.saldo ?? Math.max(0, Number(cuota?.montoTotal ?? 0) - montoVerificadoTotal)) : 0, estadoPagoGeneral: participante ? cuota?.estado ?? pagoEstado.estadoPago : "NO APLICA", fechaUltimoPago: pagosCuota.at(-1)?.fechaPago ?? null, fechaRegistro: preregistro?.fechaRegistro ?? usuario.fechaCreado ?? null, prioridadSeguimiento, motivoSeguimiento: sinPagoYSinTalla ? "SIN PAGO + SIN TALLA" : pagoSinTalla ? "PAGO VERIFICADO + SIN TALLA" : pagosPendientes.length ? "PAGO PENDIENTE DE VERIFICACIÓN" : "", problemasCalidad,
     };
   }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
 
