@@ -115,6 +115,8 @@ export default function PerfilUsuarioView() {
     useState<string | null>(
       null,
     );
+  const [perfilAEliminar, setPerfilAEliminar] = useState<PerfilUsuarioType | null>(null);
+  const [ciConfirmacion, setCiConfirmacion] = useState("");
 
   /* =========================================
      LISTADO
@@ -447,13 +449,12 @@ export default function PerfilUsuarioView() {
 
   const eliminarMutation =
     useMutation({
-      mutationFn:
-        deletePerfilUsuario,
+      mutationFn: ({ id, ci }: { id: string; ci: string }) => deletePerfilUsuario(id, ci),
 
       onSuccess:
         async (
           respuesta,
-          perfilId,
+          variables,
         ) => {
           toast.success(
             respuesta.message ||
@@ -462,12 +463,15 @@ export default function PerfilUsuarioView() {
 
           if (
             perfilSeleccionado?._id ===
-            perfilId
+            variables.id
           ) {
             setPerfilSeleccionado(
               null,
             );
           }
+
+          setPerfilAEliminar(null);
+          setCiConfirmacion("");
 
           await queryClient.invalidateQueries(
             {
@@ -665,7 +669,7 @@ export default function PerfilUsuarioView() {
 
                     const eliminando =
                       eliminarMutation.isPending &&
-                      eliminarMutation.variables ===
+                      eliminarMutation.variables?.id ===
                         perfil._id;
 
                     const preregistro = preregistroPorUsuario.get(perfil._id);
@@ -811,18 +815,8 @@ export default function PerfilUsuarioView() {
                                 eliminando
                               }
                               onClick={() => {
-                                const confirmarEliminacion =
-                                  window.confirm(
-                                    `¿Eliminar el perfil de ${perfil.nombres} ${perfil.apellidoPaterno}?`,
-                                  );
-
-                                if (
-                                  confirmarEliminacion
-                                ) {
-                                  eliminarMutation.mutate(
-                                    perfil._id,
-                                  );
-                                }
+                                setPerfilAEliminar(perfil);
+                                setCiConfirmacion("");
                               }}
                               className="rounded-lg bg-red-100 p-2 text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                               title="Eliminar perfil"
@@ -886,6 +880,7 @@ export default function PerfilUsuarioView() {
       {fraternoSeleccionado ? <GestionarFraternoModal fraterno={fraternoSeleccionado} cerrar={() => setFraternoSeleccionado(null)} /> : null}
       {cuotaSeleccionada ? <PagosModal cuota={cuotaSeleccionada} cerrar={() => setCuotaSeleccionada(null)} abrirGestion={() => navigate(`/cuotas/${cuotaSeleccionada._id}`, { state: { returnTo: "/perfil-usuario", reopenCuotaId: cuotaSeleccionada._id, viewState: { busqueda, filtroRapido, filtroPreregistro, paginaActual } } })} /> : null}
       {reporteAbierto ? <><ReporteSeleccionableModal filas={filasReporte} logoIzquierdo={logoReporteIzquierdo} logoDerecho={logoReporteDerecho} cerrar={() => setReporteAbierto(false)} /><SelectorLogosReporte logoIzquierdo={logoReporteIzquierdo} logoDerecho={logoReporteDerecho} cambiarIzquierdo={setLogoReporteIzquierdo} cambiarDerecho={setLogoReporteDerecho}/></> : null}
+      {perfilAEliminar ? <div className="fixed inset-0 z-[200] grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-eliminar-usuario"><section className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><h2 id="titulo-eliminar-usuario" className="text-2xl font-black text-red-800">Eliminar usuario definitivamente</h2><p className="mt-3 text-sm text-slate-700">Se eliminarán el perfil y sus relaciones propias: preregistro, fraterno, pagos, tallas, documentos, bloque y accesos. Esta acción no se puede deshacer desde la interfaz.</p><p className="mt-4 rounded-xl bg-red-50 p-3 font-bold text-red-900">{perfilAEliminar.nombres} {perfilAEliminar.apellidoPaterno} {perfilAEliminar.apellidoMaterno ?? ""}<br/>CI: {perfilAEliminar.ci}</p><label className="mt-4 block"><span className="text-sm font-bold">Escribe el CI exacto para confirmar</span><input autoFocus value={ciConfirmacion} onChange={(evento) => setCiConfirmacion(evento.target.value)} className="input-preregistro mt-2" placeholder={String(perfilAEliminar.ci)}/></label><div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={eliminarMutation.isPending} onClick={() => { setPerfilAEliminar(null); setCiConfirmacion(""); }} className="rounded-xl border px-5 py-3 font-bold">Cancelar</button><button type="button" disabled={eliminarMutation.isPending || ciConfirmacion.trim() !== String(perfilAEliminar.ci)} onClick={() => eliminarMutation.mutate({ id: perfilAEliminar._id, ci: ciConfirmacion.trim() })} className="rounded-xl bg-red-700 px-5 py-3 font-black text-white disabled:opacity-40">{eliminarMutation.isPending ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div> : null}
     </main>
   );
 }

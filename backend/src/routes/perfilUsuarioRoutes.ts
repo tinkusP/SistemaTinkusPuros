@@ -1146,10 +1146,10 @@ router.put(
  *   delete:
  *     tags:
  *       - PerfilUsuario
- *     summary: Eliminar lógicamente un perfil
+ *     summary: Eliminar definitivamente un usuario y sus relaciones
  *     description: >
- *       No elimina el documento de MongoDB. Cambia el estado a ELIMINADO
- *       y registra fechaEliminado y usuarioEliminador.
+ *       Requiere confirmación exacta del CI y elimina las relaciones propias
+ *       dentro de una transacción, preservando un respaldo administrativo.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1169,9 +1169,11 @@ router.put(
 router.delete(
   "/:id",
   authenticate,
+  soloAdministracion,
   param("id")
     .isMongoId()
     .withMessage("ID de usuario no válido"),
+  body("ciConfirmacion").isString().trim().notEmpty().withMessage("Debes confirmar el CI exacto"),
   handleInputErrors,
   PerfilUsuarioController.deletePerfilUsuario,
 );

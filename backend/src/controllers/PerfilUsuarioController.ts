@@ -1493,6 +1493,7 @@ import Rol from "../models/Rol";
 import ConfiguracionPago from "../models/ConfiguracionPago";
 import { eliminarArchivoAlmacenado, subirArchivoProcesado } from "../services/AlmacenamientoService";
 import { sincronizarCuotasUsuario } from "../services/SincronizacionCuotaService";
+import { eliminarUsuarioDefinitivamente } from "../services/eliminacionUsuarioService";
 
 type DetalleSolicitudInvalida = {
   tipo?: "DUPLICADO" | "ARCHIVO" | "DATO" | "TOKEN";
@@ -3121,8 +3122,7 @@ static getPerfilUsuarioById = async (
   };
 
   /* =========================================
-     ELIMINACIÓN LÓGICA
-     No elimina el documento de MongoDB.
+     ELIMINACIÓN DEFINITIVA Y TRANSACCIONAL
   ========================================= */
 
   static deletePerfilUsuario = async (
@@ -3132,35 +3132,13 @@ static getPerfilUsuarioById = async (
     try {
       validarIdParametro(req.params.id);
 
-      const perfil = await PerfilUsuario.findOneAndUpdate(
-        {
-          _id: req.params.id,
-          estado: { $ne: "ELIMINADO" },
-        },
-        {
-          $set: {
-            estado: "ELIMINADO",
-            fechaEliminado: new Date(),
-            usuarioEliminador: req.usuario?._id ?? null,
-          },
-        },
-        {
-          new: true,
-          runValidators: true,
-        },
-      ).select("_id estado fechaEliminado usuarioEliminador");
-
-      if (!perfil) {
-        return res.status(404).json({
-          error: "Perfil usuario no encontrado o ya fue eliminado",
-        });
-      }
-
-      return res.status(200).json({
-        message: "Perfil usuario eliminado lógicamente",
-        perfil,
-      });
+      const ciConfirmacion = typeof req.body?.ciConfirmacion === "string" ? req.body.ciConfirmacion.trim() : "";
+      if (!ciConfirmacion) return res.status(400).json({ error: "Debes confirmar el CI exacto del usuario" });
+      const resultado = await eliminarUsuarioDefinitivamente(String(req.params.id), ciConfirmacion, req.usuario?._id);
+      return res.status(200).json(resultado);
     } catch (error) {
+      const errorControlado = error as { status?: number; message?: string };
+      if (errorControlado.status) return res.status(errorControlado.status).json({ error: errorControlado.message });
       return responderError(
         res,
         error,

@@ -3,11 +3,10 @@ import { connectDB } from "../config/db";
 
 type Objetivo = { ci: string; complemento?: string; nombre: string };
 const OBJETIVOS: readonly Objetivo[] = [
-  { ci: "9236945", complemento: "1", nombre: "MISSEL KEYLA APAZA AQUINO" },
-  { ci: "9124293", nombre: "LUIS ANGEL ROQUE MAMANI" },
-  { ci: "13184880", nombre: "YANDIRA ENILSE MORALES NINA" },
-  { ci: "13552908", nombre: "VIDAL ACARAPI DELGADO" },
-  { ci: "15129476", nombre: "LUIS HUANCA DEL VALLE" },
+  { ci: "81818181", nombre: "JOSE MMM MMM" },
+  { ci: "8444174123", nombre: "JIMMY PRUEBA CONDORI MONTES" },
+  { ci: "0987654321", nombre: "QUALITY ANSWER" },
+  { ci: "8963742", nombre: "HIROMI SADAKATA CONDE" },
 ] as const;
 
 const nombreCompleto = (u: any) => [u.nombres, u.apellidoPaterno, u.apellidoMaterno].filter(Boolean).join(" ").trim().toUpperCase();
@@ -27,7 +26,7 @@ async function contexto(objetivo: Objetivo, session?: ClientSession) {
     detalle_cuotas: { cuotaId: { $in: cuotaIds } }, tallas_fraterno: { $or: [{ usuarioId: usuario._id }, { fraternoId: { $in: fraternoIds } }] }, detalle_bloques: { fraternoId: { $in: fraternoIds } },
     asistencias: { $or: [{ usuarioId: usuario._id }, { preregistroId: { $in: preregistroIds } }, { fraternoId: { $in: fraternoIds } }, { postulanteGuiaId: { $in: postulanteIds } }] }, entregas_indumentaria: { fraternoId: { $in: fraternoIds } }, meritos_guia: { postulanteGuiaId: { $in: postulanteIds } },
     documentos_usuarios: { perfilUsuario: usuario._id }, notificaciones: { usuarioId: usuario._id }, aceptaciones_terminos_pago: { usuarioId: usuario._id }, autorizaciones_edicion_perfil: { perfilUsuarioId: usuario._id },
-    tokens_registro: { $or: [{ utilizadoPor: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }, { fraternoId: { $in: fraternoIds } }] }, traspasos: { $or: [{ usuarioOrigenId: usuario._id }, { usuarioDestinoId: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }] }, pasos_videos: { usuarioAutorId: usuario._id },
+    tokens_registro: { $or: [{ utilizadoPor: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }, { fraternoId: { $in: fraternoIds } }] }, traspasos: { $or: [{ usuarioOrigenId: usuario._id }, { usuarioDestinoId: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }] }, pasos_videos: { usuarioAutorId: usuario._id }, auditoria: { $or: [{ usuarioId: usuario._id }, { entidadId: usuario._id }] },
   };
   const encontrados: Record<string, any[]> = { perfil_usuarios: [usuario], preregistros, fraternos, guias, postulantes_guia: postulantes, cuotas };
   for (const [nombre, filtro] of Object.entries(filtros)) encontrados[nombre] = await docs(nombre, filtro, session);
@@ -61,10 +60,14 @@ async function ejecutar() {
   const session = await mongoose.startSession();
   const idRespaldo = new Types.ObjectId();
   try {
+    const nombresColecciones = (await mongoose.connection.db!.listCollections({}, { nameOnly: true }).toArray()).map((item) => item.name);
+    const referenciasAuditoria = ["usuarioCreador", "usuarioEditor", "usuarioAprobador", "usuarioRevisor", "usuarioEliminador", "usuarioHabilitador", "usuarioEvaluador", "usuarioVerificador", "responsableEntrega", "administradorId", "generadoPor", "createdBy", "updatedBy", "approvedBy", "verifiedBy"];
     await session.withTransaction(async () => {
+      const usuariosObjetivo: Types.ObjectId[] = [];
       for (const objetivo of OBJETIVOS) {
         const ctx = await contexto(objetivo, session);
-        await coleccion("respaldos_eliminacion_usuarios").insertOne({ loteId: idRespaldo, creadoEn: new Date(), motivo: "Eliminación autorizada de cinco usuarios", objetivo, colecciones: ctx.encontrados }, { session });
+        usuariosObjetivo.push(ctx.usuario._id);
+        await coleccion("respaldos_eliminacion_usuarios").insertOne({ loteId: idRespaldo, creadoEn: new Date(), motivo: "Eliminación definitiva autorizada de cuatro usuarios", objetivo, colecciones: ctx.encontrados }, { session });
         for (const [nombre, filtro] of Object.entries(ctx.filtros)) await coleccion(nombre).deleteMany(filtro, { session });
         await coleccion("meritos_guia").deleteMany({ postulanteGuiaId: { $in: ctx.postulanteIds } }, { session });
         await coleccion("bloques").updateMany({ guiasIds: { $in: ctx.guiaIds } }, { $pull: { guiasIds: { $in: ctx.guiaIds } } } as any, { session });
@@ -76,6 +79,12 @@ async function ejecutar() {
         await coleccion("preregistros").deleteMany({ _id: { $in: ctx.preregistroIds } }, { session });
         await coleccion("perfil_usuarios").deleteOne({ _id: ctx.usuario._id }, { session });
         await recalcularBloques(ctx.bloques.map((b) => b._id), session);
+      }
+      const filtroReferencias = { $or: referenciasAuditoria.map((campo) => ({ [campo]: { $in: usuariosObjetivo } })) };
+      const limpiarReferencias = { $unset: Object.fromEntries(referenciasAuditoria.map((campo) => [campo, ""])) };
+      for (const nombreColeccion of nombresColecciones) {
+        if (nombreColeccion === "respaldos_eliminacion_usuarios") continue;
+        await coleccion(nombreColeccion).updateMany(filtroReferencias, limpiarReferencias, { session });
       }
     });
   } finally { await session.endSession(); }

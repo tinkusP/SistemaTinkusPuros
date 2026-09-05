@@ -1148,6 +1148,7 @@ export async function generarPasswordTemporal(perfilUsuarioId: string) {
 
 export async function deletePerfilUsuario(
   id: string,
+  ciConfirmacion: string,
 ): Promise<{
   message:
     string;
@@ -1163,6 +1164,7 @@ export async function deletePerfilUsuario(
         message?: string;
       }>(
         `${PERFIL_URL}/${perfilId}`,
+        { data: { ciConfirmacion } },
       );
 
     return {
