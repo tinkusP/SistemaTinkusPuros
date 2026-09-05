@@ -3,10 +3,18 @@ const assert = require("node:assert/strict");
 const { estadoTallaPago } = require("../dist/services/ReporteTallasPrimeraCuotaService");
 
 test("considera talla completa solamente cuando existen polera y chamarra", () => {
-  assert.deepEqual(estadoTallaPago("M", "XL", true), { tienePolera: true, tieneChamarra: true, conTalla: true, pendienteTalla: null, estadoGeneral: "COMPLETO" });
+  assert.deepEqual(estadoTallaPago("M", "XL", true), { tienePolera: true, tieneChamarra: true, conTalla: true, pendienteTalla: null, estadoTallaPolera: "REGISTRADA", estadoTallaChamarra: "REGISTRADA", estadoGeneral: "COMPLETO" });
   assert.equal(estadoTallaPago("M", "", true).pendienteTalla, "CHAMARRA");
   assert.equal(estadoTallaPago("", "L", true).pendienteTalla, "POLERA");
   assert.equal(estadoTallaPago(undefined, undefined, true).pendienteTalla, "AMBAS");
+});
+
+test("diferencia un usuario sin perfil fraterno de un fraterno pendiente", () => {
+  const estado = estadoTallaPago(undefined, undefined, false, false);
+  assert.equal(estado.estadoTallaPolera, "NO APLICA");
+  assert.equal(estado.estadoTallaChamarra, "NO APLICA");
+  assert.equal(estado.pendienteTalla, null);
+  assert.equal(estado.estadoGeneral, "USUARIO SIN PERFIL FRATERNO");
 });
 
 test("combina correctamente falta de talla y primera cuota pendiente", () => {
