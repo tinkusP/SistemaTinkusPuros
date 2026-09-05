@@ -12,12 +12,13 @@ import Preregistro from "../models/Preregistro";
 import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion } from "../services/AsignacionBloqueService";
+import { idsGuiasDelBloque, retirarGuiaDeBloques, sincronizarContadoresGuias } from "../services/GuiaBloqueService";
 import { crearPreregistroParaUsuario } from "./PreregistroController";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
 const normalizarGenero = normalizarGeneroBloque;
 export const listarGuias = async (_req: Request, res: Response) => {
-  const guias = await Guia.find().populate(poblarGuia);
-  const bloques = await Bloque.find().populate({ path: "guiaId", populate: poblarGuia }).populate({ path: "guiasIds", populate: poblarGuia }).sort({ nombre: 1 });
+  const guias = await Guia.find({ estado: "ACTIVO" }).populate(poblarGuia);
+  const bloques = await Bloque.find({ estado: "ACTIVO" }).populate({ path: "guiaId", populate: poblarGuia }).populate({ path: "guiasIds", populate: poblarGuia }).sort({ nombre: 1 });
   const detalles = await DetalleBloque.find(FILTRO_ASIGNACION_ACTIVA).populate("bloqueId", "nombre guiasIds guiaId estado").populate({ path: "fraternoId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo ci email telefono fotoPerfil" }, { path: "preregistroId", select: "numeroPreRegistro" }] });
   const fraternosDocumentos = await Fraterno.find({ estado: "ACTIVO", fechaEliminado: null }).populate({ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno sexo ci email telefono fotoPerfil" }).populate("preregistroId", "numeroPreRegistro");
   const [cuotas, tallas] = await Promise.all([Cuota.find({ preregistroId: { $in: fraternosDocumentos.map(f=>f.preregistroId) }, fechaEliminado: null }).lean(), TallaFraterno.find({ fraternoId: { $in: fraternosDocumentos.map(f=>f._id) } }).lean()]);
@@ -252,32 +253,60 @@ export const obtenerDirectorioBloques = async (_req: Request, res: Response) => 
 };
 export const moverGuiaComoAdmin = async (req: Request, res: Response) => {
   const guia = await Guia.findById(req.params.guiaId).populate("usuarioId", "sexo");
-  if (!guia) return res.status(404).json({ error: "Guía no encontrado" });
+  if (!guia || guia.estado !== "ACTIVO") return res.status(404).json({ error: "Guía activo no encontrado" });
   const genero = normalizarGenero((guia.usuarioId as any)?.sexo);
   if (!genero) return res.status(409).json({ error: "El guía debe tener registrado su sexo" });
-  const campoCantidad = genero === "HOMBRE" ? "cantidadGuiasHombres" : "cantidadGuiasMujeres";
-  const bloqueOrigen: any = await Bloque.findOne({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] });
+  const bloqueOrigen: any = await Bloque.findOne({ estado: "ACTIVO", $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] });
   if (bloqueOrigen && String(req.body.bloqueId ?? "") === String(bloqueOrigen._id)) return res.json({ message: "El guía ya pertenece a este bloque" });
   if (bloqueOrigen && req.body.bloqueId && req.body.confirmarMovimiento !== true) return res.status(409).json({ error: `Este usuario ya es guía del bloque ${bloqueOrigen.nombre}.` });
   const destinoSolicitado: any = req.body.bloqueId ? await Bloque.findById(req.body.bloqueId) : null;
-  if (req.body.bloqueId && (!destinoSolicitado || String(destinoSolicitado.gestionId) !== String(guia.gestionId))) return res.status(400).json({ error: "Bloque destino no válido" });
-  if (bloqueOrigen) {
-    const restantes=(bloqueOrigen.guiasIds??[]).filter((id:any)=>String(id)!==String(guia._id));
-    const cambioOrigen:any={ $pull: { guiasIds: guia._id }, $inc: { [campoCantidad]: -1 } };
-    if(restantes[0])cambioOrigen.$set={guiaId:restantes[0]};else cambioOrigen.$unset={guiaId:""};
-    await Bloque.updateOne({ _id: bloqueOrigen._id }, cambioOrigen);
-  }
-  if (req.body.bloqueId) {
-    const destino = destinoSolicitado;
-    const cantidadGenero=genero==="HOMBRE"?destino.cantidadGuiasHombres:destino.cantidadGuiasMujeres;const errorCupoGuia=validarCupoGuia(genero,cantidadGenero??0);if(errorCupoGuia){if(bloqueOrigen){const reversa:any={$addToSet:{guiasIds:guia._id},$inc:{[campoCantidad]:1}};if(bloqueOrigen.guiaId)reversa.$set={guiaId:bloqueOrigen.guiaId};await Bloque.updateOne({_id:bloqueOrigen._id},reversa);}return res.status(409).json({error:errorCupoGuia});}
-    const actualizado = await Bloque.findOneAndUpdate({ _id: destino._id, guiasIds: { $ne: guia._id }, [campoCantidad]: { $lt: LIMITES_BLOQUE.GUIAS_POR_GENERO }, $expr: { $lt: [{ $size: "$guiasIds" }, LIMITES_BLOQUE.GUIAS_TOTAL] } }, { $addToSet: { guiasIds: guia._id }, $set: { ...(destino.guiaId?{}:{guiaId:guia._id}) }, $inc: { [campoCantidad]: 1 } }, { new: true, runValidators: true }).catch(() => null);
-    if (!actualizado) {
-      if (bloqueOrigen) {const reversa:any={$addToSet:{guiasIds:guia._id},$inc:{[campoCantidad]:1}};if(bloqueOrigen.guiaId)reversa.$set={guiaId:bloqueOrigen.guiaId};await Bloque.updateOne({_id:bloqueOrigen._id},reversa);}
-      return res.status(409).json({ error: `El bloque destino no tiene cupo para otro guía ${genero === "HOMBRE" ? "hombre" : "mujer"}` });
-    }
+  if (req.body.bloqueId && (!destinoSolicitado || destinoSolicitado.estado !== "ACTIVO" || String(destinoSolicitado.gestionId) !== String(guia.gestionId))) return res.status(400).json({ error: "Bloque destino no válido" });
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await retirarGuiaDeBloques(guia._id, session, destinoSolicitado?._id);
+      if (!destinoSolicitado) return;
+      const destino: any = await Bloque.findById(destinoSolicitado._id).session(session);
+      if (!destino || destino.estado !== "ACTIVO") throw new Error("BLOQUE_DESTINO_INVALIDO");
+      const idsActuales = idsGuiasDelBloque(destino).filter((id) => String(id) !== String(guia._id));
+      const guiasActuales: any[] = await Guia.find({ _id: { $in: idsActuales }, estado: "ACTIVO" }).populate("usuarioId", "sexo").session(session);
+      const cantidadGenero = guiasActuales.filter((item) => normalizarGenero((item.usuarioId as any)?.sexo) === genero).length;
+      const errorCupo = validarCupoGuia(genero, cantidadGenero);
+      if (errorCupo || idsActuales.length >= LIMITES_BLOQUE.GUIAS_TOTAL) throw new Error(errorCupo ?? "El bloque ya tiene 4 guías");
+      destino.guiasIds = [...idsActuales, guia._id];
+      if (!destino.guiaId) destino.guiaId = guia._id;
+      await destino.save({ session });
+      await sincronizarContadoresGuias(destino, session);
+    });
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : "No se pudo actualizar la asignación";
+    return res.status(mensaje === "BLOQUE_DESTINO_INVALIDO" ? 400 : 409).json({ error: mensaje === "BLOQUE_DESTINO_INVALIDO" ? "Bloque destino no válido" : mensaje });
+  } finally {
+    await session.endSession();
   }
   await registrarAuditoria(req, { accion: req.body.bloqueId ? "MOVER_GUIA_BLOQUE" : "RETIRAR_GUIA_BLOQUE", modulo: "BLOQUES", entidad: "Guia", entidadId: guia._id, descripcion: req.body.bloqueId ? "Administración movió un guía a otro bloque" : "Administración retiró un guía de su bloque", datosAntes: { bloqueId: bloqueOrigen?._id }, datosDespues: { bloqueId: req.body.bloqueId ?? null, genero } });
   return res.json({ message: req.body.bloqueId ? "Guía movido por administración" : "Guía retirado del bloque por administración" });
+};
+
+export const quitarRolGuiaComoAdmin = async (req: Request, res: Response) => {
+  const guia = await Guia.findById(req.params.guiaId);
+  if (!guia) return res.status(404).json({ error: "Guía no encontrado" });
+  const rolGuia = await Rol.findOne({ codigo: "GUIA" }).select("_id");
+  const bloquesAntes = await Bloque.find({ $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).select("_id nombre").lean();
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await retirarGuiaDeBloques(guia._id, session);
+      await Guia.updateOne({ _id: guia._id }, { $set: { estado: "INACTIVO" } }, { session });
+      if (rolGuia) await PerfilUsuario.updateOne({ _id: guia.usuarioId }, { $pull: { roles: rolGuia._id } }, { session });
+    });
+  } catch {
+    return res.status(409).json({ error: "No se pudo quitar el rol de guía de forma segura" });
+  } finally {
+    await session.endSession();
+  }
+  await registrarAuditoria(req, { accion: "QUITAR_ROL_GUIA", modulo: "GUIAS", entidad: "Guia", entidadId: guia._id, descripcion: "Administración quitó el rol de guía y liberó sus bloques", datosAntes: { estado: guia.estado, bloques: bloquesAntes }, datosDespues: { estado: "INACTIVO", bloqueId: null } });
+  return res.json({ message: "Rol de guía retirado. La persona conserva su perfil y datos de fraterno." });
 };
 export const asignarEnMiBloque = async (req: Request, res: Response) => {
   const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" });
