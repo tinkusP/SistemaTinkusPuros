@@ -1,0 +1,23 @@
+# El proyecto Vercel compila exclusivamente el directorio frontend.
+backend/
+
+# Dependencias, compilaciones y metadatos locales.
+.git/
+.vercel/
+.wrangler/
+**/node_modules/
+**/dist/
+logs-desarrollo/
+artifacts/
+
+# Respaldos y documentos personales ajenos al despliegue.
+*.zip
+*.gz
+*.pdf
+*.docx
+contactos_culturas.csv
+*atras.jpeg
+*cara.jpeg
+vidal.jpeg
+umsalogo.png
+frontend/public/Captura de pantalla_*.png
