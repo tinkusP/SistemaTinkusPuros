@@ -45,7 +45,18 @@ Todo pago deberá ser correctamente identificado, registrado y posteriormente va
 Me comprometo a cumplir las disposiciones, comunicados, reglamentos y decisiones emitidas por la Directiva para garantizar una organización adecuada de los ensayos y actividades.
 
 15. Aceptación
-Al seleccionar la opción “Acepto los términos y condiciones”, declaro haber leído, comprendido y aceptado las disposiciones señaladas anteriormente, comprometiéndome a cumplirlas durante mi participación en la Fraternidad Tinkus Puros y Naturales.`;
+Al seleccionar la opción “Acepto los términos y condiciones”, declaro haber leído, comprendido y aceptado las disposiciones señaladas anteriormente, comprometiéndome a cumplirlas durante mi participación en la Fraternidad Tinkus Puros y Naturales.
+
+16. Pagos no reembolsables
+Los pagos realizados no serán reembolsables, salvo casos de fuerza mayor debidamente justificados y sujetos a evaluación de la administración.`;
+
+export const CLAUSULA_PAGOS_NO_REEMBOLSABLES = "Los pagos realizados no serán reembolsables, salvo casos de fuerza mayor debidamente justificados y sujetos a evaluación de la administración.";
+
+export const agregarClausulaPagosNoReembolsables = (texto: string) => {
+  const actual = texto.trim();
+  if (actual.includes(CLAUSULA_PAGOS_NO_REEMBOLSABLES)) return actual;
+  return `${actual}\n\n16. Pagos no reembolsables\n${CLAUSULA_PAGOS_NO_REEMBOLSABLES}`;
+};
 
 export const sonTerminosPredeterminadosAnteriores = (texto: string) => {
   const limpio = texto.trim();

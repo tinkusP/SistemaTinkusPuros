@@ -10,7 +10,7 @@ import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
-import { TERMINOS_PARTICIPACION, sonTerminosPredeterminadosAnteriores } from "../constants/terminosParticipacion";
+import { TERMINOS_PARTICIPACION, agregarClausulaPagosNoReembolsables, sonTerminosPredeterminadosAnteriores } from "../constants/terminosParticipacion";
 
 const carpeta = path.resolve(process.cwd(), "public", "uploads", "qr-pagos");
 type Archivos = Record<string, Express.Multer.File[]>;
@@ -39,9 +39,11 @@ async function gestionUsuario(usuarioId: unknown) {
 }
 
 async function actualizarTerminosBase(config: InstanceType<typeof ConfiguracionPago>) {
-  if (!sonTerminosPredeterminadosAnteriores(config.terminos)) return config;
-  config.terminos = TERMINOS_PARTICIPACION;
-  config.versionTerminos += 1;
+  const anteriores = sonTerminosPredeterminadosAnteriores(config.terminos);
+  const contenidoActualizado = anteriores ? TERMINOS_PARTICIPACION : agregarClausulaPagosNoReembolsables(config.terminos);
+  if (contenidoActualizado === config.terminos) return config;
+  config.terminos = contenidoActualizado;
+  // Este ajuste informativo conserva deliberadamente la versión y las aceptaciones existentes.
   config.fechaEditado = new Date();
   await config.save();
   return config;

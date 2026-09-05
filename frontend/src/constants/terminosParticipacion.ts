@@ -45,7 +45,10 @@ Todo pago deberá identificarse, registrarse y validarse. Presentar un comproban
 Me comprometo a cumplir las disposiciones, comunicados, reglamentos y decisiones de la Directiva.
 
 15. Aceptación
-Al seleccionar “Acepto los términos y condiciones”, declaro haber leído, comprendido y aceptado estas disposiciones durante mi participación en la Fraternidad Tinkus Puros y Naturales.`;
+Al seleccionar “Acepto los términos y condiciones”, declaro haber leído, comprendido y aceptado estas disposiciones durante mi participación en la Fraternidad Tinkus Puros y Naturales.
+
+16. Pagos no reembolsables
+Los pagos realizados no serán reembolsables, salvo casos de fuerza mayor debidamente justificados y sujetos a evaluación de la administración.`;
 
 export const sonTerminosPredeterminadosAnteriores = (texto: string) => {
   const limpio = texto.trim();
