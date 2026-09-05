@@ -9,6 +9,7 @@ import Fraterno from "../models/Fraterno";
 import EntregaIndumentaria from "../models/EntregaIndumentaria";
 import Asistencia from "../models/Asistencia";
 import { LIMITES_BLOQUE } from "../services/BloqueService";
+import { generarReporteTallasPrimeraCuota } from "../services/ReporteTallasPrimeraCuotaService";
 
 const genero=(sexo?:string)=>["HOMBRE","MASCULINO","M"].includes(String(sexo??"").toUpperCase())?"HOMBRE":["MUJER","FEMENINO","F"].includes(String(sexo??"").toUpperCase())?"MUJER":"SIN REGISTRO";
 
@@ -24,4 +25,10 @@ export async function reporteEjecutivo(req:Request,res:Response){
  const[guias,fraternos,bloques,entregas,asistencias]=await Promise.all([Guia.countDocuments({gestionId:gestion._id,estado:"ACTIVO"}),Fraterno.countDocuments({gestionId:gestion._id,estado:"ACTIVO",fechaEliminado:null}),Bloque.countDocuments({gestionId:gestion._id}),EntregaIndumentaria.countDocuments({estado:"ENTREGADO"}),Asistencia.countDocuments({gestionId:gestion._id,estado:"PRESENTE"})]);
  const finanzas={montoEsperado:cuotas.reduce((s,c)=>s+c.montoTotal,0),montoCobrado:cuotas.reduce((s,c)=>s+c.montoPagado,0),saldoPendiente:cuotas.reduce((s,c)=>s+c.saldo,0),sinPago:personas.filter(p=>p.cuota.clasificacion==="SIN_PAGO").length,primeraCuota:personas.filter(p=>p.cuota.clasificacion==="PRIMERA_CUOTA").length,segundaCuota:personas.filter(p=>p.cuota.clasificacion==="SEGUNDA_CUOTA").length,totalUnQr:personas.filter(p=>p.cuota.clasificacion==="TOTAL_UN_SOLO_QR").length,pagadoTotal:personas.filter(p=>["TOTAL_UN_SOLO_QR","PAGADO_TOTAL"].includes(p.cuota.clasificacion)).length};
  return res.json({generadoEn:new Date(),gestion:{_id:gestion._id,nombre:gestion.nombre,anio:gestion.anio},resumen:{total:personas.length,hombres:personas.filter(p=>p.genero==="HOMBRE").length,mujeres:personas.filter(p=>p.genero==="MUJER").length,pendientes:personas.filter(p=>p.estadoPreregistro==="PENDIENTE").length,aprobados:personas.filter(p=>p.estadoPreregistro==="APROBADO").length,fraternos,guias,bloques,capacidadBloques:bloques*LIMITES_BLOQUE.TOTAL,entregas,asistencias},finanzas,distribuciones:{genero:agrupar("genero"),facultad:agrupar("facultad"),carrera:agrupar("carrera"),origen:agrupar("origen"),estadoPreregistro:agrupar("estadoPreregistro")},personas});
+}
+
+export async function reporteTallasPrimeraCuota(req: Request, res: Response) {
+ const reporte = await generarReporteTallasPrimeraCuota(req.query.gestionId ? String(req.query.gestionId) : undefined);
+ if (!reporte) return res.status(404).json({ error: "No existe una gestión para generar el reporte" });
+ return res.json(reporte);
 }
