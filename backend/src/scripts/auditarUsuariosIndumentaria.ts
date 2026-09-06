@@ -20,6 +20,11 @@ async function ejecutar() {
   const fraternosIds = new Set(fraternos.map((fraterno) => String(fraterno._id)));
   const usuariosLegacy = new Set(fraternos.map((fraterno) => String(fraterno.usuarioId)));
   const tallasHuerfanas = tallas.filter((talla) => (!talla.usuarioId || !usuariosIds.has(String(talla.usuarioId))) && (!talla.fraternoId || !fraternosIds.has(String(talla.fraternoId))));
+  const tallaRegistrada = (valor: unknown) => Boolean(String(valor ?? "").trim() && String(valor).trim().toUpperCase() !== "SIN DEFINIR");
+  const conPolera = usuarios.filter((usuario) => tallaRegistrada(usuario.talla?.tallaPolera));
+  const conChamarra = usuarios.filter((usuario) => tallaRegistrada(usuario.talla?.tallaChamarra));
+  const sinNingunaTalla = usuarios.filter((usuario) => !tallaRegistrada(usuario.talla?.tallaPolera) && !tallaRegistrada(usuario.talla?.tallaChamarra));
+  const contarGenero = (lista: typeof usuarios, genero: string) => lista.filter((usuario) => usuario.sexo === genero).length;
   const noHabilitados = usuarios.filter((usuario) => !usuario.habilitado);
   const rolesNoHabilitados = new Map<string, number>();
   noHabilitados.forEach((usuario) => (usuario.roles.length ? usuario.roles : ["OTROS"]).forEach((rol: string) => rolesNoHabilitados.set(rol, (rolesNoHabilitados.get(rol) ?? 0) + 1)));
@@ -34,6 +39,19 @@ async function ejecutar() {
     visiblesNoHabilitados: noHabilitados.length,
     rolesNoHabilitados: Object.fromEntries(rolesNoHabilitados),
     integridad: { ciDuplicados: duplicadosCi.length, emailDuplicados: duplicadosEmail.length, tallasHuerfanas: tallasHuerfanas.length },
+    tallas: {
+      conPolera: conPolera.length,
+      sinPolera: usuarios.length - conPolera.length,
+      conChamarra: conChamarra.length,
+      sinChamarra: usuarios.length - conChamarra.length,
+      sinNingunaTalla: sinNingunaTalla.length,
+      usuariosHombres: contarGenero(usuarios, "HOMBRE"),
+      usuariosMujeres: contarGenero(usuarios, "MUJER"),
+      polerasHombres: contarGenero(conPolera, "HOMBRE"),
+      polerasMujeres: contarGenero(conPolera, "MUJER"),
+      chamarrasHombres: contarGenero(conChamarra, "HOMBRE"),
+      chamarrasMujeres: contarGenero(conChamarra, "MUJER"),
+    },
     casos: casos.map((ci) => usuarios.find((usuario) => usuario.ci === ci) ?? { ci, encontrado: false }),
   }, null, 2));
 }
