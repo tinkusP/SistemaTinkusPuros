@@ -13,6 +13,8 @@ import { listarUsuariosIndumentaria } from "../services/IndumentariaUsuariosServ
 import PerfilUsuario from "../models/PerfilUsuario";
 import { registrarAuditoria } from "../services/AuditoriaService";
 import { normalizarTallaAdministrativa, TALLA_SIN_REGISTRAR } from "../constants/tallas";
+import { asegurarIndiceTallasOpcionales } from "../services/IndiceTallaService";
+import { randomUUID } from "node:crypto";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -81,15 +83,21 @@ export const miIndumentaria = async (req: Request, res: Response) => {
 };
 export const guardarTalla = async (req: Request, res: Response) => { const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: req.body.fraternoId }, { ...req.body, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true }); res.json({ message: "Tallas guardadas", talla }); };
 export const guardarTallaUsuario = async (req: Request, res: Response) => {
+  const requestId = req.header("x-request-id") || randomUUID();
+  const targetUserId = String(req.body.usuarioId ?? "");
+  const prendaSolicitada = req.body.tallaPolera !== undefined && req.body.tallaChamarra !== undefined ? "POLERA_Y_CHAMARRA" : req.body.tallaPolera !== undefined ? "POLERA" : "CHAMARRA";
+  const tallaSolicitada = prendaSolicitada === "POLERA_Y_CHAMARRA" ? `${req.body.tallaPolera}/${req.body.tallaChamarra}` : String(req.body.tallaPolera ?? req.body.tallaChamarra ?? "");
+  try {
+  await asegurarIndiceTallasOpcionales();
   const usuario = await PerfilUsuario.findOne({ _id: req.body.usuarioId, fechaEliminado: null, estado: { $ne: "ELIMINADO" } }).select("_id ci");
-  if (!usuario) return res.status(404).json({ error: "El usuario no existe o fue eliminado" });
+  if (!usuario) return res.status(404).json({ error: "El usuario no existe o fue eliminado", requestId });
   const fraterno = await Fraterno.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id");
   const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
   const cambioPolera = req.body.tallaPolera !== undefined;
   const cambioChamarra = req.body.tallaChamarra !== undefined;
   const nuevaPolera = cambioPolera ? normalizarTallaAdministrativa(req.body.tallaPolera) : existente?.tallaPolera ?? TALLA_SIN_REGISTRAR;
   const nuevaChamarra = cambioChamarra ? normalizarTallaAdministrativa(req.body.tallaChamarra) : existente?.tallaChamarra ?? TALLA_SIN_REGISTRAR;
-  if ((cambioPolera && !nuevaPolera) || (cambioChamarra && !nuevaChamarra)) return res.status(400).json({ error: "La talla seleccionada no es válida" });
+  if ((cambioPolera && !nuevaPolera) || (cambioChamarra && !nuevaChamarra)) return res.status(400).json({ error: "La talla seleccionada no es válida", requestId });
   const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };
   const antes = { tallaPolera: existente?.tallaPolera ?? TALLA_SIN_REGISTRAR, tallaChamarra: existente?.tallaChamarra ?? TALLA_SIN_REGISTRAR };
   const talla = await TallaFraterno.findOneAndUpdate(
@@ -101,7 +109,14 @@ export const guardarTallaUsuario = async (req: Request, res: Response) => {
   await registrarAuditoria(req, { accion: existente ? "ACTUALIZAR_TALLA_ADMIN" : "REGISTRAR_TALLA_ADMIN", modulo: "INDUMENTARIA", entidad: "TallaFraterno", entidadId: talla._id, descripcion: `Administración ${existente ? "actualizó" : "registró"} talla de ${prenda.toLowerCase()} del usuario CI ${usuario.ci}`, datosAntes: antes, datosDespues: { tallaPolera: talla.tallaPolera, tallaChamarra: talla.tallaChamarra, prenda } });
   const valor = prenda === "POLERA" ? talla.tallaPolera : prenda === "CHAMARRA" ? talla.tallaChamarra : null;
   const nombrePrenda = prenda === "POLERA_Y_CHAMARRA" ? "Tallas de polera y chamarra" : `Talla de ${prenda.toLowerCase()}`;
-  return res.json({ message: valor === TALLA_SIN_REGISTRAR ? `${nombrePrenda} retirada correctamente` : `${nombrePrenda} ${existente ? "actualizada" : "registrada"} correctamente`, talla });
+  console.info(JSON.stringify({ requestId, accion: "SAVE_SIZE", adminUserId: req.usuario?._id, targetUserId, ci: usuario.ci, prenda, talla: tallaSolicitada, resultado: "OK" }));
+  return res.json({ message: valor === TALLA_SIN_REGISTRAR ? `${nombrePrenda} retirada correctamente` : `${nombrePrenda} ${existente ? "actualizada" : "registrada"} correctamente`, talla, requestId });
+  } catch (error) {
+    console.error(JSON.stringify({ requestId, accion: "SAVE_SIZE", adminUserId: req.usuario?._id, targetUserId, prenda: prendaSolicitada, talla: tallaSolicitada, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
+    if ((error as { code?: number }).code === 11000) return res.status(409).json({ error: "Ya existe un registro de talla incompatible para esta persona. Actualiza la página y vuelve a intentarlo.", requestId });
+    if ((error as { name?: string }).name === "ValidationError" || (error as { name?: string }).name === "CastError") return res.status(400).json({ error: "Los datos enviados para la talla no son válidos.", requestId });
+    return res.status(500).json({ error: "No se pudo guardar la talla por una inconsistencia interna. Administración puede consultar el identificador del error.", requestId });
+  }
 };
 export const guardarMiTalla = async (_req: Request, res: Response) => res.status(403).json({ error: "Las tallas son registradas y corregidas únicamente por Administración. Puedes consultarlas desde tu perfil." });
 export const configurarRegistroTallas = async (req: Request, res: Response) => {

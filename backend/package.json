@@ -15,6 +15,7 @@
     "audit:guias-bloques": "ts-node src/scripts/auditarGuiasBloques.ts",
     "audit:integrity": "ts-node src/scripts/auditarIntegridadUsuarios.ts",
     "audit:indumentaria-users": "ts-node src/scripts/auditarUsuariosIndumentaria.ts",
+    "audit:size-integrity": "ts-node src/scripts/auditarUsuariosIndumentaria.ts",
     "repair:fraterno": "ts-node src/scripts/repararPromocionFraterno.ts",
     "audit:archivos-r2": "ts-node src/scripts/auditarArchivosR2.ts",
     "unlock:login-attempts": "ts-node src/scripts/desbloquearCuentasIntentos.ts"
