@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { toast } from "react-toastify";
-import { marcarAsistenciaQr, verificarCredencialQr, type IdentidadQr } from "@/api/CredencialQrApi";
+import { buscarIdentidades, identificarManualmente, marcarAsistenciaQr, verificarCredencialQr, type IdentidadQr, type ResultadoBusquedaIdentidad } from "@/api/CredencialQrApi";
 import { guardarTallaUsuario } from "@/api/IndumentariaApi";
 import { useAuth } from "@/hooks/useAuth";
 
 const API = String(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
 const TALLAS = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+const urlFoto = (ruta?: string) => !ruta ? "" : /^https?:\/\//i.test(ruta) ? ruta : `${API}${ruta}`;
 
 export default function EscanerQrView() {
   const { data: usuario } = useAuth();
@@ -27,6 +28,19 @@ export default function EscanerQrView() {
   const [tallaPolera, setTallaPolera] = useState("");
   const [tallaChamarra, setTallaChamarra] = useState("");
   const [guardandoTalla, setGuardandoTalla] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [terminoBusqueda, setTerminoBusqueda] = useState("");
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<ResultadoBusquedaIdentidad[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [seleccionando, setSeleccionando] = useState("");
+
+  const cargarIdentidad = (identidad: IdentidadQr, token: string) => {
+    tokenLeido.current = token;
+    setResultado(identidad);
+    setTallaPolera(identidad.talla?.tallaPolera ?? "");
+    setTallaChamarra(identidad.talla?.tallaChamarra ?? "");
+    setHoraMarcada(null);
+  };
 
   const verificar = async (token: string) => {
     if (procesandoRef.current || token === ultimoTokenRef.current) return;
@@ -35,11 +49,7 @@ export default function EscanerQrView() {
     setProcesando(true);
     try {
       const identidad = await verificarCredencialQr(token);
-      tokenLeido.current = token;
-      setResultado(identidad);
-      setTallaPolera(identidad.talla?.tallaPolera ?? "");
-      setTallaChamarra(identidad.talla?.tallaChamarra ?? "");
-      setHoraMarcada(null);
+      cargarIdentidad(identidad, token);
       await lector.current?.stop().catch(() => undefined);
       setActivo(false);
     } catch (e) {
@@ -47,6 +57,22 @@ export default function EscanerQrView() {
       setActivo(false);
       toast.error(e instanceof Error ? e.message : "QR inválido");
     } finally { procesandoRef.current = false; setProcesando(false); }
+  };
+
+  const buscarAhora = () => setTerminoBusqueda(busqueda.trim());
+
+  const seleccionarResultado = async (id: string) => {
+    if (seleccionando) return;
+    setSeleccionando(id);
+    try {
+      const identidad = await identificarManualmente(id);
+      cargarIdentidad(identidad, identidad.token);
+      await lector.current?.stop().catch(() => undefined);
+      setActivo(false);
+      setResultadosBusqueda([]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo identificar al usuario");
+    } finally { setSeleccionando(""); }
   };
 
   const iniciar = async () => {
@@ -121,6 +147,26 @@ export default function EscanerQrView() {
     } finally { setGuardandoTalla(false); }
   };
 
+  useEffect(() => {
+    const temporizador = window.setTimeout(() => setTerminoBusqueda(busqueda.trim()), 400);
+    return () => window.clearTimeout(temporizador);
+  }, [busqueda]);
+
+  useEffect(() => {
+    let vigente = true;
+    if (terminoBusqueda.length < 2) {
+      setResultadosBusqueda([]);
+      setBuscando(false);
+      return () => { vigente = false; };
+    }
+    setBuscando(true);
+    buscarIdentidades(terminoBusqueda)
+      .then(({ resultados }) => { if (vigente) setResultadosBusqueda(resultados); })
+      .catch((error) => { if (vigente) toast.error(error instanceof Error ? error.message : "No se pudo buscar"); })
+      .finally(() => { if (vigente) setBuscando(false); });
+    return () => { vigente = false; };
+  }, [terminoBusqueda]);
+
   useEffect(() => () => { if (lector.current?.isScanning) lector.current.stop().catch(() => undefined); }, []);
   const u = resultado?.usuario;
 
@@ -140,16 +186,30 @@ export default function EscanerQrView() {
           📷 Tomar foto del QR
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => { void fotografiarQr(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </label>
-        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La persona debe presentar su QR y estar físicamente presente. Compara siempre su rostro con la fotografía antes de registrar información.</p>
+        <div className="my-5 flex items-center gap-3 text-xs font-black uppercase tracking-wider text-slate-400"><span className="h-px flex-1 bg-slate-200" />O buscar manualmente<span className="h-px flex-1 bg-slate-200" /></div>
+        <form onSubmit={(evento) => { evento.preventDefault(); buscarAhora(); }} className="flex flex-col gap-2 sm:flex-row">
+          <input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="CI, nombre, apellido o código de fraterno" className="input-preregistro flex-1" aria-label="Buscar usuario manualmente" />
+          <button type="submit" disabled={busqueda.trim().length < 2 || buscando} className="rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white disabled:opacity-50">{buscando ? "Buscando..." : "Buscar"}</button>
+        </form>
+        {terminoBusqueda.length >= 2 && !buscando && resultadosBusqueda.length === 0 && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No se encontraron usuarios con esos datos.</p>}
+        {!!resultadosBusqueda.length && <div className="mt-3 max-h-80 space-y-2 overflow-y-auto" aria-label="Resultados de búsqueda">{resultadosBusqueda.map((persona) => <button key={persona._id} type="button" onClick={() => void seleccionarResultado(persona._id)} disabled={Boolean(seleccionando)} className="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-[#74122A] hover:bg-[#74122A]/5 disabled:opacity-50">
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-slate-100">{persona.fotoPerfil ? <img src={urlFoto(persona.fotoPerfil)} alt="" className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center text-xs">Sin foto</span>}</div>
+          <div className="min-w-0 flex-1"><p className="font-black uppercase">{persona.nombres} {persona.apellidoPaterno} {persona.apellidoMaterno}</p><p className="text-sm text-slate-500">CI {persona.ci}</p><p className="truncate text-xs font-semibold text-[#74122A]">{persona.roles.map((rol) => rol.nombre).join(" / ") || "SIN ROL"}</p></div>
+          <span className="text-sm font-bold text-[#74122A]">{seleccionando === persona._id ? "Cargando..." : "Ver ficha"}</span>
+        </button>)}</div>}
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La persona debe estar físicamente presente. Ya sea mediante QR o búsqueda manual, compara siempre su rostro con la fotografía antes de registrar información.</p>
         {!window.isSecureContext && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-800">Estás usando HTTP: “Abrir cámara” está bloqueado por el navegador. Usa “Tomar foto del QR”, que abre la cámara nativa del celular.</p>}
       </div>
       <div className="rounded-2xl bg-white p-5 shadow">
-        {!u ? <p className="grid min-h-64 place-items-center text-center text-slate-500">Aquí aparecerá la identidad después de escanear.</p> : <div className="text-center">
+        {!u ? <p className="grid min-h-64 place-items-center text-center text-slate-500">Aquí aparecerá la identidad después de escanear el QR o seleccionar un resultado de búsqueda.</p> : <div className="text-center">
+          <p className="mb-3 text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Identificado mediante {resultado.metodoIdentificacion === "QR" ? "QR" : "búsqueda manual"}</p>
           <span className={`inline-block rounded-full px-4 py-2 text-sm font-black ${resultado.valida ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}`}>{resultado.valida ? "IDENTIDAD ACTIVA" : "CUENTA NO ACTIVA"}</span>
-          <div className="mx-auto mt-5 h-52 w-52 overflow-hidden rounded-2xl border-4 border-[#C59A3A] bg-slate-100">{u.fotoPerfil ? <img src={`${API}${u.fotoPerfil}`} alt={`Fotografía de ${u.nombres}`} className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center">Sin fotografía</span>}</div>
+          <div className="mx-auto mt-5 h-52 w-52 overflow-hidden rounded-2xl border-4 border-[#C59A3A] bg-slate-100">{u.fotoPerfil ? <img src={urlFoto(u.fotoPerfil)} alt={`Fotografía de ${u.nombres}`} className="h-full w-full object-cover" /> : <span className="grid h-full place-items-center">Sin fotografía</span>}</div>
           <h2 className="mt-4 text-2xl font-black">{u.nombres} {u.apellidoPaterno} {u.apellidoMaterno}</h2>
           <p className="mt-2 text-xl font-bold text-[#74122A]">CI {u.ci}</p>
           <p className="text-sm text-slate-500">{u.email}</p>
+          <p className="mt-2 text-sm font-bold">Roles: {u.roles.map((rol) => rol.nombre).join(" / ") || "SIN ROL"}</p>
+          <p className="text-sm font-bold">Bloque: {resultado.bloque}</p>
           <EstadoPagos pago={resultado.pago} />
           {puedeRegistrarTallas ? <section className="mt-5 rounded-2xl border border-[#C59A3A]/50 bg-[#C59A3A]/10 p-4 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-wider text-[#8F5F2A]">Registro administrativo de tallas</p><h3 className="font-black">{resultado.fraterno ? `Fraterno ${resultado.fraterno.numeroFraterno}` : "Postulante identificado"}</h3></div>{resultado.talla ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">TALLAS REGISTRADAS</span> : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">FALTA REGISTRAR</span>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2"><SelectorTalla etiqueta="Talla de polera" valor={tallaPolera} cambiar={setTallaPolera}/><SelectorTalla etiqueta="Talla de chamarra" valor={tallaChamarra} cambiar={setTallaChamarra}/></div><button type="button" onClick={guardarTallas} disabled={!resultado.valida || !resultado.pago.primeraCuotaVerificada || guardandoTalla || !tallaPolera || !tallaChamarra} className="mt-4 w-full rounded-xl bg-[#74122A] px-5 py-3 font-black text-white disabled:opacity-50">{!resultado.valida ? "Cuenta inactiva: no se puede registrar" : !resultado.pago.primeraCuotaVerificada ? "Primera cuota pendiente de verificación" : guardandoTalla ? "Guardando..." : resultado.talla ? "Actualizar tallas" : "Registrar tallas"}</button></section> : null}
           {puedeMarcarAsistencia ? (horaMarcada ? <div className="mt-5 rounded-xl bg-emerald-100 p-4 font-black text-emerald-800">ASISTENCIA MARCADA · {new Date(horaMarcada).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</div> : <button onClick={marcar} disabled={!resultado.valida || !u.fotoPerfil || marcando} className="mt-5 w-full rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{marcando ? "Marcando..." : !u.fotoPerfil ? "No se puede validar: sin fotografía" : "Rostro verificado — Marcar asistencia"}</button>) : null}
