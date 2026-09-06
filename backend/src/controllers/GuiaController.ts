@@ -14,6 +14,8 @@ import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, ase
 import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion } from "../services/AsignacionBloqueService";
 import { idsGuiasDelBloque, retirarGuiaDeBloques, sincronizarContadoresGuias } from "../services/GuiaBloqueService";
 import { crearPreregistroParaUsuario } from "./PreregistroController";
+import { obtenerOCrearFraterno } from "../services/CodigoFraternoService";
+import { randomUUID } from "node:crypto";
 const poblarGuia = [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo telefono fotoPerfil" }, { path: "gestionId", select: "nombre anio" }, { path: "preregistroId", select: "numeroPreRegistro" }];
 const normalizarGenero = normalizarGeneroBloque;
 export const listarGuias = async (_req: Request, res: Response) => {
@@ -47,11 +49,7 @@ export const decidirPostulante = async (req: Request, res: Response) => {
     return res.json({ message: "Postulante aprobado como guía", guia });
   }
 
-  let fraterno = await Fraterno.findOne({ preregistroId: preregistro._id });
-  if (!fraterno) {
-    const correlativo = String((await Fraterno.countDocuments({ gestionId: preregistro.gestionId })) + 1).padStart(4, "0");
-    fraterno = await Fraterno.create({ preregistroId: preregistro._id, usuarioId: preregistro.usuarioId, gestionId: preregistro.gestionId, numeroFraterno: `FRA-${new Date().getFullYear()}-${correlativo}`, usuarioCreador: req.usuario?._id });
-  }
+  const fraterno = await obtenerOCrearFraterno({ preregistroId: preregistro._id, usuarioId: preregistro.usuarioId, gestionId: preregistro.gestionId, usuarioCreador: req.usuario?._id });
   postulante.estado = "NO_ELEGIDO"; postulante.fechaEleccion = new Date(); postulante.usuarioEvaluador = req.usuario?._id as any; postulante.observacion = req.body.observacion;
   await postulante.save();
   const rol = await Rol.findOneAndUpdate({ codigo: "FRATERNO" }, { $set: { nombre: "Fraterno", estado: true, fechaEliminado: null }, $setOnInsert: { codigo: "FRATERNO", descripcion: "Miembro activo de la fraternidad", esRolSistema: true } }, { upsert: true, new: true });
@@ -94,6 +92,7 @@ async function crearBloqueAdministrativo(req: Request, res: Response) {
 export const crearBloque = crearBloqueAdministrativo;
 
 async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGenero?: string) {
+  const requestId = req.header("x-request-id") || randomUUID();
   const fraterno: any = await Fraterno.findOne({ _id: req.body.fraternoId, gestionId: bloque.gestionId, estado: "ACTIVO", fechaEliminado: null }).populate("usuarioId", "sexo");
   if (!fraterno) return res.status(404).json({ error: "Fraterno no disponible para este bloque" });
   const genero = normalizarGenero(fraterno.usuarioId?.sexo);
@@ -111,8 +110,10 @@ async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGe
     await asegurarIndiceAsignacionActiva();
     const detalle = await DetalleBloque.create({ bloqueId: bloque._id, fraternoId: fraterno._id, genero, estado: "ACTIVO" });
     await registrarAuditoria(req, { accion: "INCORPORAR_FRATERNO", modulo: "BLOQUES", entidad: "DetalleBloque", entidadId: detalle._id, descripcion: `Se incorporó un fraterno al bloque ${bloque.nombre}`, datosDespues: { bloqueId: bloque._id, fraternoId: fraterno._id, genero } });
+    console.info(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, ci: fraterno.usuarioId?.ci, resultado: "OK" }));
     return res.status(201).json({ message: "Fraterno agregado al bloque", detalle });
   } catch (error) {
+    console.error(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, ci: fraterno.usuarioId?.ci, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
     await Bloque.updateOne({ _id: bloque._id, [campoCantidad]: { $gt: 0 } }, { $inc: { [campoCantidad]: -1 } });
     if ((error as { code?: number }).code === 11000) {
       const ganadora: any = await obtenerAsignacionActivaValida(fraterno._id);
@@ -189,6 +190,7 @@ export const buscarUsuariosParaBloqueComoAdmin = async (req: Request, res: Respo
   return res.json({ fraternos: await buscarUsuariosDisponiblesParaBloque(bloque, termino) });
 };
 async function registrarUsuarioYAsignar(req: Request, res: Response, bloque: any) {
+  const requestId = req.header("x-request-id") || randomUUID();
   const usuario: any = await PerfilUsuario.findOne({ _id: req.body.usuarioId, fechaEliminado: null }).select("_id ci sexo roles");
   if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
   let preregistro: any = await Preregistro.findOne({ usuarioId: usuario._id, gestionId: bloque.gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
@@ -196,19 +198,13 @@ async function registrarUsuarioYAsignar(req: Request, res: Response, bloque: any
     try { preregistro = await crearPreregistroParaUsuario({ usuarioId: usuario._id, gestionId: String(bloque.gestionId), creadorId: req.usuario?._id }); }
     catch (error) { return res.status(409).json({ error: error instanceof Error ? error.message : "No se pudo crear el perfil fraterno" }); }
   }
-  let fraterno: any = await Fraterno.findOne({ usuarioId: usuario._id, gestionId: bloque.gestionId, fechaEliminado: null });
-  if (!fraterno) {
-    for (let intento = 0; intento < 5 && !fraterno; intento += 1) {
-      const correlativo = String((await Fraterno.countDocuments({ gestionId: bloque.gestionId })) + 1 + intento).padStart(4, "0");
-      try { fraterno = await Fraterno.create({ preregistroId: preregistro._id, usuarioId: usuario._id, gestionId: bloque.gestionId, numeroFraterno: `FRA-${new Date().getFullYear()}-${correlativo}`, usuarioCreador: req.usuario?._id }); }
-      catch (error) { if ((error as { code?: number }).code !== 11000) throw error; }
-    }
-    if (!fraterno) return res.status(409).json({ error: "No se pudo generar un código de fraterno único. Vuelve a intentarlo." });
-  } else if (fraterno.estado !== "ACTIVO") {
-    fraterno.estado = "ACTIVO";
-    fraterno.fechaEditado = new Date();
-    fraterno.usuarioEditor = req.usuario?._id;
-    await fraterno.save();
+  let fraterno: any;
+  try {
+    fraterno = await obtenerOCrearFraterno({ preregistroId: preregistro._id, usuarioId: usuario._id, gestionId: bloque.gestionId, usuarioCreador: req.usuario?._id });
+    console.info(JSON.stringify({ requestId, accion: "REGISTER_FRATERNO", usuarioId: usuario._id, ci: usuario.ci, fraternoId: fraterno._id, codigo: fraterno.numeroFraterno, resultado: "OK" }));
+  } catch (error) {
+    console.error(JSON.stringify({ requestId, accion: "REGISTER_FRATERNO", usuarioId: usuario._id, ci: usuario.ci, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
+    return res.status((error as { statusCode?: number }).statusCode ?? 409).json({ error: error instanceof Error ? error.message : "No se pudo registrar al fraterno", requestId });
   }
   const rol = await Rol.findOneAndUpdate({ codigo: "FRATERNO" }, { $set: { nombre: "Fraterno", estado: true, fechaEliminado: null }, $setOnInsert: { descripcion: "Miembro activo de la fraternidad", esRolSistema: true } }, { upsert: true, new: true });
   await PerfilUsuario.updateOne({ _id: usuario._id }, { $addToSet: { roles: rol._id } });

@@ -18,6 +18,7 @@ import { usuarioEsAdministrador } from "../middleware/soloAdministracion";
 import { reactivarCuotaPreregistroAprobado, sincronizarCuotaPreregistro } from "../services/SincronizacionCuotaService";
 import { subirArchivoProcesado } from "../services/AlmacenamientoService";
 import { montoCuotaActual, redondearMonto as redondear } from "../services/PlanPagosService";
+import { randomUUID } from "node:crypto";
 
 const poblar = { path: "preregistroId", select: "numeroPreRegistro estado usuarioId gestionId", populate: [{ path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci email telefono fotoPerfil tipoOrigen" }, { path: "gestionId", select: "nombre anio" }] };
 const esAdministrador = usuarioEsAdministrador;
@@ -340,6 +341,8 @@ export const registrarPago = async (req: Request, res: Response) => {
   }
 };
 export const revisarPago = async (req: Request, res: Response) => {
+ try {
+  const requestId = req.header("x-request-id") || randomUUID();
   if (["OBSERVADO", "RECHAZADO"].includes(req.body.estadoRevision) && !String(req.body.observacionRevision ?? "").trim()) {
     return res.status(400).json({ error: "Debe escribir el motivo de la observación o rechazo" });
   }
@@ -371,6 +374,14 @@ export const revisarPago = async (req: Request, res: Response) => {
   }
   if (req.body.estadoRevision === "VERIFICADO" && antes.estadoRevision !== "VERIFICADO") await programarSiguientePago(String(req.params.id));
   if (pago) await registrarAuditoria(req, { accion: "REVISAR_PAGO", modulo: "CUOTAS", entidad: "DetalleCuota", entidadId: pago._id, descripcion: `Pago marcado como ${pago.estadoRevision}`, datosAntes: antes, datosDespues: pago.toObject() });
-  return res.json({ message: "Pago revisado", pago });
+  console.info(JSON.stringify({ requestId, accion: "VERIFY_PAYMENT", cuotaId: req.params.id, pagoId: req.params.pagoId, resultado: "OK" }));
+  return res.json({ message: "Pago revisado", pago, requestId });
+ } catch (error) {
+  if (req.file) await fs.unlink(req.file.path).catch(() => undefined);
+  const requestId = req.header("x-request-id") || randomUUID();
+  console.error(JSON.stringify({ requestId, accion: "VERIFY_PAYMENT", cuotaId: req.params.id, pagoId: req.params.pagoId, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
+  if ((error as { code?: number }).code === 11000) return res.status(409).json({ error: "El perfil o código de fraterno ya existe. Actualiza la página y vuelve a intentarlo.", requestId });
+  return res.status(500).json({ error: "No se pudo completar la verificación porque el registro relacionado está incompleto. Administración puede consultar el identificador del error.", requestId });
+ }
 };
 export const eliminarPago = async (req: Request, res: Response) => { const pago = await DetalleCuota.findOneAndUpdate({ _id: req.params.pagoId, cuotaId: req.params.id, fechaEliminado: null }, { fechaEliminado: new Date(), usuarioEliminador: req.usuario?._id }, { new: true }); if (!pago) return res.status(404).json({ error: "Pago no encontrado" }); await recalcular(String(req.params.id)); await registrarAuditoria(req, { accion: "ELIMINAR", modulo: "CUOTAS", entidad: "DetalleCuota", entidadId: pago._id, descripcion: "Se eliminó un detalle de cuota" }); return res.json({ message: "Pago eliminado" }); };

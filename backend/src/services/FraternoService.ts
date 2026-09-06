@@ -5,6 +5,7 @@ import Preregistro from "../models/Preregistro";
 import Rol from "../models/Rol";
 import Asistencia from "../models/Asistencia";
 import DetalleCuota from "../models/DetalleCuota";
+import { obtenerOCrearFraterno } from "./CodigoFraternoService";
 
 export async function promoverAFraternoSiCorresponde(cuotaId: string, usuarioCreador?: unknown) {
   const cuota = await Cuota.findById(cuotaId);
@@ -22,18 +23,7 @@ export async function promoverAFraternoSiCorresponde(cuotaId: string, usuarioCre
   const preregistro = await Preregistro.findOne({ _id: cuota.preregistroId, fechaEliminado: null });
   if (!preregistro) return null;
 
-  let fraterno = await Fraterno.findOne({ preregistroId: cuota.preregistroId });
-  if (!fraterno) {
-    const correlativo = String((await Fraterno.countDocuments({ gestionId: preregistro.gestionId })) + 1).padStart(4, "0");
-    const numeroFraterno = `FRA-${new Date().getFullYear()}-${correlativo}`;
-    fraterno = await Fraterno.create({
-      preregistroId: preregistro._id,
-      usuarioId: preregistro.usuarioId,
-      gestionId: preregistro.gestionId,
-      numeroFraterno,
-      usuarioCreador,
-    });
-  }
+  const fraterno = await obtenerOCrearFraterno({ preregistroId: preregistro._id, usuarioId: preregistro.usuarioId, gestionId: preregistro.gestionId, usuarioCreador });
 
   const rol = await Rol.findOne({ codigo: "FRATERNO", estado: true, fechaEliminado: null }).select("_id");
   const rolPostulante = await Rol.findOne({ codigo: "POSTULANTE", estado: true, fechaEliminado: null }).select("_id");
