@@ -10,6 +10,9 @@ import Preregistro from "../models/Preregistro";
 import DetalleCuota from "../models/DetalleCuota";
 import { normalizarGeneroBloque } from "../services/BloqueService";
 import { listarUsuariosIndumentaria } from "../services/IndumentariaUsuariosService";
+import PerfilUsuario from "../models/PerfilUsuario";
+import { registrarAuditoria } from "../services/AuditoriaService";
+import { normalizarTallaAdministrativa, TALLA_SIN_REGISTRAR } from "../constants/tallas";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -78,21 +81,27 @@ export const miIndumentaria = async (req: Request, res: Response) => {
 };
 export const guardarTalla = async (req: Request, res: Response) => { const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: req.body.fraternoId }, { ...req.body, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true }); res.json({ message: "Tallas guardadas", talla }); };
 export const guardarTallaUsuario = async (req: Request, res: Response) => {
+  const usuario = await PerfilUsuario.findOne({ _id: req.body.usuarioId, fechaEliminado: null, estado: { $ne: "ELIMINADO" } }).select("_id ci");
+  if (!usuario) return res.status(404).json({ error: "El usuario no existe o fue eliminado" });
   const fraterno = await Fraterno.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaIngreso: -1 }).select("_id");
-  const preregistro = await Preregistro.findOne({ usuarioId: req.body.usuarioId, fechaEliminado: null }).sort({ fechaCreado: -1 }).select("_id");
-  const cuota = preregistro ? await Cuota.findOne({ preregistroId: preregistro._id, fechaEliminado: null }).select("_id") : null;
-  const primeraCuota = cuota ? await DetalleCuota.findOne({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }).select("_id") : null;
-  if (!primeraCuota) return res.status(409).json({ error: cuota ? "La primera cuota todavía no fue verificada; no se pueden registrar tallas" : "El usuario no tiene una cuota vinculada; regularízala antes de registrar tallas" });
   const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
+  const cambioPolera = req.body.tallaPolera !== undefined;
+  const cambioChamarra = req.body.tallaChamarra !== undefined;
+  const nuevaPolera = cambioPolera ? normalizarTallaAdministrativa(req.body.tallaPolera) : existente?.tallaPolera ?? TALLA_SIN_REGISTRAR;
+  const nuevaChamarra = cambioChamarra ? normalizarTallaAdministrativa(req.body.tallaChamarra) : existente?.tallaChamarra ?? TALLA_SIN_REGISTRAR;
+  if ((cambioPolera && !nuevaPolera) || (cambioChamarra && !nuevaChamarra)) return res.status(400).json({ error: "La talla seleccionada no es válida" });
   const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };
-  const tallaPolera = String(req.body.tallaPolera ?? existente?.tallaPolera ?? "SIN DEFINIR").trim().toUpperCase();
-  const tallaChamarra = String(req.body.tallaChamarra ?? existente?.tallaChamarra ?? "SIN DEFINIR").trim().toUpperCase();
+  const antes = { tallaPolera: existente?.tallaPolera ?? TALLA_SIN_REGISTRAR, tallaChamarra: existente?.tallaChamarra ?? TALLA_SIN_REGISTRAR };
   const talla = await TallaFraterno.findOneAndUpdate(
     filtro,
-    { $set: { usuarioId: req.body.usuarioId, ...(fraterno ? { fraternoId: fraterno._id } : {}), tallaPolera, tallaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id } },
+    { $set: { usuarioId: req.body.usuarioId, ...(fraterno ? { fraternoId: fraterno._id } : {}), tallaPolera: nuevaPolera, tallaChamarra: nuevaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id } },
     { upsert: true, new: true, runValidators: true },
   );
-  return res.json({ message: "Tallas del usuario guardadas", talla });
+  const prenda = cambioPolera && cambioChamarra ? "POLERA_Y_CHAMARRA" : cambioPolera ? "POLERA" : "CHAMARRA";
+  await registrarAuditoria(req, { accion: existente ? "ACTUALIZAR_TALLA_ADMIN" : "REGISTRAR_TALLA_ADMIN", modulo: "INDUMENTARIA", entidad: "TallaFraterno", entidadId: talla._id, descripcion: `Administración ${existente ? "actualizó" : "registró"} talla de ${prenda.toLowerCase()} del usuario CI ${usuario.ci}`, datosAntes: antes, datosDespues: { tallaPolera: talla.tallaPolera, tallaChamarra: talla.tallaChamarra, prenda } });
+  const valor = prenda === "POLERA" ? talla.tallaPolera : prenda === "CHAMARRA" ? talla.tallaChamarra : null;
+  const nombrePrenda = prenda === "POLERA_Y_CHAMARRA" ? "Tallas de polera y chamarra" : `Talla de ${prenda.toLowerCase()}`;
+  return res.json({ message: valor === TALLA_SIN_REGISTRAR ? `${nombrePrenda} retirada correctamente` : `${nombrePrenda} ${existente ? "actualizada" : "registrada"} correctamente`, talla });
 };
 export const guardarMiTalla = async (_req: Request, res: Response) => res.status(403).json({ error: "Las tallas son registradas y corregidas únicamente por Administración. Puedes consultarlas desde tu perfil." });
 export const configurarRegistroTallas = async (req: Request, res: Response) => {

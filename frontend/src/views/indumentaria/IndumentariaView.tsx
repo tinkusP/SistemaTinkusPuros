@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, crearEntrega, crearPrenda, guardarTallaUsuario, obtenerIndumentaria, type Entrega, type Prenda, type UsuarioIndumentaria } from "@/api/IndumentariaApi";
+import { TALLAS_DISPONIBLES, TALLA_SIN_REGISTRAR } from "@/constants/tallas";
 
 type Seccion = "POLERA" | "CHAMARRA" | "INDUMENTARIA";
 type TallasLocales = Record<string, { polera: string; chamarra: string }>;
@@ -59,6 +60,8 @@ export default function IndumentariaView() {
     const tipo = seccion === "POLERA" ? "polera" : "chamarra";
     const valor = tallaCampo(usuario, tipo).trim();
     if (!valor) return toast.info(`Registra la talla de ${tipo}`);
+    const tallaAnterior = buscarTalla(usuario)?.[tipo === "polera" ? "tallaPolera" : "tallaChamarra"] ?? TALLA_SIN_REGISTRAR;
+    if (valor === TALLA_SIN_REGISTRAR && tallaAnterior !== TALLA_SIN_REGISTRAR && !window.confirm(`¿Estás seguro de quitar la talla de ${tipo}?`)) return;
     mutacion.mutate(() => guardarTallaUsuario({ usuarioId: usuario._id, ...(tipo === "polera" ? { tallaPolera: valor } : { tallaChamarra: valor }) }));
   };
   const alternarEntrega = (fraternoId: string, prenda: Prenda, talla?: string) => {
@@ -110,7 +113,7 @@ export default function IndumentariaView() {
             <td className="p-4"><p className="font-black text-slate-800">{nombreUsuario(usuario)}</p><p className="mt-1 text-xs text-slate-500">{usuario.roles.join(" / ") || "SIN ROL"}{usuario.bloque ? ` · ${usuario.guia ? "GUÍA DEL " : ""}${usuario.bloque}` : ""}</p></td>
             <td className="p-4 text-sm"><p>{usuario.ci}</p><p className="text-slate-500">{usuario.fraterno?.numero ?? usuario.preregistro?.numero ?? "Sin código"}</p></td>
             {seccion !== "INDUMENTARIA" && <>
-              <td className="p-4"><input disabled={!usuario.habilitado} value={tallaCampo(usuario, tipo)==="SIN DEFINIR"?"":tallaCampo(usuario, tipo)} onChange={(evento) => actualizarTalla(usuario, tipo, evento.target.value)} placeholder="Sin talla" className="w-28 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534] disabled:bg-slate-100" /><button type="button" disabled={!usuario.habilitado || mutacion.isPending} onClick={() => guardarTallasUsuario(usuario)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534] disabled:opacity-40">Guardar talla</button>{fraternoId && <button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraternoId, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button>}</td>
+              <td className="p-4"><select value={tallaCampo(usuario, tipo) || TALLA_SIN_REGISTRAR} onChange={(evento) => actualizarTalla(usuario, tipo, evento.target.value)} aria-label={`Talla de ${tipo} de ${nombreUsuario(usuario)}`} className="w-36 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534]"><option value={TALLA_SIN_REGISTRAR}>SIN REGISTRAR</option>{TALLAS_DISPONIBLES.map((talla) => <option key={talla} value={talla}>{talla}</option>)}</select><button type="button" disabled={!usuario.administrable || mutacion.isPending} onClick={() => guardarTallasUsuario(usuario)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534] disabled:opacity-40">Guardar talla</button>{fraternoId && <button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraternoId, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button>}</td>
               <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${usuario.habilitado ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{usuario.estadoHabilitacion === "HABILITADO" ? "HABILITADO PARA TALLA" : usuario.estadoHabilitacion.replace("_", " ")}</span><p className="mt-1 max-w-xs text-xs text-slate-500">{usuario.motivo}</p></td>
               <td className="p-4 text-right">{fraternoId ? <button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && (!tallaCampo(usuario, tipo) || !pagoCompleto))} onClick={() => prendaPrincipal && alternarEntrega(fraternoId, prendaPrincipal, tallaCampo(usuario, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : pagoCompleto ? "Marcar entregado" : "Pago pendiente"}</button> : <span className="text-xs text-slate-400">Sin perfil fraterno</span>}</td>
             </>}

@@ -1,11 +1,18 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { estadoHabilitacionTalla } = require("../dist/services/IndumentariaUsuariosService");
+const { normalizarTallaAdministrativa } = require("../dist/constants/tallas");
 
 test("un usuario visible solo se habilita con primera cuota verificada", () => {
   assert.equal(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: true, primeraCuotaVerificada: true }).habilitado, true);
   assert.equal(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: true, primeraCuotaVerificada: false }).estadoHabilitacion, "PAGO_PENDIENTE");
   assert.match(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: false, primeraCuotaVerificada: false }).motivo, /cuota/i);
+});
+
+test("la gestión administrativa acepta el catálogo y permite dejar una prenda sin registrar", () => {
+  assert.equal(normalizarTallaAdministrativa(" xl "), "XL");
+  assert.equal(normalizarTallaAdministrativa("SIN DEFINIR"), "SIN DEFINIR");
+  assert.equal(normalizarTallaAdministrativa("TALLA INVENTADA"), null);
 });
 
 test("una cuenta inactiva sigue siendo explicable pero no habilitada", () => {

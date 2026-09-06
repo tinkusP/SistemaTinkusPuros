@@ -79,6 +79,7 @@ export async function listarUsuariosIndumentaria() {
       bloque: (fraterno && bloquePorFraterno.get(id(fraterno._id))) || (guia && bloquePorGuia.get(id(guia._id))) || null,
       cuota: cuota ? { _id: cuota._id, estado: cuota.estado, saldo: cuota.saldo, primeraCuotaVerificada: cuotasVerificadas.has(id(cuota._id)) } : null,
       talla: talla ?? null,
+      administrable: true,
       ...habilitacion,
     };
   });
