@@ -27,6 +27,7 @@ export async function eliminarUsuarioDefinitivamente(perfilId: string, ciConfirm
       const postulanteIds = ids(postulantes);
       const cuotas = await find("cuotas", { preregistroId: { $in: preregistroIds } }, session);
       const cuotaIds = ids(cuotas);
+      const idsPropios = [usuario._id, ...preregistroIds, ...fraternoIds, ...guiaIds, ...postulanteIds, ...cuotaIds];
       const detallesBloque = await find("detalle_bloques", { fraternoId: { $in: fraternoIds } }, session);
       const bloques = await find("bloques", { $or: [{ _id: { $in: detallesBloque.map((item) => item.bloqueId) } }, { guiaId: { $in: guiaIds } }, { guiasIds: { $in: guiaIds } }] }, session);
       const filtros: Record<string, object> = {
@@ -43,7 +44,8 @@ export async function eliminarUsuarioDefinitivamente(perfilId: string, ciConfirm
         tokens_registro: { $or: [{ utilizadoPor: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }, { fraternoId: { $in: fraternoIds } }] },
         traspasos: { $or: [{ usuarioOrigenId: usuario._id }, { usuarioDestinoId: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }] },
         pasos_videos: { usuarioAutorId: usuario._id },
-        auditoria: { $or: [{ usuarioId: usuario._id }, { entidadId: usuario._id }] },
+        auditoria: { $or: [{ usuarioId: usuario._id }, { entidadId: { $in: idsPropios } }] },
+        usuarios_sin_talla: { $or: [{ usuarioId: usuario._id }, { ci: String(usuario.ci) }] },
       };
       const propios: Record<string, any[]> = { perfil_usuarios: [usuario], preregistros, fraternos, guias, postulantes_guia: postulantes, cuotas };
       for (const [name, filter] of Object.entries(filtros)) propios[name] = await find(name, filter, session);

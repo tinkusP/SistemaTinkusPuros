@@ -1,12 +1,9 @@
 import mongoose, { ClientSession, Types } from "mongoose";
 import { connectDB } from "../config/db";
 
-type Objetivo = { ci: string; complemento?: string; nombre: string };
+type Objetivo = { ci: string; complemento?: string; nombre: string; email?: string };
 const OBJETIVOS: readonly Objetivo[] = [
-  { ci: "81818181", nombre: "JOSE MMM MMM" },
-  { ci: "8444174123", nombre: "JIMMY PRUEBA CONDORI MONTES" },
-  { ci: "0987654321", nombre: "QUALITY ANSWER" },
-  { ci: "8963742", nombre: "HIROMI SADAKATA CONDE" },
+  { ci: "1234567890", nombre: "CONDORI PPP MONTES", email: "aa@gmail.com" },
 ] as const;
 
 const nombreCompleto = (u: any) => [u.nombres, u.apellidoPaterno, u.apellidoMaterno].filter(Boolean).join(" ").trim().toUpperCase();
@@ -17,6 +14,7 @@ async function contexto(objetivo: Objetivo, session?: ClientSession) {
   const usuario = await coleccion("perfil_usuarios").findOne({ ci: objetivo.ci, ...(objetivo.complemento ? { complementoCi: objetivo.complemento } : {}) }, { session });
   if (!usuario) throw new Error(`No existe el CI ${objetivo.ci}${objetivo.complemento ? `-${objetivo.complemento}` : ""}`);
   if (nombreCompleto(usuario) !== objetivo.nombre) throw new Error(`El nombre no coincide para CI ${objetivo.ci}: ${nombreCompleto(usuario)}`);
+  if (objetivo.email && String(usuario.email ?? "").trim().toLowerCase() !== objetivo.email) throw new Error(`El correo no coincide para CI ${objetivo.ci}`);
   const preregistros = await docs("preregistros", { usuarioId: usuario._id }, session), preregistroIds = preregistros.map((x) => x._id);
   const fraternos = await docs("fraternos", { $or: [{ usuarioId: usuario._id }, { preregistroId: { $in: preregistroIds } }] }, session), fraternoIds = fraternos.map((x) => x._id);
   const guias = await docs("guias", { $or: [{ usuarioId: usuario._id }, { preregistroId: { $in: preregistroIds } }] }, session), guiaIds = guias.map((x) => x._id);
@@ -67,7 +65,7 @@ async function ejecutar() {
       for (const objetivo of OBJETIVOS) {
         const ctx = await contexto(objetivo, session);
         usuariosObjetivo.push(ctx.usuario._id);
-        await coleccion("respaldos_eliminacion_usuarios").insertOne({ loteId: idRespaldo, creadoEn: new Date(), motivo: "Eliminación definitiva autorizada de cuatro usuarios", objetivo, colecciones: ctx.encontrados }, { session });
+        await coleccion("respaldos_eliminacion_usuarios").insertOne({ loteId: idRespaldo, creadoEn: new Date(), motivo: "Eliminación definitiva adicional autorizada", objetivo, colecciones: ctx.encontrados }, { session });
         for (const [nombre, filtro] of Object.entries(ctx.filtros)) await coleccion(nombre).deleteMany(filtro, { session });
         await coleccion("meritos_guia").deleteMany({ postulanteGuiaId: { $in: ctx.postulanteIds } }, { session });
         await coleccion("bloques").updateMany({ guiasIds: { $in: ctx.guiaIds } }, { $pull: { guiasIds: { $in: ctx.guiaIds } } } as any, { session });

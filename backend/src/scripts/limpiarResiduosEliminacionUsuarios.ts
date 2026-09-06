@@ -1,8 +1,8 @@
 import mongoose, { Types } from "mongoose";
 import { connectDB } from "../config/db";
 
-const LOTE = new Types.ObjectId("6a9caa15268a1c5bc94e8e80");
-const CIS = ["81818181", "8444174123", "0987654321", "8963742"];
+const LOTE = new Types.ObjectId("6a9caf459123776bc45e65ec");
+const CIS = ["1234567890"];
 const CAMPOS = ["_id", "usuarioId", "perfilUsuario", "perfilUsuarioId", "fraternoId", "preregistroId", "postulanteGuiaId", "guiaId", "guiasIds", "cuotaId", "utilizadoPor", "usuarioOrigenId", "usuarioDestinoId", "entidadId"];
 
 async function ejecutar() {
