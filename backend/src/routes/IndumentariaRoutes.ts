@@ -11,7 +11,10 @@ router.use(authenticate, soloAdministracion);
 router.get("/", resumenIndumentaria);
 router.put("/configuracion-tallas", body("habilitado").isBoolean(), body("sinFechaLimite").isBoolean(), body("fechaLimite").optional({ nullable: true, checkFalsy: true }).isISO8601(), handleInputErrors, configurarRegistroTallas);
 router.put("/tallas", body("fraternoId").isMongoId(), body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarTalla);
-router.put("/tallas/usuario", body("usuarioId").isMongoId(), body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarTallaUsuario);
+router.put("/tallas/usuario", body("usuarioId").isMongoId(), body().custom((datos) => {
+  if (!String(datos.tallaPolera ?? "").trim() && !String(datos.tallaChamarra ?? "").trim()) throw new Error("Debe registrar al menos una talla");
+  return true;
+}), handleInputErrors, guardarTallaUsuario);
 router.patch("/tallas/:fraternoId/bloqueo", param("fraternoId").isMongoId(), body("bloqueada").isBoolean(), handleInputErrors, cambiarBloqueoTalla);
 router.post("/prendas", body("nombre").trim().notEmpty(), handleInputErrors, crearPrenda);
 router.post("/entregas", body("fraternoId").isMongoId(), body("prendaId").isMongoId(), body("cantidad").optional().isInt({ min: 1 }).toInt(), handleInputErrors, entregar);

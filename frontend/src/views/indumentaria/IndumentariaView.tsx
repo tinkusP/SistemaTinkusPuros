@@ -1,17 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { listarFraternos } from "@/api/FraternoApi";
-import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, crearEntrega, crearPrenda, guardarTalla, obtenerIndumentaria, type Entrega, type Prenda } from "@/api/IndumentariaApi";
-import type { Fraterno } from "@/types/FraternoType";
+import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, crearEntrega, crearPrenda, guardarTallaUsuario, obtenerIndumentaria, type Entrega, type Prenda, type UsuarioIndumentaria } from "@/api/IndumentariaApi";
 
 type Seccion = "POLERA" | "CHAMARRA" | "INDUMENTARIA";
 type TallasLocales = Record<string, { polera: string; chamarra: string }>;
 
-const nombreFraterno = (fraterno: Fraterno) => {
-  const usuario = typeof fraterno.usuarioId === "object" ? fraterno.usuarioId : null;
-  return usuario ? `${usuario.nombres} ${usuario.apellidoPaterno} ${usuario.apellidoMaterno ?? ""}`.trim() : fraterno.numeroFraterno;
-};
+const nombreUsuario = (usuario: UsuarioIndumentaria) => `${usuario.nombres} ${usuario.apellidoPaterno} ${usuario.apellidoMaterno ?? ""}`.trim();
 const idRelacionado = (valor: any) => typeof valor === "object" ? valor?._id : valor;
 
 export default function IndumentariaView() {
@@ -23,7 +18,6 @@ export default function IndumentariaView() {
   const [configTallas, setConfigTallas] = useState<{ habilitado: boolean; sinFechaLimite: boolean; fechaLimite: string }>({ habilitado: false, sinFechaLimite: true, fechaLimite: "" });
 
   const resumen = useQuery({ queryKey: ["indumentaria"], queryFn: obtenerIndumentaria });
-  const consultaFraternos = useQuery({ queryKey: ["fraternos"], queryFn: listarFraternos });
   const mutacion = useMutation({
     mutationFn: (accion: () => Promise<any>) => accion(),
     onSuccess: async (respuesta) => {
@@ -45,30 +39,27 @@ export default function IndumentariaView() {
     setConfigTallas({ habilitado: configuracionServidor.habilitado, sinFechaLimite: !fecha, fechaLimite: fecha ? new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "" });
   }, [configuracionServidor]);
 
-  const fraternos = useMemo(() => {
+  const usuarios = useMemo(() => {
     const texto = busqueda.trim().toLocaleUpperCase("es-BO");
-    return (consultaFraternos.data?.fraternos ?? []).filter((fraterno) => {
-      const usuario = typeof fraterno.usuarioId === "object" ? fraterno.usuarioId : null;
-      return !texto || [nombreFraterno(fraterno), usuario?.ci, fraterno.numeroFraterno]
+    return (resumen.data?.usuarios ?? []).filter((usuario) => {
+      return !texto || [nombreUsuario(usuario), usuario.ci, usuario.fraterno?.numero, usuario.preregistro?.numero]
         .some((valor) => String(valor ?? "").toLocaleUpperCase("es-BO").includes(texto));
     });
-  }, [busqueda, consultaFraternos.data]);
+  }, [busqueda, resumen.data?.usuarios]);
 
   const prendas = resumen.data?.prendas ?? [];
   const prendasTraje = prendas.filter((prenda) => !["POLERA", "CHAMARRA"].includes(prenda.nombre));
-  const buscarTalla = (fraternoId: string) => resumen.data?.tallas.find((talla) => idRelacionado(talla.fraternoId) === fraternoId);
-  const tallaCampo = (fraternoId: string, tipo: "polera" | "chamarra") => tallasLocales[fraternoId]?.[tipo] ?? buscarTalla(fraternoId)?.[tipo === "polera" ? "tallaPolera" : "tallaChamarra"] ?? "";
+  const buscarTalla = (usuario: UsuarioIndumentaria) => usuario.talla;
+  const tallaCampo = (usuario: UsuarioIndumentaria, tipo: "polera" | "chamarra") => tallasLocales[usuario._id]?.[tipo] ?? buscarTalla(usuario)?.[tipo === "polera" ? "tallaPolera" : "tallaChamarra"] ?? "";
   const entregaActual = (fraternoId: string, prendaId: string) => resumen.data?.entregas.find((entrega) => idRelacionado(entrega.fraternoId) === fraternoId && idRelacionado(entrega.prendaId) === prendaId && entrega.estado === "ENTREGADO");
-  const cuotaFraterno = (fraterno: Fraterno) => resumen.data?.cuotas.find((cuota) => idRelacionado(cuota.preregistroId) === idRelacionado(fraterno.preregistroId));
-
-  const actualizarTalla = (fraternoId: string, tipo: "polera" | "chamarra", valor: string) => {
-    setTallasLocales((actual) => ({ ...actual, [fraternoId]: { polera: tallaCampo(fraternoId, "polera"), chamarra: tallaCampo(fraternoId, "chamarra"), ...actual[fraternoId], [tipo]: valor.toUpperCase() } }));
+  const actualizarTalla = (usuario: UsuarioIndumentaria, tipo: "polera" | "chamarra", valor: string) => {
+    setTallasLocales((actual) => ({ ...actual, [usuario._id]: { polera: tallaCampo(usuario, "polera"), chamarra: tallaCampo(usuario, "chamarra"), ...actual[usuario._id], [tipo]: valor.toUpperCase() } }));
   };
-  const guardarTallasFraterno = (fraternoId: string) => {
-    const tallaPolera = tallaCampo(fraternoId, "polera").trim();
-    const tallaChamarra = tallaCampo(fraternoId, "chamarra").trim();
-    if (!tallaPolera || !tallaChamarra) return toast.info("Registra las tallas de polera y chamarra");
-    mutacion.mutate(() => guardarTalla({ fraternoId, tallaPolera, tallaChamarra }));
+  const guardarTallasUsuario = (usuario: UsuarioIndumentaria) => {
+    const tipo = seccion === "POLERA" ? "polera" : "chamarra";
+    const valor = tallaCampo(usuario, tipo).trim();
+    if (!valor) return toast.info(`Registra la talla de ${tipo}`);
+    mutacion.mutate(() => guardarTallaUsuario({ usuarioId: usuario._id, ...(tipo === "polera" ? { tallaPolera: valor } : { tallaChamarra: valor }) }));
   };
   const alternarEntrega = (fraternoId: string, prenda: Prenda, talla?: string) => {
     const actual = entregaActual(fraternoId, prenda._id);
@@ -78,7 +69,7 @@ export default function IndumentariaView() {
   return <div className="space-y-6">
     <header>
       <h1 className="text-3xl font-black text-[#841534]">Tallas e indumentaria</h1>
-      <p className="text-slate-500">Control de tallas y entrega de prendas a todos los fraternos.</p>
+      <p className="text-slate-500">Busca todas las cuentas de Gestión Integral y aplica por separado la habilitación de tallas.</p>
     </header>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -106,30 +97,29 @@ export default function IndumentariaView() {
 
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left">
-        <thead className="bg-[#841534] text-white"><tr><th className="p-4">Fraterno</th><th className="p-4">CI / N.º</th>{seccion !== "INDUMENTARIA" && <><th className="p-4">Talla</th><th className="p-4">Estado</th><th className="p-4 text-right">Acción</th></>}{seccion === "INDUMENTARIA" && <th className="p-4">Prendas del traje y estado de entrega</th>}</tr></thead>
-        <tbody>{fraternos.map((fraterno) => {
-          const usuario = typeof fraterno.usuarioId === "object" ? fraterno.usuarioId : null;
+        <thead className="bg-[#841534] text-white"><tr><th className="p-4">Usuario</th><th className="p-4">CI / Código</th>{seccion !== "INDUMENTARIA" && <><th className="p-4">Talla</th><th className="p-4">Habilitación</th><th className="p-4 text-right">Entrega</th></>}{seccion === "INDUMENTARIA" && <th className="p-4">Prendas del traje y estado de entrega</th>}</tr></thead>
+        <tbody>{usuarios.map((usuario) => {
           const tipo = seccion === "POLERA" ? "polera" : "chamarra";
           const prendaPrincipal = prendas.find((item) => item.nombre === seccion);
-          const entregada = prendaPrincipal ? entregaActual(fraterno._id, prendaPrincipal._id) : undefined;
-          const cuota = cuotaFraterno(fraterno);
-          const pagoCompleto = Boolean(cuota && cuota.saldo <= 0 && cuota.estado === "PAGADA");
-          const tallaRegistrada = buscarTalla(fraterno._id);
+          const fraternoId = usuario.fraterno?._id;
+          const entregada = prendaPrincipal && fraternoId ? entregaActual(fraternoId, prendaPrincipal._id) : undefined;
+          const pagoCompleto = Boolean(usuario.cuota && usuario.cuota.saldo <= 0 && usuario.cuota.estado === "PAGADA");
+          const tallaRegistrada = buscarTalla(usuario);
           const edicionBloqueada = tallaRegistrada?.edicionBloqueada === true;
-          return <tr key={fraterno._id} className="border-b border-slate-100 align-top hover:bg-slate-50/70">
-            <td className="p-4"><p className="font-black text-slate-800">{nombreFraterno(fraterno)}</p><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${fraterno.estado === "ACTIVO" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{fraterno.estado}</span><span className={`ml-1 mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${pagoCompleto ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{pagoCompleto ? "PAGO COMPLETO" : `SALDO Bs ${cuota?.saldo.toFixed(2) ?? "—"}`}</span></td>
-            <td className="p-4 text-sm"><p>{usuario?.ci ?? "Sin CI"}</p><p className="text-slate-500">{fraterno.numeroFraterno}</p></td>
+          return <tr key={usuario._id} className="border-b border-slate-100 align-top hover:bg-slate-50/70">
+            <td className="p-4"><p className="font-black text-slate-800">{nombreUsuario(usuario)}</p><p className="mt-1 text-xs text-slate-500">{usuario.roles.join(" / ") || "SIN ROL"}{usuario.bloque ? ` · ${usuario.guia ? "GUÍA DEL " : ""}${usuario.bloque}` : ""}</p></td>
+            <td className="p-4 text-sm"><p>{usuario.ci}</p><p className="text-slate-500">{usuario.fraterno?.numero ?? usuario.preregistro?.numero ?? "Sin código"}</p></td>
             {seccion !== "INDUMENTARIA" && <>
-              <td className="p-4"><input value={tallaCampo(fraterno._id, tipo)==="SIN DEFINIR"?"":tallaCampo(fraterno._id, tipo)} onChange={(evento) => actualizarTalla(fraterno._id, tipo, evento.target.value)} placeholder="Sin talla" className="w-28 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534]" /><button type="button" onClick={() => guardarTallasFraterno(fraterno._id)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534]">Guardar talla</button><button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraterno._id, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button></td>
-              <td className="p-4"><EstadoEntrega entrega={entregada} /></td>
-              <td className="p-4 text-right"><button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && (!tallaCampo(fraterno._id, tipo) || !pagoCompleto))} onClick={() => prendaPrincipal && alternarEntrega(fraterno._id, prendaPrincipal, tallaCampo(fraterno._id, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : pagoCompleto ? "Marcar entregado" : "Pago pendiente"}</button></td>
+              <td className="p-4"><input disabled={!usuario.habilitado} value={tallaCampo(usuario, tipo)==="SIN DEFINIR"?"":tallaCampo(usuario, tipo)} onChange={(evento) => actualizarTalla(usuario, tipo, evento.target.value)} placeholder="Sin talla" className="w-28 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534] disabled:bg-slate-100" /><button type="button" disabled={!usuario.habilitado || mutacion.isPending} onClick={() => guardarTallasUsuario(usuario)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534] disabled:opacity-40">Guardar talla</button>{fraternoId && <button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraternoId, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button>}</td>
+              <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${usuario.habilitado ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{usuario.estadoHabilitacion === "HABILITADO" ? "HABILITADO PARA TALLA" : usuario.estadoHabilitacion.replace("_", " ")}</span><p className="mt-1 max-w-xs text-xs text-slate-500">{usuario.motivo}</p></td>
+              <td className="p-4 text-right">{fraternoId ? <button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && (!tallaCampo(usuario, tipo) || !pagoCompleto))} onClick={() => prendaPrincipal && alternarEntrega(fraternoId, prendaPrincipal, tallaCampo(usuario, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : pagoCompleto ? "Marcar entregado" : "Pago pendiente"}</button> : <span className="text-xs text-slate-400">Sin perfil fraterno</span>}</td>
             </>}
-            {seccion === "INDUMENTARIA" && <td className="p-4"><div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{prendasTraje.map((prenda) => { const actual = entregaActual(fraterno._id, prenda._id); return <div key={prenda._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><div><p className="text-xs font-black text-slate-800">{prenda.nombre}</p><EstadoEntrega entrega={actual} compacto /></div><button type="button" disabled={mutacion.isPending} onClick={() => alternarEntrega(fraterno._id, prenda)} className={`rounded-lg px-3 py-2 text-xs font-bold text-white ${actual ? "bg-slate-600" : "bg-emerald-600"}`}>{actual ? "Devolver" : "Entregar"}</button></div>; })}{!prendasTraje.length && <p className="col-span-full text-sm text-slate-500">Agrega las prendas que componen el traje.</p>}</div></td>}
+            {seccion === "INDUMENTARIA" && <td className="p-4">{fraternoId ? <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{prendasTraje.map((prenda) => { const actual = entregaActual(fraternoId, prenda._id); return <div key={prenda._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><div><p className="text-xs font-black text-slate-800">{prenda.nombre}</p><EstadoEntrega entrega={actual} compacto /></div><button type="button" disabled={mutacion.isPending} onClick={() => alternarEntrega(fraternoId, prenda)} className={`rounded-lg px-3 py-2 text-xs font-bold text-white ${actual ? "bg-slate-600" : "bg-emerald-600"}`}>{actual ? "Devolver" : "Entregar"}</button></div>; })}{!prendasTraje.length && <p className="col-span-full text-sm text-slate-500">Agrega las prendas que componen el traje.</p>}</div> : <p className="text-sm text-slate-500">No habilitado para entrega: no tiene perfil fraterno.</p>}</td>}
           </tr>;
         })}</tbody>
       </table></div>
-      {!consultaFraternos.isLoading && !fraternos.length && <div className="p-10 text-center text-slate-500">No se encontraron fraternos.</div>}
-      {consultaFraternos.isLoading && <div className="p-10 text-center text-slate-500">Cargando fraternos...</div>}
+      {!resumen.isLoading && !usuarios.length && <div className="p-10 text-center text-slate-500">SIN RESULTADOS. No hay usuarios que coincidan con la búsqueda.</div>}
+      {resumen.isLoading && <div className="p-10 text-center text-slate-500">BUSCANDO...</div>}
     </section>
   </div>;
 }

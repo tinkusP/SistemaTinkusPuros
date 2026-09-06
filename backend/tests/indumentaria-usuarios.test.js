@@ -1,0 +1,15 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { estadoHabilitacionTalla } = require("../dist/services/IndumentariaUsuariosService");
+
+test("un usuario visible solo se habilita con primera cuota verificada", () => {
+  assert.equal(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: true, primeraCuotaVerificada: true }).habilitado, true);
+  assert.equal(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: true, primeraCuotaVerificada: false }).estadoHabilitacion, "PAGO_PENDIENTE");
+  assert.match(estadoHabilitacionTalla({ usuarioActivo: true, tieneCuota: false, primeraCuotaVerificada: false }).motivo, /cuota/i);
+});
+
+test("una cuenta inactiva sigue siendo explicable pero no habilitada", () => {
+  const resultado = estadoHabilitacionTalla({ usuarioActivo: false, tieneCuota: true, primeraCuotaVerificada: true });
+  assert.equal(resultado.estadoHabilitacion, "NO_HABILITADO");
+  assert.match(resultado.motivo, /activa/i);
+});

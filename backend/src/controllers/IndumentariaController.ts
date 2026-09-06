@@ -9,6 +9,7 @@ import ConfiguracionPago from "../models/ConfiguracionPago";
 import Preregistro from "../models/Preregistro";
 import DetalleCuota from "../models/DetalleCuota";
 import { normalizarGeneroBloque } from "../services/BloqueService";
+import { listarUsuariosIndumentaria } from "../services/IndumentariaUsuariosService";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -24,12 +25,13 @@ const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
 export const resumenIndumentaria = async (req: Request, res: Response) => {
   await asegurarPrendasPrincipales(req.usuario?._id);
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
-  const [tallas, prendas, entregas, cuotas, configuracionTallas] = await Promise.all([
+  const [tallas, prendas, entregas, cuotas, configuracionTallas, usuarios] = await Promise.all([
     TallaFraterno.find().populate("usuarioId", "nombres apellidoPaterno apellidoMaterno ci sexo").populate({ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci sexo" } }),
     PrendaIndumentaria.find().sort({ nombre: 1 }),
     EntregaIndumentaria.find().populate(poblarEntrega).sort({ fechaEntrega: -1 }),
     Cuota.find({ fechaEliminado: null }).select("preregistroId montoTotal montoPagado saldo estado"),
     gestion ? ConfiguracionPago.findOne({ gestionId: gestion._id }).select("registroTallasHabilitado fechaLimiteRegistroTallas") : null,
+    listarUsuariosIndumentaria(),
   ]);
   const acumulado: Record<"POLERA" | "CHAMARRA", Record<"HOMBRE" | "MUJER", Map<string, number>>> = { POLERA: { HOMBRE: new Map(), MUJER: new Map() }, CHAMARRA: { HOMBRE: new Map(), MUJER: new Map() } };
   for (const registro of tallas as any[]) {
@@ -44,7 +46,7 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
   }
   const resumenTallas = Object.fromEntries((["POLERA", "CHAMARRA"] as const).map((prenda) => [prenda, Object.fromEntries((["HOMBRE", "MUJER"] as const).map((genero) => { const tallasOrdenadas = Array.from(acumulado[prenda][genero]).sort(([a], [b]) => a.localeCompare(b, "es", { numeric: true })); return [genero, { tallas: tallasOrdenadas.map(([talla, cantidad]) => ({ talla, cantidad })), total: tallasOrdenadas.reduce((suma, [, cantidad]) => suma + cantidad, 0) }]; }))]));
   const totalGeneral = (["POLERA", "CHAMARRA"] as const).reduce((total, prenda) => total + (["HOMBRE", "MUJER"] as const).reduce((subtotal, genero) => subtotal + Array.from(acumulado[prenda][genero].values()).reduce((suma, cantidad) => suma + cantidad, 0), 0), 0);
-  res.json({ tallas, prendas, entregas, cuotas, resumenTallas: { ...resumenTallas, totalGeneral }, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
+  res.json({ usuarios, tallas, prendas, entregas, cuotas, resumenTallas: { ...resumenTallas, totalGeneral }, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
 };
 
 export const miIndumentaria = async (req: Request, res: Response) => {
@@ -83,9 +85,11 @@ export const guardarTallaUsuario = async (req: Request, res: Response) => {
   if (!primeraCuota) return res.status(409).json({ error: cuota ? "La primera cuota todavía no fue verificada; no se pueden registrar tallas" : "El usuario no tiene una cuota vinculada; regularízala antes de registrar tallas" });
   const existente = await TallaFraterno.findOne({ $or: [{ usuarioId: req.body.usuarioId }, ...(fraterno ? [{ fraternoId: fraterno._id }] : [])] });
   const filtro = existente ? { _id: existente._id } : { usuarioId: req.body.usuarioId };
+  const tallaPolera = String(req.body.tallaPolera ?? existente?.tallaPolera ?? "SIN DEFINIR").trim().toUpperCase();
+  const tallaChamarra = String(req.body.tallaChamarra ?? existente?.tallaChamarra ?? "SIN DEFINIR").trim().toUpperCase();
   const talla = await TallaFraterno.findOneAndUpdate(
     filtro,
-    { $set: { usuarioId: req.body.usuarioId, ...(fraterno ? { fraternoId: fraterno._id } : {}), tallaPolera: req.body.tallaPolera, tallaChamarra: req.body.tallaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id } },
+    { $set: { usuarioId: req.body.usuarioId, ...(fraterno ? { fraternoId: fraterno._id } : {}), tallaPolera, tallaChamarra, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id } },
     { upsert: true, new: true, runValidators: true },
   );
   return res.json({ message: "Tallas del usuario guardadas", talla });
