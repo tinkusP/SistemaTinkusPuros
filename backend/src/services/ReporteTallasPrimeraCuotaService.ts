@@ -32,6 +32,11 @@ export function estadoTallaPago(tallaPolera?: string, tallaChamarra?: string, pr
   return { tienePolera, tieneChamarra, conTalla, pendienteTalla, estadoTallaPolera: tienePolera ? "REGISTRADA" : "SIN REGISTRAR", estadoTallaChamarra: tieneChamarra ? "REGISTRADA" : "SIN REGISTRAR", estadoGeneral };
 }
 
+export function clasificarEstadoTalla(tallaPolera?: string, tallaChamarra?: string) {
+  const polera = tieneValor(tallaPolera), chamarra = tieneValor(tallaChamarra);
+  return polera && chamarra ? "TALLAS COMPLETAS" : polera ? "SOLO POLERA" : chamarra ? "SOLO CHAMARRA" : "SIN TALLA";
+}
+
 export function estadoPrimeraCuota(aplica: boolean, montoEsperado: number, pago?: { monto?: number; estadoRevision?: string } | null) {
   const montoRegistrado = aplica ? redondearMonto(pago?.monto ?? 0) : 0;
   const verificacion = !aplica ? "NO APLICA" : pago?.estadoRevision ?? "SIN REGISTRO";
@@ -105,7 +110,7 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     const guia: any = guiaPorUsuario.get(String(usuario._id));
     const perfilFraterno = Boolean(fraterno);
     const participante = Boolean(preregistro);
-    const talla: any = participante ? tallaPorFraterno.get(String(fraterno?._id)) ?? tallaPorUsuario.get(String(usuario._id)) : null;
+    const talla: any = tallaPorFraterno.get(String(fraterno?._id)) ?? tallaPorUsuario.get(String(usuario._id)) ?? null;
     const cuota: any = participante ? cuotaPorPreregistro.get(String(preregistro._id)) : null;
     const pagosCuota: any[] = cuota ? pagosPorCuota.get(String(cuota._id)) ?? [] : [];
     const primerPago: any = pagosCuota.find((pago) => pago.numeroPago === 1);
@@ -113,7 +118,8 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     const pagoEstado = estadoPrimeraCuota(participante, montoPrimeraCuota, primerPago);
     const primeraCuotaPagada = pagoEstado.pagada;
     const roles = (usuario.roles ?? []).filter((rol: any) => rol && rol.estado !== false && !rol.fechaEliminado).map(normalizarRol).filter(Boolean);
-    const tallaEstado = estadoTallaPago(talla?.tallaPolera, talla?.tallaChamarra, primeraCuotaPagada, participante);
+    const tallaEstado = estadoTallaPago(talla?.tallaPolera, talla?.tallaChamarra, primeraCuotaPagada, true);
+    const estadoTalla = clasificarEstadoTalla(talla?.tallaPolera, talla?.tallaChamarra);
     const bloqueIntegrante: any = fraterno ? bloquePorFraterno.get(String(fraterno._id)) : null;
     const bloqueGuia: any = guia ? bloquePorGuia.get(String(guia._id)) : null;
     const bloque = bloqueGuia?.nombre ?? bloqueIntegrante?.nombre ?? "SIN BLOQUE";
@@ -125,13 +131,13 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
     const montoRegistradoTotal = redondearMonto(pagosCuota.reduce((total, pago) => total + Number(pago.monto ?? 0), 0));
     const montoVerificadoTotal = redondearMonto(pagosVerificados.reduce((total, pago) => total + Number(pago.monto ?? 0), 0));
     const resumenPago = resumirPagoReporte(participante, cuota, pagosCuota);
-    const estadoMedicion = !participante ? "NO APLICA" : tallaEstado.conTalla ? "TALLAS COMPLETAS" : tallaEstado.pendienteTalla === "AMBAS" ? "SIN MEDICIÓN" : "MEDICIÓN INCOMPLETA";
+    const estadoMedicion = estadoTalla;
     const sinPagoYSinTalla = participante && pagosCuota.length === 0 && !tallaEstado.conTalla;
     const pagoSinTalla = participante && pagosVerificados.length > 0 && !tallaEstado.conTalla;
     const prioridadSeguimiento = sinPagoYSinTalla ? "ALTA" : pagoSinTalla || pagosPendientes.length > 0 ? "MEDIA" : "BAJA";
-    const problemasCalidad = [!usuario.telefono && "TELÉFONO VACÍO", !usuario.ci && "CI VACÍO", !usuario.email && "CORREO VACÍO", !usuario.sexo && "SEXO VACÍO", roles.length === 0 && "SIN ROLES", participante && bloque === "SIN BLOQUE" && "SIN BLOQUE", estadoMedicion === "MEDICIÓN INCOMPLETA" && "TALLA PARCIAL", pagoEstado.primeraCuota === "PENDIENTE" && pagoEstado.saldoPrimeraCuota === 0 && "PAGO INCONSISTENTE"].filter(Boolean);
+    const problemasCalidad = [!usuario.telefono && "TELÉFONO VACÍO", !usuario.ci && "CI VACÍO", !usuario.email && "CORREO VACÍO", !usuario.sexo && "SEXO VACÍO", roles.length === 0 && "SIN ROLES", participante && bloque === "SIN BLOQUE" && "SIN BLOQUE", ["SOLO POLERA", "SOLO CHAMARRA"].includes(estadoTalla) && "TALLA PARCIAL", pagoEstado.primeraCuota === "PENDIENTE" && pagoEstado.saldoPrimeraCuota === 0 && "PAGO INCONSISTENTE"].filter(Boolean);
     return {
-      usuarioId: String(usuario._id), fraternoId: String(fraterno?._id ?? ""), nombre: nombreCompleto(usuario), ci: String(usuario.ci ?? ""), codigoFraterno: String(fraterno?.numeroFraterno ?? preregistro?.numeroPreRegistro ?? ""), sexo: usuario.sexo ?? "SIN REGISTRO", telefono: String(usuario.telefono ?? ""), whatsapp: whatsapp(usuario.telefono), correo: usuario.email ?? "", roles, tipoRegistro: tipoRegistro(roles, perfilFraterno), perfilFraterno, participante, estadoInscripcion: preregistro?.estado ?? "SIN INSCRIPCIÓN", estadoUsuario: usuario.estado ?? "SIN REGISTRO", bloque, asignacion, tallaPolera: participante ? talla?.tallaPolera ?? null : null, tallaChamarra: participante ? talla?.tallaChamarra ?? null : null, ...tallaEstado, estadoMedicion, ...pagoEstado, ...resumenPago, montoPrimeraCuota, montoPagadoPrimeraCuota: pagoEstado.montoVerificadoPrimeraCuota, planPagos: numeroCuotas ? `${numeroCuotas} CUOTA${numeroCuotas === 1 ? "" : "S"}` : participante ? "SIN PLAN" : "NO APLICA", numeroCuotas, cuotasPagadas: pagosVerificados.length, cuotasPendientes: Math.max(0, numeroCuotas - pagosVerificados.length), cuotasPorVerificar: pagosPendientes.length, montoRegistradoTotal, montoVerificadoTotal, totalPagado: participante ? redondearMonto(cuota?.montoPagado ?? montoVerificadoTotal) : 0, saldoTotal: participante ? redondearMonto(cuota?.saldo ?? montoPrimeraCuota) : 0, estadoPagoGeneral: resumenPago.estadoPagoReporte, fechaUltimoPago: pagosCuota.at(-1)?.fechaPago ?? null, fechaRegistro: preregistro?.fechaRegistro ?? usuario.fechaCreado ?? null, prioridadSeguimiento, motivoSeguimiento: sinPagoYSinTalla ? "SIN PAGO + SIN TALLA" : pagoSinTalla ? "PAGO VERIFICADO + SIN TALLA" : pagosPendientes.length ? "PAGO PENDIENTE DE VERIFICACIÓN" : "", problemasCalidad,
+      usuarioId: String(usuario._id), fraternoId: String(fraterno?._id ?? ""), nombre: nombreCompleto(usuario), ci: String(usuario.ci ?? ""), codigoFraterno: String(fraterno?.numeroFraterno ?? preregistro?.numeroPreRegistro ?? ""), sexo: usuario.sexo ?? "SIN REGISTRO", telefono: String(usuario.telefono ?? ""), whatsapp: whatsapp(usuario.telefono), correo: usuario.email ?? "", roles, tipoRegistro: tipoRegistro(roles, perfilFraterno), perfilFraterno, participante, estadoInscripcion: preregistro?.estado ?? "SIN INSCRIPCIÓN", estadoUsuario: usuario.estado ?? "SIN REGISTRO", bloque, asignacion, tallaPolera: talla?.tallaPolera ?? null, tallaChamarra: talla?.tallaChamarra ?? null, ...tallaEstado, estadoTalla, estadoMedicion, ...pagoEstado, ...resumenPago, montoPrimeraCuota, montoPagadoPrimeraCuota: pagoEstado.montoVerificadoPrimeraCuota, planPagos: numeroCuotas ? `${numeroCuotas} CUOTA${numeroCuotas === 1 ? "" : "S"}` : participante ? "SIN PLAN" : "NO APLICA", numeroCuotas, cuotasPagadas: pagosVerificados.length, cuotasPendientes: Math.max(0, numeroCuotas - pagosVerificados.length), cuotasPorVerificar: pagosPendientes.length, montoRegistradoTotal, montoVerificadoTotal, totalPagado: participante ? redondearMonto(cuota?.montoPagado ?? montoVerificadoTotal) : 0, saldoTotal: participante ? redondearMonto(cuota?.saldo ?? montoPrimeraCuota) : 0, estadoPagoGeneral: resumenPago.estadoPagoReporte, fechaUltimoPago: pagosCuota.at(-1)?.fechaPago ?? null, fechaRegistro: preregistro?.fechaRegistro ?? usuario.fechaCreado ?? null, prioridadSeguimiento, motivoSeguimiento: sinPagoYSinTalla ? "SIN PAGO + SIN TALLA" : pagoSinTalla ? "PAGO VERIFICADO + SIN TALLA" : pagosPendientes.length ? "PAGO PENDIENTE DE VERIFICACIÓN" : "", problemasCalidad,
     };
   }).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
 
@@ -139,9 +145,13 @@ export async function generarReporteTallasPrimeraCuota(gestionId?: string) {
   const resumir = (items: typeof personas) => ({ total: items.length, conTalla: items.filter((p) => p.conTalla).length, sinTalla: items.filter((p) => !p.conTalla).length, conPolera: items.filter((p) => p.tienePolera).length, sinPolera: items.filter((p) => !p.tienePolera).length, conChamarra: items.filter((p) => p.tieneChamarra).length, sinChamarra: items.filter((p) => !p.tieneChamarra).length, sinNingunaTalla: items.filter((p) => p.pendienteTalla === "AMBAS").length, primeraCuotaPagada: items.filter((p) => p.primeraCuota === "PAGADA").length, primeraCuotaPendiente: items.filter((p) => p.primeraCuota === "PENDIENTE").length, sinTallaYSinPrimeraCuota: items.filter((p) => !p.conTalla && p.primeraCuota === "PENDIENTE").length, conTallaSinPago: items.filter((p) => p.conTalla && p.estadoPagoReporte === "SIN PAGO").length, conTallaPagoPendiente: items.filter((p) => p.conTalla && p.estadoPagoReporte === "PENDIENTE DE VERIFICACIÓN").length, conTallaPagoVerificado: items.filter((p) => p.conTalla && p.montoVerificadoTotal > 0).length, conTallaPagoParcial: items.filter((p) => p.conTalla && p.estadoPagoReporte === "PAGO PARCIAL").length, conTallaPagoCompleto: items.filter((p) => p.conTalla && p.estadoPagoReporte === "PAGO COMPLETO").length });
   const hombresFraternos = fraternosReporte.filter((persona) => persona.sexo === "HOMBRE"), mujeresFraternos = fraternosReporte.filter((persona) => persona.sexo === "MUJER");
   const resumenFraternos = resumir(fraternosReporte);
+  const tallasDisponibles = [...new Set(personas.flatMap((persona) => [persona.tallaPolera, persona.tallaChamarra]).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  const distribucionTallas = tallasDisponibles.map((talla) => ({ talla, poleraHombres: personas.filter((p) => p.sexo === "HOMBRE" && p.tallaPolera === talla).length, poleraMujeres: personas.filter((p) => p.sexo === "MUJER" && p.tallaPolera === talla).length, chamarraHombres: personas.filter((p) => p.sexo === "HOMBRE" && p.tallaChamarra === talla).length, chamarraMujeres: personas.filter((p) => p.sexo === "MUJER" && p.tallaChamarra === talla).length }));
+  distribucionTallas.push({ talla: "SIN TALLA", poleraHombres: personas.filter((p) => p.sexo === "HOMBRE" && !p.tienePolera).length, poleraMujeres: personas.filter((p) => p.sexo === "MUJER" && !p.tienePolera).length, chamarraHombres: personas.filter((p) => p.sexo === "HOMBRE" && !p.tieneChamarra).length, chamarraMujeres: personas.filter((p) => p.sexo === "MUJER" && !p.tieneChamarra).length });
   return {
     generadoEn: new Date(), gestion: { _id: gestion._id, nombre: gestion.nombre, anio: gestion.anio },
     resumen: { ...resumenFraternos, totalUsuarios: personas.length, conPerfilFraterno: fraternosReporte.length, sinPerfilFraterno: personas.length - fraternosReporte.length, administradores: personas.filter((p) => esRol(p.roles, "ADMINISTRADOR")).length, guias: personas.filter((p) => esRol(p.roles, "GUIA") || esRol(p.roles, "GUÍA")).length, totalHombres: personas.filter((p) => p.sexo === "HOMBRE").length, totalMujeres: personas.filter((p) => p.sexo === "MUJER").length, sinBloque: personas.filter((p) => p.bloque === "SIN BLOQUE").length, hombres: resumir(hombresFraternos), mujeres: resumir(mujeresFraternos) },
-    bloques: [...new Set(personas.map((persona) => persona.bloque))].sort(), personas,
+    resumenGeneralTallas: { totalUsuarios: personas.length, totalHombres: personas.filter((p) => p.sexo === "HOMBRE").length, totalMujeres: personas.filter((p) => p.sexo === "MUJER").length, tallasCompletas: personas.filter((p) => p.estadoTalla === "TALLAS COMPLETAS").length, soloPolera: personas.filter((p) => p.estadoTalla === "SOLO POLERA").length, soloChamarra: personas.filter((p) => p.estadoTalla === "SOLO CHAMARRA").length, sinTalla: personas.filter((p) => p.estadoTalla === "SIN TALLA").length },
+    tallasDisponibles, distribucionTallas, bloques: [...new Set(personas.map((persona) => persona.bloque))].sort(), personas,
   };
 }

@@ -1,12 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { estadoTallaPago, estadoPrimeraCuota, resumirPagoReporte } = require("../dist/services/ReporteTallasPrimeraCuotaService");
+const { estadoTallaPago, estadoPrimeraCuota, resumirPagoReporte, clasificarEstadoTalla } = require("../dist/services/ReporteTallasPrimeraCuotaService");
 
 test("considera talla completa solamente cuando existen polera y chamarra", () => {
   assert.deepEqual(estadoTallaPago("M", "XL", true), { tienePolera: true, tieneChamarra: true, conTalla: true, pendienteTalla: null, estadoTallaPolera: "REGISTRADA", estadoTallaChamarra: "REGISTRADA", estadoGeneral: "COMPLETO" });
   assert.equal(estadoTallaPago("M", "", true).pendienteTalla, "CHAMARRA");
   assert.equal(estadoTallaPago("", "L", true).pendienteTalla, "POLERA");
   assert.equal(estadoTallaPago(undefined, undefined, true).pendienteTalla, "AMBAS");
+});
+
+test("clasifica las cuatro combinaciones de tallas", () => {
+  assert.equal(clasificarEstadoTalla("M", "L"), "TALLAS COMPLETAS");
+  assert.equal(clasificarEstadoTalla("M", ""), "SOLO POLERA");
+  assert.equal(clasificarEstadoTalla("", "S"), "SOLO CHAMARRA");
+  assert.equal(clasificarEstadoTalla(undefined, undefined), "SIN TALLA");
 });
 
 test("clasifica pagos usando monto verificado, saldo y revisión reales", () => {
