@@ -9,6 +9,7 @@ export const LIMITES_BLOQUE = {
 } as const;
 
 export const inscripcionesBloqueAbiertas = (bloque: { inscripcionesAbiertas?: boolean } | null | undefined) => bloque?.inscripcionesAbiertas !== false;
+export const puedeIncorporarAlBloque = (bloque: { inscripcionesAbiertas?: boolean } | null | undefined, esAdministrador = false) => esAdministrador || inscripcionesBloqueAbiertas(bloque);
 
 export function normalizarNombreBloque(valor: unknown) {
   return String(valor ?? "").trim().replace(/\s+/g, " ").toUpperCase();
