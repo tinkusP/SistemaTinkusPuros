@@ -7,6 +7,7 @@ export const crearBloque = (nombre: string) => api.post("/guias/bloques", { nomb
 export const moverGuia = (guiaId: string, bloqueId: string | null) => api.patch(`/guias/bloques/guias/${guiaId}`, { bloqueId });
 export const quitarRolGuia = (guiaId: string) => api.delete(`/guias/${guiaId}/rol`);
 export const renombrarBloque = (bloqueId: string, nombre: string) => api.patch(`/guias/bloques/${bloqueId}/nombre`, { nombre });
+export const cambiarInscripcionesBloque = (bloqueId: string, inscripcionesAbiertas: boolean) => api.patch(`/guias/bloques/${bloqueId}/inscripciones`, { inscripcionesAbiertas });
 export const eliminarBloque = (bloqueId: string) => api.delete(`/guias/bloques/${bloqueId}`);
 export const buscarUsuariosBloque = async (bloqueId: string, buscar: string) => (await api.get("/guias/bloques/buscar-usuarios", { params: { bloqueId, buscar } })).data;
 export const agregarFraternoExistente = (bloqueId: string, fraternoId: string) => api.post("/guias/bloques/integrantes", { bloqueId, fraternoId });

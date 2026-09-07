@@ -8,6 +8,8 @@ export const LIMITES_BLOQUE = {
   GUIAS_TOTAL: 4,
 } as const;
 
+export const inscripcionesBloqueAbiertas = (bloque: { inscripcionesAbiertas?: boolean } | null | undefined) => bloque?.inscripcionesAbiertas !== false;
+
 export function normalizarNombreBloque(valor: unknown) {
   return String(valor ?? "").trim().replace(/\s+/g, " ").toUpperCase();
 }

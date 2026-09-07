@@ -9,7 +9,7 @@ import DetalleCuota from "../models/DetalleCuota";
 import Gestion from "../models/Gestion";
 import TallaFraterno from "../models/TallaFraterno";
 import Preregistro from "../models/Preregistro";
-import { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
+import { inscripcionesBloqueAbiertas, LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
 import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion } from "../services/AsignacionBloqueService";
 import { idsGuiasDelBloque, retirarGuiaDeBloques, sincronizarContadoresGuias } from "../services/GuiaBloqueService";
@@ -93,6 +93,7 @@ export const crearBloque = crearBloqueAdministrativo;
 
 async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGenero?: string) {
   const requestId = req.header("x-request-id") || randomUUID();
+  if (!inscripcionesBloqueAbiertas(bloque)) return res.status(409).json({ code: "BLOCK_REGISTRATION_CLOSED", error: `Las inscripciones del ${bloque.nombre} están cerradas.`, message: `Las inscripciones del ${bloque.nombre} están cerradas.` });
   const fraterno: any = await Fraterno.findOne({ _id: req.body.fraternoId, gestionId: bloque.gestionId, estado: "ACTIVO", fechaEliminado: null }).populate("usuarioId", "sexo");
   if (!fraterno) return res.status(404).json({ error: "Fraterno no disponible para este bloque" });
   const genero = normalizarGenero(fraterno.usuarioId?.sexo);
@@ -104,8 +105,8 @@ async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGe
   if (existente) { const resumen = resumirAsignacion(existente); return res.status(409).json({ error: String(existente.bloqueId._id) === String(bloque._id) ? "Este fraterno ya está en tu bloque." : `Este fraterno pertenece actualmente al bloque ${existente.bloqueId.nombre}.`, asignacion: resumen }); }
   const campoCantidad = genero === "HOMBRE" ? "cantidadHombres" : "cantidadMujeres";
   await Bloque.updateOne({ _id: bloque._id, [campoCantidad]: { $lt: cantidad } }, { $set: { [campoCantidad]: cantidad } });
-  const reservado = await Bloque.findOneAndUpdate({ _id: bloque._id, [campoCantidad]: { $lt: limite } }, { $inc: { [campoCantidad]: 1 } }, { new: true });
-  if (!reservado) return res.status(409).json({ error: mensajeCupoCompleto(genero) });
+  const reservado = await Bloque.findOneAndUpdate({ _id: bloque._id, inscripcionesAbiertas: { $ne: false }, [campoCantidad]: { $lt: limite } }, { $inc: { [campoCantidad]: 1 } }, { new: true });
+  if (!reservado) { const vigente = await Bloque.findById(bloque._id).select("nombre inscripcionesAbiertas").lean(); if (vigente && !inscripcionesBloqueAbiertas(vigente)) return res.status(409).json({ code: "BLOCK_REGISTRATION_CLOSED", error: `Las inscripciones del ${vigente.nombre} están cerradas.`, message: `Las inscripciones del ${vigente.nombre} están cerradas.` }); return res.status(409).json({ error: mensajeCupoCompleto(genero) }); }
   try {
     await asegurarIndiceAsignacionActiva();
     const detalle = await DetalleBloque.create({ bloqueId: bloque._id, fraternoId: fraterno._id, genero, estado: "ACTIVO" });
@@ -191,6 +192,7 @@ export const buscarUsuariosParaBloqueComoAdmin = async (req: Request, res: Respo
 };
 async function registrarUsuarioYAsignar(req: Request, res: Response, bloque: any) {
   const requestId = req.header("x-request-id") || randomUUID();
+  if (!inscripcionesBloqueAbiertas(bloque)) return res.status(409).json({ code: "BLOCK_REGISTRATION_CLOSED", error: `Las inscripciones del ${bloque.nombre} están cerradas.`, message: `Las inscripciones del ${bloque.nombre} están cerradas.` });
   const usuario: any = await PerfilUsuario.findOne({ _id: req.body.usuarioId, fechaEliminado: null }).select("_id ci sexo roles");
   if (!usuario) return res.status(404).json({ error: "Usuario no encontrado" });
   let preregistro: any = await Preregistro.findOne({ usuarioId: usuario._id, gestionId: bloque.gestionId, fechaEliminado: null }).sort({ fechaRegistro: -1 });
@@ -313,6 +315,16 @@ export const asignarEnMiBloque = async (req: Request, res: Response) => {
 async function renombrar(req:Request,res:Response,bloque:any){const {nombre,error}=validarNombreBloque(req.body.nombre);if(error)return res.status(400).json({error});const anterior=bloque.nombre;try{const actualizado=await Bloque.findOneAndUpdate({_id:bloque._id,gestionId:bloque.gestionId},{$set:{nombre}},{new:true,runValidators:true});if(!actualizado)return res.status(404).json({error:"Bloque no encontrado"});await registrarAuditoria(req,{accion:"RENOMBRAR_BLOQUE",modulo:"BLOQUES",entidad:"Bloque",entidadId:actualizado._id,descripcion:`Se cambió el nombre de ${anterior} a ${actualizado.nombre}`,datosAntes:{nombre:anterior},datosDespues:{nombre:actualizado.nombre}});return res.json({message:"Nombre del bloque actualizado correctamente.",bloque:actualizado});}catch(error){if((error as any)?.code===11000)return res.status(409).json({error:"Ya existe un bloque con ese nombre en esta gestión"});return res.status(400).json({error:"No se pudo actualizar el nombre del bloque"});}}
 export const renombrarMiBloque=async(req:Request,res:Response)=>{const guia=await Guia.findOne({usuarioId:req.usuario?._id,estado:"ACTIVO"});const bloque=guia?await Bloque.findOne({$or:[{guiaId:guia._id},{guiasIds:guia._id}]}):null;if(!bloque)return res.status(404).json({error:"No tienes un bloque asignado"});return renombrar(req,res,bloque);};
 export const renombrarBloqueComoAdmin=async(req:Request,res:Response)=>{const bloque=await Bloque.findById(req.params.bloqueId);if(!bloque)return res.status(404).json({error:"Bloque no encontrado"});return renombrar(req,res,bloque);};
+
+export const cambiarInscripcionesBloqueComoAdmin = async (req: Request, res: Response) => {
+  const bloque: any = await Bloque.findOne({ _id: req.params.bloqueId, estado: "ACTIVO" });
+  if (!bloque) return res.status(404).json({ error: "Bloque activo no encontrado" });
+  const anterior = inscripcionesBloqueAbiertas(bloque), nuevo = req.body.inscripcionesAbiertas === true;
+  if (anterior === nuevo) return res.json({ message: `Las inscripciones del ${bloque.nombre} ya están ${nuevo ? "abiertas" : "cerradas"}.`, bloque });
+  bloque.inscripcionesAbiertas = nuevo; await bloque.save();
+  await registrarAuditoria(req, { accion: nuevo ? "BLOQUE_INSCRIPCIONES_ABIERTAS" : "BLOQUE_INSCRIPCIONES_CERRADAS", modulo: "BLOQUES", entidad: "Bloque", entidadId: bloque._id, descripcion: `Administración ${nuevo ? "abrió" : "cerró"} las inscripciones del ${bloque.nombre}`, datosAntes: { nombre: bloque.nombre, inscripcionesAbiertas: anterior }, datosDespues: { nombre: bloque.nombre, inscripcionesAbiertas: nuevo } });
+  return res.json({ message: `Inscripciones del ${bloque.nombre} ${nuevo ? "abiertas" : "cerradas"}.`, bloque });
+};
 
 export const buscarCandidatoGuia = async (req: Request, res: Response) => {
   const ci = String(req.query.ci ?? "").trim();

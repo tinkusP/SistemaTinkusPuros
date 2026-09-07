@@ -12,7 +12,7 @@ async function ejecutar() {
   const diferenciasHistoricas = reporte.personas.filter((persona) => persona.montoVerificadoTotal !== persona.totalPagado);
   const inconsistencias = reporte.personas.filter((persona) => persona.cuotasPagadas > persona.numeroCuotas || persona.saldoTotal < 0);
   const ids = reporte.personas.map((persona) => persona.usuarioId), duplicados = ids.length - new Set(ids).size;
-  const sumaEstadosTalla = reporte.resumenGeneralTallas.tallasCompletas + reporte.resumenGeneralTallas.soloPolera + reporte.resumenGeneralTallas.soloChamarra + reporte.resumenGeneralTallas.sinTalla;
+  const sumaEstadosTalla = reporte.resumenGeneralTallas.tallasCompletas + reporte.resumenGeneralTallas.soloPolera + reporte.resumenGeneralTallas.soloChamarra + reporte.resumenGeneralTallas.sinTalla + reporte.resumenGeneralTallas.sinDefinir;
   console.log(JSON.stringify({ gestion: reporte.gestion.nombre, usuarios: reporte.personas.length, resumenTallas: reporte.resumenGeneralTallas, tallasDinamicas: reporte.tallasDisponibles, filasDistribucion: reporte.distribucionTallas.length, conTalla: conTalla.length, hombresConTalla: conTalla.filter((persona) => persona.sexo === "HOMBRE").length, mujeresConTalla: conTalla.filter((persona) => persona.sexo === "MUJER").length, estados, conteos, duplicados, estadosTallaCubrenTodos: sumaEstadosTalla === reporte.personas.length, usuarioEliminadoPresente: reporte.personas.some((persona) => persona.ci === "1234567890"), diferenciasHistoricasCuotaDetalle: diferenciasHistoricas.length, inconsistencias: inconsistencias.length, correcto: inconsistencias.length === 0 && duplicados === 0 && sumaEstadosTalla === reporte.personas.length && !reporte.personas.some((persona) => persona.ci === "1234567890") }));
 }
 

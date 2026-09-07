@@ -8,6 +8,7 @@ const schema = new Schema({
   cantidadGuiasMujeres: { type: Number, min: 0, default: 0 },
   cantidadHombres: { type: Number, min: 0, default: 0 },
   cantidadMujeres: { type: Number, min: 0, default: 0 },
+  inscripcionesAbiertas: { type: Boolean, default: true },
   gestionId: { type: Schema.Types.ObjectId, ref: "Gestion", required: true },
   estado: { type: String, enum: ["ACTIVO", "CERRADO"], default: "ACTIVO" },
   usuarioCreador: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },

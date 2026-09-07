@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, normalizarNombreBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } = require("../dist/services/BloqueService");
+const { inscripcionesBloqueAbiertas, LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, normalizarNombreBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } = require("../dist/services/BloqueService");
 const { distribuirPlanPagos, montoCuotaActual } = require("../dist/services/PlanPagosService");
 
 test("normaliza los valores de género usados actualmente", () => {
@@ -21,6 +21,12 @@ test("aplica los límites duros de 40 hombres, 80 mujeres y 120 integrantes", ()
   assert.equal(LIMITES_BLOQUE.MUJER, 80);
   assert.equal(LIMITES_BLOQUE.TOTAL, 120);
   assert.equal(LIMITES_BLOQUE.GUIAS_POR_GENERO, 2);
+});
+
+test("los bloques antiguos permanecen abiertos y false cierra nuevas incorporaciones", () => {
+  assert.equal(inscripcionesBloqueAbiertas({}), true);
+  assert.equal(inscripcionesBloqueAbiertas({ inscripcionesAbiertas: true }), true);
+  assert.equal(inscripcionesBloqueAbiertas({ inscripcionesAbiertas: false }), false);
 });
 
 test("reutiliza los importes reales de los planes de una, dos y tres cuotas", () => {
