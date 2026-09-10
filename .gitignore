@@ -20,6 +20,9 @@ backend/uploads/
 backend/storage/
 respaldos/
 logs-desarrollo/
+USUARIOS_SIN_BLOQUE_COMPLETO.txt
+USUARIOS_SIN_BLOQUE_COMPLETO.csv
+.~lock.USUARIOS_SIN_BLOQUE_COMPLETO.csv#
 *.archive
 *.log
 
