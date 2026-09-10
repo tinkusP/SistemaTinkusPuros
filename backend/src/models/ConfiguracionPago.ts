@@ -18,6 +18,7 @@ export interface ConfiguracionPagoType extends Document {
   cantidadBloques: number;
   registroTallasHabilitado: boolean;
   fechaLimiteRegistroTallas?: Date;
+  requisitosEntregaIndumentaria?: Record<string, number>;
   terminos: string;
   versionTerminos: number;
   activo: boolean;
@@ -40,6 +41,11 @@ const schema = new Schema<ConfiguracionPagoType>({
   cantidadBloques: { type: Number, min: 1, max: 100, default: 1 },
   registroTallasHabilitado: { type: Boolean, default: false },
   fechaLimiteRegistroTallas: Date,
+  requisitosEntregaIndumentaria: {
+    type: Map,
+    of: { type: Number, min: 0, max: 3 },
+    default: { POLERA: 2, CHAMARRA: 2, CHALINA: 3, "ETIQUETA PUROS": 3 },
+  },
   terminos: { type: String, required: true, trim: true, maxlength: 10000 },
   versionTerminos: { type: Number, min: 1, default: 1 },
   activo: { type: Boolean, default: true },

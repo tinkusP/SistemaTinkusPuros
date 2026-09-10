@@ -15,16 +15,11 @@ import { registrarAuditoria } from "../services/AuditoriaService";
 import { normalizarTallaAdministrativa, TALLA_SIN_REGISTRAR } from "../constants/tallas";
 import { asegurarIndiceTallasOpcionales } from "../services/IndiceTallaService";
 import { randomUUID } from "node:crypto";
+import { ARTICULOS_PACK, asegurarArticulosPack, requisitosGestion, resumenPackFraterno, validarEntrega } from "../services/EntregaPackService";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
-  await Promise.all(["POLERA", "CHAMARRA"].map((nombre) =>
-    PrendaIndumentaria.findOneAndUpdate(
-      { nombre },
-      { $setOnInsert: { nombre, requiereTalla: true, activo: true, usuarioCreador } },
-      { upsert: true, new: true },
-    ),
-  ));
+  await asegurarArticulosPack(usuarioCreador);
 };
 
 export const resumenIndumentaria = async (req: Request, res: Response) => {
@@ -51,7 +46,8 @@ export const resumenIndumentaria = async (req: Request, res: Response) => {
   }
   const resumenTallas = Object.fromEntries((["POLERA", "CHAMARRA"] as const).map((prenda) => [prenda, Object.fromEntries((["HOMBRE", "MUJER"] as const).map((genero) => { const tallasOrdenadas = Array.from(acumulado[prenda][genero]).sort(([a], [b]) => a.localeCompare(b, "es", { numeric: true })); return [genero, { tallas: tallasOrdenadas.map(([talla, cantidad]) => ({ talla, cantidad })), total: tallasOrdenadas.reduce((suma, [, cantidad]) => suma + cantidad, 0) }]; }))]));
   const totalGeneral = (["POLERA", "CHAMARRA"] as const).reduce((total, prenda) => total + (["HOMBRE", "MUJER"] as const).reduce((subtotal, genero) => subtotal + Array.from(acumulado[prenda][genero].values()).reduce((suma, cantidad) => suma + cantidad, 0), 0), 0);
-  res.json({ usuarios, tallas, prendas, entregas, cuotas, resumenTallas: { ...resumenTallas, totalGeneral }, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
+  const requisitosEntrega = gestion ? await requisitosGestion(gestion._id) : null;
+  res.json({ usuarios, tallas, prendas, entregas, cuotas, articulosPack: ARTICULOS_PACK, requisitosEntrega, resumenTallas: { ...resumenTallas, totalGeneral }, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null } });
 };
 
 export const miIndumentaria = async (req: Request, res: Response) => {
@@ -157,5 +153,24 @@ export const cambiarBloqueoTalla = async (req: Request, res: Response) => {
   });
 };
 export const crearPrenda = async (req: Request, res: Response) => { try { const prenda = await PrendaIndumentaria.create({ ...req.body, usuarioCreador: req.usuario?._id }); res.status(201).json({ message: "Prenda creada", prenda }); } catch { res.status(409).json({ error: "La prenda ya existe" }); } };
-export const entregar = async (req: Request, res: Response) => { try { const fraterno = await Fraterno.findById(req.body.fraternoId).select("preregistroId"); if (!fraterno) return res.status(404).json({ error: "Fraterno no encontrado" }); const cuota = await Cuota.findOne({ preregistroId: fraterno.preregistroId, fechaEliminado: null }); if (!cuota || cuota.saldo > 0 || cuota.estado !== "PAGADA") return res.status(409).json({ error: `No se puede entregar la indumentaria hasta completar la cuota total${cuota ? `. Saldo pendiente: Bs ${cuota.saldo.toFixed(2)}` : ""}` }); const entrega = await EntregaIndumentaria.create({ ...req.body, responsableEntrega: req.usuario?._id }); await entrega.populate(poblarEntrega); res.status(201).json({ message: "Indumentaria entregada", entrega }); } catch (e) { if ((e as { code?: number }).code === 11000) return res.status(409).json({ error: "Esta prenda ya está entregada al fraterno" }); res.status(400).json({ error: e instanceof Error ? e.message : "No se pudo registrar la entrega" }); } };
-export const cambiarEstadoEntrega = async (req: Request, res: Response) => { const estado = req.body.estado; const entrega = await EntregaIndumentaria.findByIdAndUpdate(req.params.id, { estado, observacion: req.body.observacion, ...(estado === "DEVUELTO" ? { fechaDevolucion: new Date(), responsableRecepcion: req.usuario?._id } : {}) }, { new: true, runValidators: true }).populate(poblarEntrega); if (!entrega) return res.status(404).json({ error: "Entrega no encontrada" }); res.json({ message: "Estado actualizado", entrega }); };
+export const entregar = async (req: Request, res: Response) => { try {
+  const validacion = await validarEntrega(req.body.fraternoId, req.body.prendaId);
+  const entrega = await EntregaIndumentaria.create({ ...req.body, gestionId: validacion.fraterno.gestionId, responsableEntrega: req.usuario?._id });
+  await entrega.populate(poblarEntrega);
+  const pack = await resumenPackFraterno(req.body.fraternoId);
+  await registrarAuditoria(req, { accion: "ENTREGAR_PRENDA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Se entregó ${validacion.prenda.nombre}`, datosDespues: { fraternoId: req.body.fraternoId, prenda: validacion.prenda.nombre, cuotasVerificadas: validacion.verificadas, estadoPack: pack.estado } });
+  return res.status(201).json({ message: `${validacion.prenda.nombre} entregada. Pack: ${pack.estado}`, entrega, pack });
+} catch (e) { if ((e as { code?: number }).code === 11000) return res.status(409).json({ error: "Esta prenda ya está entregada al fraterno" }); return res.status(400).json({ error: e instanceof Error ? e.message : "No se pudo registrar la entrega" }); } };
+export const cambiarEstadoEntrega = async (req: Request, res: Response) => { const anterior = await EntregaIndumentaria.findById(req.params.id).populate("prendaId", "nombre"); const estado = req.body.estado; const entrega = await EntregaIndumentaria.findByIdAndUpdate(req.params.id, { estado, observacion: req.body.observacion, ...(estado === "DEVUELTO" ? { fechaDevolucion: new Date(), responsableRecepcion: req.usuario?._id } : {}) }, { new: true, runValidators: true }).populate(poblarEntrega); if (!entrega) return res.status(404).json({ error: "Entrega no encontrada" }); await registrarAuditoria(req, { accion: "CAMBIAR_ESTADO_ENTREGA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Entrega actualizada a ${estado}`, datosAntes: { estado: anterior?.estado }, datosDespues: { estado, observacion: req.body.observacion } }); return res.json({ message: "Estado actualizado", entrega }); };
+
+export const configurarRequisitosEntrega = async (req: Request, res: Response) => {
+  const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
+  if (!gestion) return res.status(404).json({ error: "No existe gestión activa" });
+  const requisitos = Object.fromEntries(ARTICULOS_PACK.map((articulo) => [articulo, Number(req.body.requisitos?.[articulo])]));
+  if (Object.values(requisitos).some((valor) => !Number.isInteger(valor) || valor < 0 || valor > 3)) return res.status(400).json({ error: "Cada requisito debe ser un número entero entre 0 y 3" });
+  const anterior = await requisitosGestion(gestion._id);
+  const configuracion = await ConfiguracionPago.findOneAndUpdate({ gestionId: gestion._id }, { $set: { requisitosEntregaIndumentaria: requisitos, fechaEditado: new Date(), usuarioEditor: req.usuario?._id } }, { new: true });
+  if (!configuracion) return res.status(409).json({ error: "Primero configura los pagos de la gestión" });
+  await registrarAuditoria(req, { accion: "CONFIGURAR_REQUISITOS_ENTREGA", modulo: "INDUMENTARIA", entidad: "ConfiguracionPago", entidadId: configuracion._id, descripcion: "Se actualizaron los requisitos de cuotas verificadas por prenda", datosAntes: anterior, datosDespues: requisitos });
+  return res.json({ message: "Requisitos de entrega actualizados", requisitos });
+};

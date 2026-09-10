@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "react-router-dom";
-import { obtenerReporteEjecutivo } from "@/api/ReporteApi";
+import { obtenerCentroControl, obtenerReporteEjecutivo } from "@/api/ReporteApi";
 import { getPerfilUsuarios } from "@/api/PerfilUsuarioApi";
 import { listarCuotas } from "@/api/CuotaApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -96,6 +96,7 @@ export default function DashboardView() {
     refetchInterval: 30_000,
     enabled: puedeVerReportes,
   });
+  const centroQuery = useQuery({ queryKey: ["centro-control"], queryFn: obtenerCentroControl, refetchInterval: 30_000, enabled: esAdministrador });
   const usuariosQuery = useQuery({
     queryKey: ["perfilusuarios", "dashboard-total"],
     queryFn: getPerfilUsuarios,
@@ -144,6 +145,16 @@ export default function DashboardView() {
         </p>
         {reporte && <p className="mt-3 text-xs text-white/75">{reporte.gestion.nombre} · actualizado {new Date(reporte.generadoEn).toLocaleString("es-BO")}</p>}
       </section>
+
+      {esAdministrador && centroQuery.data?.gestion ? <section className="rounded-3xl border border-[#d3c9bb] bg-white p-5 shadow-sm dark:bg-[#262022]">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wider text-[#8F5F2A]">Gestión {centroQuery.data.gestion.nombre}</p><h2 className="text-2xl font-black text-[#74122A]">Centro de control</h2></div><Link to="/reportes" className="font-bold text-[#74122A]">Ver reportes →</Link></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricaControl titulo="Sin bloque" valor={centroQuery.data.bloques?.sinBloque ?? 0} detalle={`${centroQuery.data.bloques?.listos ?? 0} listos para asignar`} ruta="/guias-bloques" />
+          <MetricaControl titulo="Pagos por revisar" valor={centroQuery.data.pagos?.pendientesRevision ?? 0} detalle={`${centroQuery.data.pagos?.observados ?? 0} observados`} ruta="/cuotas?revision=PENDIENTE" />
+          <MetricaControl titulo="Pack completo" valor={centroQuery.data.indumentaria?.completos ?? 0} detalle={`${centroQuery.data.indumentaria?.parciales ?? 0} entregas parciales`} ruta="/indumentaria" />
+          <MetricaControl titulo="Sin entrega" valor={centroQuery.data.indumentaria?.sinEntrega ?? 0} detalle={`${centroQuery.data.personas?.total ?? 0} fraternos en total`} ruta="/indumentaria" />
+        </div>
+      </section> : null}
 
       {((puedeVerReportes && reporteQuery.isError) || (puedeVerUsuarios && usuariosQuery.isError) || (puedeVerPagos && cuotasQuery.isError)) && (
         <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
@@ -232,3 +243,5 @@ export default function DashboardView() {
     </div>
   );
 }
+
+function MetricaControl({ titulo, valor, detalle, ruta }: { titulo: string; valor: number; detalle: string; ruta: string }) { return <Link to={ruta} className="rounded-2xl border bg-slate-50 p-4 hover:border-[#C59A3A]"><p className="text-xs font-bold uppercase text-slate-500">{titulo}</p><p className="mt-1 text-3xl font-black text-[#74122A]">{valor}</p><p className="text-xs text-slate-600">{detalle}</p></Link>; }

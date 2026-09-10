@@ -8,6 +8,7 @@ import {
   type PersonaReporte,
 } from "@/api/ReporteApi";
 import ReporteTallasPrimeraCuota from "@/components/reportes/ReporteTallasPrimeraCuota";
+import ReportePagosCronologicos from "@/components/reportes/ReportePagosCronologicos";
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
@@ -124,6 +125,7 @@ export default function ReportesView() {
 
   return <main className="space-y-5">
     <ReporteTallasPrimeraCuota />
+    <ReportePagosCronologicos />
     <section className="print:hidden">
       <h1 className="text-3xl font-black text-[#74122A]">Constructor de reportes</h1>
       <p className="text-sm text-slate-600">Marca únicamente las listas que deseas revisar o imprimir. “Todos” incluye cada reporte.</p>

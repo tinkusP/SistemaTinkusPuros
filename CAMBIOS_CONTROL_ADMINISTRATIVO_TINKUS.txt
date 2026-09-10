@@ -1,0 +1,93 @@
+CAMBIOS DE CONTROL ADMINISTRATIVO - TINKUS PUROS Y NATURALES
+Fecha: 10 de septiembre de 2026
+
+RESUMEN
+Se amplió el sistema existente sin reemplazar su arquitectura ni duplicar identidades, cuotas,
+tallas, bloques o entregas. La gestión activa continúa siendo la referencia de las operaciones.
+
+FUNCIONES IMPLEMENTADAS
+1. Lista administrativa de fraternos sin bloque, con filtros, exportación Excel, estado de primera
+   cuota verificada, talla válida, condición histórica y asignación directa con control de capacidad.
+2. Pack de cuatro artículos: POLERA, CHAMARRA, CHALINA y ETIQUETA PUROS. La entrega es individual,
+   idempotente y muestra PENDIENTE, ENTREGA_PARCIAL o PACK_COMPLETO.
+3. Requisitos configurables de 0 a 3 cuotas verificadas por artículo. Valores iniciales: 2 para
+   polera/chamarra y 3 para chalina/etiqueta. No se alteraron fórmulas ni estados de dinero.
+4. Eventos especiales independientes de la asistencia diaria: creación, apertura, cierre, búsqueda
+   por nombre/CI y registro único por evento.
+5. Clasificación NUEVO, ANTIGUO o REINCORPORADO calculada desde el historial real de gestiones.
+6. Reporte cronológico de primera, segunda y tercera cuota y de pago completo; solo considera pagos
+   VERIFICADOS y permite exportar cuatro hojas Excel.
+7. Ficha integral del fraterno con identidad, condición histórica, bloque, tallas, pack y línea de
+   tiempo de pagos, asignación, entregas y eventos.
+8. Centro de control en el dashboard: pendientes de bloque, revisión de pagos y estado de packs.
+9. Se conservó y reutilizó el respaldo ZIP organizado existente, que incluye colecciones, índices,
+   documentos almacenados y manifiesto restaurable. No se ejecutó exportación contra producción.
+
+MODELOS CREADOS
+- Evento: gestión, nombre, tipo, fecha, horario, estado, creador y cierre.
+- AsistenciaEvento: evento, usuario/fraterno, método y hora; índice único parcial por evento+usuario.
+
+MODELOS MODIFICADOS
+- ConfiguracionPago: requisitosEntregaIndumentaria opcional con valores por defecto seguros.
+- EntregaIndumentaria: gestionId opcional e índice por gestión/fecha.
+
+ENDPOINTS NUEVOS
+- GET/POST /api/eventos
+- GET /api/eventos/:id
+- PATCH /api/eventos/:id/estado
+- POST /api/eventos/:id/asistencias
+- GET /api/guias/bloques/pendientes
+- PUT /api/indumentaria/configuracion-entregas
+- GET /api/reportes/pagos-cronologicos
+- GET /api/reportes/centro-control
+- GET /api/fraternos/:id/ficha-integral
+
+PERMISOS
+- VISTA_EVENTOS
+- EVENTOS_GESTIONAR (incluye automáticamente VISTA_EVENTOS)
+Los endpoints de eventos están además protegidos por autenticación y administración en backend.
+
+SERVICIOS CREADOS
+- CondicionFraternoService
+- EntregaPackService
+- PendientesBloqueService
+- ReportePagosCronologicoService
+
+FRONTEND
+- Vista Eventos y asistencias especiales.
+- Panel Personas pendientes de asignación dentro de Guías y bloques.
+- Pack, requisitos de entrega y validación definitiva en backend dentro de Indumentaria.
+- Reporte cronológico con Excel dentro de Reportes.
+- Centro de control en Dashboard.
+- Ficha integral dentro de la ventana Gestionar fraterno.
+
+PRUEBAS Y VALIDACIÓN
+- npm test --prefix backend: 12 archivos aprobados, 0 fallidos.
+- npm run build --prefix backend: aprobado.
+- npm run build --prefix frontend: aprobado.
+- frontend/node_modules/.bin/tsc --noEmit -p frontend/tsconfig.json: aprobado.
+- git diff --check: aprobado.
+- Nueva prueba control-administrativo: clasificación histórica, estados del pack y talla válida.
+
+MIGRACIONES Y DATOS
+No se requiere una migración destructiva. Los campos nuevos son opcionales y tienen valores por
+defecto; Mongoose creará los nuevos índices al sincronizar esquemas según la configuración vigente.
+No se conectó a producción, no se modificaron usuarios y no se recalcularon pagos históricos.
+
+RIESGOS Y PASOS MANUALES
+- Tras desplegar, comprobar que la cuenta administradora tenga acceso al menú Eventos.
+- Validar en una copia o entorno de prueba la creación de índices antes de una ventana crítica.
+- Los rankings dependen de fechaPago registrada y solo incluyen revisiones VERIFICADO.
+- Confirmar en Railway y Vercel que ambos proyectos siguen la rama main del repositorio tinkusP.
+
+ROLLBACK
+Revertir el commit de esta entrega restaura el código anterior. Los documentos Evento y
+AsistenciaEvento creados después del despliegue pueden conservarse sin afectar módulos antiguos.
+No eliminar colecciones automáticamente; si se decide retirarlas, exportar primero un ZIP completo.
+
+NO MODIFICADO
+- Fórmulas o montos de planes de pago.
+- Aceptaciones históricas de términos.
+- Relaciones existentes de usuario, preregistro y fraterno.
+- Datos de producción, R2, credenciales o variables .env.
+- Archivos personales, fotografías, PDFs, ZIP y respaldos locales no relacionados.

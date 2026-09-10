@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, crearEntrega, crearPrenda, guardarTallaUsuario, obtenerIndumentaria, type Entrega, type Prenda, type UsuarioIndumentaria } from "@/api/IndumentariaApi";
+import { cambiarBloqueoTalla, cambiarEntrega, configurarRegistroTallas, configurarRequisitosEntrega, crearEntrega, crearPrenda, guardarTallaUsuario, obtenerIndumentaria, type ArticuloPack, type Entrega, type Prenda, type UsuarioIndumentaria } from "@/api/IndumentariaApi";
 import { TALLAS_DISPONIBLES, TALLA_SIN_REGISTRAR } from "@/constants/tallas";
 
 type Seccion = "POLERA" | "CHAMARRA" | "INDUMENTARIA";
@@ -17,6 +17,7 @@ export default function IndumentariaView() {
   const [tallasLocales, setTallasLocales] = useState<TallasLocales>({});
   const [nuevaPrenda, setNuevaPrenda] = useState("");
   const [configTallas, setConfigTallas] = useState<{ habilitado: boolean; sinFechaLimite: boolean; fechaLimite: string }>({ habilitado: false, sinFechaLimite: true, fechaLimite: "" });
+  const [requisitos, setRequisitos] = useState<Record<ArticuloPack, number>>({ POLERA: 2, CHAMARRA: 2, CHALINA: 3, "ETIQUETA PUROS": 3 });
 
   const resumen = useQuery({ queryKey: ["indumentaria"], queryFn: obtenerIndumentaria });
   const mutacion = useMutation({
@@ -39,6 +40,7 @@ export default function IndumentariaView() {
     const fecha = configuracionServidor.fechaLimite ? new Date(configuracionServidor.fechaLimite) : null;
     setConfigTallas({ habilitado: configuracionServidor.habilitado, sinFechaLimite: !fecha, fechaLimite: fecha ? new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "" });
   }, [configuracionServidor]);
+  useEffect(() => { if (resumen.data?.requisitosEntrega) setRequisitos(resumen.data.requisitosEntrega); }, [resumen.data?.requisitosEntrega]);
 
   const usuarios = useMemo(() => {
     const texto = busqueda.trim().toLocaleUpperCase("es-BO");
@@ -78,7 +80,7 @@ export default function IndumentariaView() {
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
-          {(["POLERA", "CHAMARRA", "INDUMENTARIA"] as Seccion[]).map((opcion) => <button key={opcion} type="button" onClick={() => setSeccion(opcion)} className={`rounded-xl px-5 py-3 text-sm font-black transition ${seccion === opcion ? "bg-[#841534] text-white shadow" : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-[#841534]"}`}>{opcion === "INDUMENTARIA" ? "Indumentaria del traje" : opcion[0] + opcion.slice(1).toLowerCase()}</button>)}
+          {(["POLERA", "CHAMARRA", "INDUMENTARIA"] as Seccion[]).map((opcion) => <button key={opcion} type="button" onClick={() => setSeccion(opcion)} className={`rounded-xl px-5 py-3 text-sm font-black transition ${seccion === opcion ? "bg-[#841534] text-white shadow" : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-[#841534]"}`}>{opcion === "INDUMENTARIA" ? "Pack de indumentaria" : opcion[0] + opcion.slice(1).toLowerCase()}</button>)}
         </div>
         <label className="relative block w-full lg:max-w-md"><span className="pointer-events-none absolute left-4 top-3 text-slate-400">⌕</span><input value={busqueda} onChange={(evento) => setBusqueda(evento.target.value)} placeholder="Buscar por nombre, CI o número de fraterno..." className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-4 outline-none focus:border-[#841534]" /></label>
       </div>
@@ -92,6 +94,7 @@ export default function IndumentariaView() {
     </section>
 
     {seccion === "INDUMENTARIA" && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <div className="mb-4"><h2 className="font-black text-[#841534]">Cuotas verificadas requeridas por artículo</h2><div className="mt-2 flex flex-wrap gap-3">{Object.entries(requisitos).map(([articulo, cantidad])=><label key={articulo} className="text-xs font-bold">{articulo}<select value={cantidad} onChange={e=>setRequisitos({...requisitos,[articulo]:Number(e.target.value)})} className="ml-2 rounded-lg border bg-white p-2">{[0,1,2,3].map(n=><option key={n} value={n}>{n}</option>)}</select></label>)}<button type="button" onClick={()=>mutacion.mutate(()=>configurarRequisitosEntrega(requisitos))} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white">Guardar requisitos</button></div></div>
       <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(evento) => { evento.preventDefault(); const nombre = nuevaPrenda.trim().toUpperCase(); if (!nombre) return; mutacion.mutate(() => crearPrenda({ nombre, requiereTalla: true }), { onSuccess: () => setNuevaPrenda("") }); }}>
         <label className="flex-1 text-sm font-bold text-slate-700">Agregar prenda al traje<input value={nuevaPrenda} onChange={(evento) => setNuevaPrenda(evento.target.value.toUpperCase())} placeholder="EJ.: MONTERA, CHALINA, PANTALÓN..." className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 outline-none" /></label>
         <button disabled={mutacion.isPending} className="rounded-xl bg-[#841534] px-5 py-2.5 font-bold text-white disabled:opacity-50">+ Agregar prenda</button>
@@ -106,7 +109,6 @@ export default function IndumentariaView() {
           const prendaPrincipal = prendas.find((item) => item.nombre === seccion);
           const fraternoId = usuario.fraterno?._id;
           const entregada = prendaPrincipal && fraternoId ? entregaActual(fraternoId, prendaPrincipal._id) : undefined;
-          const pagoCompleto = Boolean(usuario.cuota && usuario.cuota.saldo <= 0 && usuario.cuota.estado === "PAGADA");
           const tallaRegistrada = buscarTalla(usuario);
           const edicionBloqueada = tallaRegistrada?.edicionBloqueada === true;
           return <tr key={usuario._id} className="border-b border-slate-100 align-top hover:bg-slate-50/70">
@@ -115,7 +117,7 @@ export default function IndumentariaView() {
             {seccion !== "INDUMENTARIA" && <>
               <td className="p-4"><select value={tallaCampo(usuario, tipo) || TALLA_SIN_REGISTRAR} onChange={(evento) => actualizarTalla(usuario, tipo, evento.target.value)} aria-label={`Talla de ${tipo} de ${nombreUsuario(usuario)}`} className="w-36 rounded-lg border border-slate-300 px-3 py-2 uppercase outline-none focus:border-[#841534]"><option value={TALLA_SIN_REGISTRAR}>SIN REGISTRAR</option>{TALLAS_DISPONIBLES.map((talla) => <option key={talla} value={talla}>{talla}</option>)}</select><button type="button" disabled={!usuario.administrable || mutacion.isPending} onClick={() => guardarTallasUsuario(usuario)} className="ml-2 rounded-lg border border-[#841534] px-3 py-2 text-xs font-bold text-[#841534] disabled:opacity-40">Guardar talla</button>{fraternoId && <button type="button" disabled={mutacion.isPending} onClick={() => mutacion.mutate(() => cambiarBloqueoTalla(fraternoId, !edicionBloqueada))} className={`ml-2 rounded-lg px-3 py-2 text-xs font-bold text-white ${edicionBloqueada?"bg-emerald-700":"bg-slate-700"}`}>{edicionBloqueada?"Habilitar edición":"Bloquear edición"}</button>}</td>
               <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${usuario.habilitado ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{usuario.estadoHabilitacion === "HABILITADO" ? "HABILITADO PARA TALLA" : usuario.estadoHabilitacion.replace("_", " ")}</span><p className="mt-1 max-w-xs text-xs text-slate-500">{usuario.motivo}</p></td>
-              <td className="p-4 text-right">{fraternoId ? <button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && (!tallaCampo(usuario, tipo) || !pagoCompleto))} onClick={() => prendaPrincipal && alternarEntrega(fraternoId, prendaPrincipal, tallaCampo(usuario, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : pagoCompleto ? "Marcar entregado" : "Pago pendiente"}</button> : <span className="text-xs text-slate-400">Sin perfil fraterno</span>}</td>
+              <td className="p-4 text-right">{fraternoId ? <button type="button" disabled={!prendaPrincipal || mutacion.isPending || (!entregada && !tallaCampo(usuario, tipo))} onClick={() => prendaPrincipal && alternarEntrega(fraternoId, prendaPrincipal, tallaCampo(usuario, tipo))} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 ${entregada ? "bg-slate-600" : "bg-emerald-600"}`}>{entregada ? "Marcar devuelto" : "Marcar entregado"}</button> : <span className="text-xs text-slate-400">Sin perfil fraterno</span>}</td>
             </>}
             {seccion === "INDUMENTARIA" && <td className="p-4">{fraternoId ? <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{prendasTraje.map((prenda) => { const actual = entregaActual(fraternoId, prenda._id); return <div key={prenda._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"><div><p className="text-xs font-black text-slate-800">{prenda.nombre}</p><EstadoEntrega entrega={actual} compacto /></div><button type="button" disabled={mutacion.isPending} onClick={() => alternarEntrega(fraternoId, prenda)} className={`rounded-lg px-3 py-2 text-xs font-bold text-white ${actual ? "bg-slate-600" : "bg-emerald-600"}`}>{actual ? "Devolver" : "Entregar"}</button></div>; })}{!prendasTraje.length && <p className="col-span-full text-sm text-slate-500">Agrega las prendas que componen el traje.</p>}</div> : <p className="text-sm text-slate-500">No habilitado para entrega: no tiene perfil fraterno.</p>}</td>}
           </tr>;

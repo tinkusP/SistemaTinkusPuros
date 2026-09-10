@@ -141,6 +141,11 @@ const opcionesMenu: OpcionMenu[] = [
     icono: "👕",
   },
   {
+    nombre: "Eventos especiales",
+    ruta: "/eventos",
+    icono: "📅",
+  },
+  {
     nombre: "Anuncios",
     ruta: "/anuncios",
     icono: "📣",
@@ -237,7 +242,7 @@ export default function AppLayout() {
           .trim()
           .toUpperCase()
       : "";
-  const permisoPorRuta:Record<string,string>={"/escaner-qr":"TALLAS_REGISTRAR","/tokens-registro":"TOKENS_GESTIONAR","/dashboard":"VISTA_DASHBOARD","/gestion":"VISTA_GESTIONES","/perfil-usuario":"VISTA_USUARIOS","/facultades":"VISTA_FACULTADES","/rol":"VISTA_ROLES","/preregistros":"VISTA_PREREGISTROS","/postulantes-guia":"VISTA_POSTULANTES_GUIA","/asistencias-postulantes-guia":"VISTA_ASISTENCIA_GUIA","/guias-bloques":"VISTA_GUIAS_BLOQUES","/directorio-bloques-guia":"VISTA_DIRECTORIO_BLOQUES","/mi-bloque-guia":"VISTA_MI_BLOQUE_GUIA","/mis-fraternos-guia":"VISTA_MI_BLOQUE_GUIA","/indumentaria":"VISTA_INDUMENTARIA","/anuncios":"VISTA_ANUNCIOS","/auditoria":"VISTA_AUDITORIA","/cuotas":"VISTA_PAGOS","/asistencias":"VISTA_ASISTENCIAS","/fraternos":"VISTA_FRATERNOS","/traspasos":"VISTA_TRASPASOS","/pasos":"VISTA_PASOS","/cancionero":"VISTA_CANCIONERO","/reportes":"VISTA_REPORTES"};
+  const permisoPorRuta:Record<string,string>={"/escaner-qr":"TALLAS_REGISTRAR","/tokens-registro":"TOKENS_GESTIONAR","/dashboard":"VISTA_DASHBOARD","/gestion":"VISTA_GESTIONES","/perfil-usuario":"VISTA_USUARIOS","/facultades":"VISTA_FACULTADES","/rol":"VISTA_ROLES","/preregistros":"VISTA_PREREGISTROS","/postulantes-guia":"VISTA_POSTULANTES_GUIA","/asistencias-postulantes-guia":"VISTA_ASISTENCIA_GUIA","/guias-bloques":"VISTA_GUIAS_BLOQUES","/directorio-bloques-guia":"VISTA_DIRECTORIO_BLOQUES","/mi-bloque-guia":"VISTA_MI_BLOQUE_GUIA","/mis-fraternos-guia":"VISTA_MI_BLOQUE_GUIA","/indumentaria":"VISTA_INDUMENTARIA","/eventos":"VISTA_EVENTOS","/anuncios":"VISTA_ANUNCIOS","/auditoria":"VISTA_AUDITORIA","/cuotas":"VISTA_PAGOS","/asistencias":"VISTA_ASISTENCIAS","/fraternos":"VISTA_FRATERNOS","/traspasos":"VISTA_TRASPASOS","/pasos":"VISTA_PASOS","/cancionero":"VISTA_CANCIONERO","/reportes":"VISTA_REPORTES"};
   const esPropietarioRespaldo = String(usuario?.email ?? "").trim().toLowerCase() === "devdjcod@gmail.com";
   const tienePermisosOperativos = permisosUsuario.size > 0;
   const rutasExclusivasGuia = new Set(["/mi-bloque-guia", "/directorio-bloques-guia", "/mis-fraternos-guia"]);

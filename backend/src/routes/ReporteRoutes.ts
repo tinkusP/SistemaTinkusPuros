@@ -6,6 +6,7 @@ import { handleInputErrors } from "../middleware/validation";
 import { reporteEjecutivo, reporteTallasPrimeraCuota } from "../controllers/ReporteController";
 import { estadoAlmacenamiento, reporteTallas } from "../controllers/AlmacenamientoController";
 import { reporteFormacion } from "../controllers/ReporteFormacionController";
+import { centroControl, pagosCronologicos } from "../controllers/AdministracionController";
 
 const router = Router();
 router.get("/formacion", authenticate, soloAdministracion, reporteFormacion);
@@ -13,5 +14,7 @@ router.get("/tallas", authenticate, soloAdministracion, reporteTallas);
 router.get("/tallas-primera-cuota", authenticate, soloAdministradorReal, query("gestionId").optional().isMongoId(), handleInputErrors, reporteTallasPrimeraCuota);
 router.get("/almacenamiento", authenticate, soloAdministracion, estadoAlmacenamiento);
 router.get("/ejecutivo", authenticate, soloAdministracion, query("gestionId").optional().isMongoId(), handleInputErrors, reporteEjecutivo);
+router.get("/pagos-cronologicos", authenticate, soloAdministracion, pagosCronologicos);
+router.get("/centro-control", authenticate, soloAdministracion, centroControl);
 
 export default router;

@@ -2,6 +2,7 @@ import mongoose, { Schema } from "mongoose";
 export const ESTADOS_ENTREGA = ["ENTREGADO", "DEVUELTO", "PERDIDO", "DANADO"] as const;
 const schema = new Schema({
   fraternoId: { type: Schema.Types.ObjectId, ref: "Fraterno", required: true },
+  gestionId: { type: Schema.Types.ObjectId, ref: "Gestion" },
   prendaId: { type: Schema.Types.ObjectId, ref: "PrendaIndumentaria", required: true },
   cantidad: { type: Number, min: 1, default: 1 },
   evento: { type: String, enum: ["ENTRADA_UNIVERSITARIA"], default: "ENTRADA_UNIVERSITARIA", immutable: true },
@@ -15,4 +16,5 @@ const schema = new Schema({
   observacion: { type: String, trim: true, maxlength: 700 },
 }, { versionKey: false, collection: "entregas_indumentaria" });
 schema.index({ fraternoId: 1, prendaId: 1 }, { unique: true, partialFilterExpression: { estado: "ENTREGADO" } });
+schema.index({ gestionId: 1, fechaEntrega: -1 });
 export default mongoose.model("EntregaIndumentaria", schema);

@@ -66,6 +66,7 @@ import CancioneroView from "./views/guia/CancioneroView";
 import TokenRegistroView from "./views/tokens/TokenRegistroView";
 import RespaldoView from "./views/respaldo/RespaldoView";
 import ModoCapacitacionView from "./views/capacitacion/ModoCapacitacionView";
+import EventosView from "./views/eventos/EventosView";
 import ModoCapacitacionBanner from "./components/ModoCapacitacionBanner";
 import PortalFormacionLayout from "./layouts/PortalFormacionLayout";
 const MiCredencialQrView=lazy(()=>import("./views/perfilUsuario/MiCredencialQrView"));
@@ -188,6 +189,7 @@ export default function Router() {
             <Route path="/reportes" element={<ReportesView />} />
             <Route path="/respaldo" element={<RespaldoView />} />
             <Route path="/modo-capacitacion" element={<ModoCapacitacionView />} />
+            <Route path="/eventos" element={<EventosView />} />
             <Route path="/tokens-registro" element={<TokenRegistroView />} />
             <Route path="/indumentaria" element={<IndumentariaView />} />
             <Route path="/pasos" element={<PasosVideoView />} />

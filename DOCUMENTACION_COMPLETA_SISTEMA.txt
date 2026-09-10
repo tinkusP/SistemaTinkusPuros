@@ -1,0 +1,666 @@
+DOCUMENTACIÓN COMPLETA DEL SISTEMA TINKUS PUROS Y NATURALES
+Auditoría técnica de código fuente
+Fecha de revisión: 10 de septiembre de 2026
+
+ALCANCE Y MÉTODO
+================
+Este documento describe el estado observado del repositorio /home/jimmy/tinkus.
+La revisión fue estática y no modificó reglas de negocio, datos ni configuración de producción.
+Se inspeccionaron código fuente, manifiestos, rutas, modelos, pruebas y archivos de despliegue.
+No se leyeron ni se reproducen contraseñas, tokens, cadenas de conexión ni valores de archivos .env.
+Los respaldos, documentos personales, binarios, node_modules, dist y estados locales de herramientas
+se contabilizan como artefactos, pero no se consideran código fuente activo.
+
+1. RESUMEN DEL PROYECTO
+=======================
+Sistema web monorepo para administrar la fraternidad Tinkus Puros y Naturales. Cubre cuentas,
+roles, gestiones, prerregistros, fraternos, postulantes a guía, guías, bloques administrativos,
+cuotas y comprobantes, QR, asistencias, tallas e indumentaria, anuncios, reportes, formación,
+tokens de registro, traspasos, auditoría y respaldos.
+
+Aplicaciones:
+- backend/: API REST Node.js/Express/TypeScript con MongoDB mediante Mongoose.
+- frontend/: SPA React/TypeScript/Vite.
+- r2-worker/: Worker Cloudflare para almacenamiento privado en R2.
+
+Métricas del código auditado:
+- 131 archivos TypeScript en backend/src.
+- 121 archivos TypeScript/TSX en frontend/src.
+- 1 archivo TypeScript en r2-worker/src.
+- 41.935 líneas aproximadas en los tres árboles fuente.
+- 27 modelos MongoDB.
+- 22 archivos de rutas, de los cuales 21 se montan en server.ts.
+- 26 controladores, 17 servicios y 12 middlewares de backend.
+- 50 vistas, 22 componentes, 19 módulos API y 10 archivos de tipos del frontend.
+- 148 operaciones HTTP detectadas en routers; 141 pertenecen a routers montados y 7 a loginRoutes heredado.
+- 11 archivos de pruebas backend; 11/11 pasaron durante esta auditoría.
+
+Estado general: el sistema tiene cobertura funcional amplia y reglas defensivas importantes, pero
+mantiene deuda por archivos monolíticos, duplicación histórica, tipos flexibles y controles de acceso
+repartidos entre frontend y backend. El backend compila; el chequeo TypeScript estricto del frontend
+no pasa actualmente y sus errores se detallan en Riesgos detectados.
+
+2. TECNOLOGÍAS UTILIZADAS
+=========================
+Backend:
+- Node.js >=20 y <23, TypeScript 5.9, Express 5.1, Mongoose 8.16/MongoDB.
+- JWT para sesión, bcrypt para contraseñas, express-validator para validación.
+- Multer y Sharp para archivos/imágenes; Archiver/Unzipper para respaldos.
+- Nodemailer para correo, Swagger para documentación, Morgan y compression.
+
+Frontend:
+- React 19, React Router 6, Vite 4, TypeScript.
+- Axios y TanStack React Query; React Hook Form y Zod.
+- Tailwind CSS, PrimeReact, Headless UI, Heroicons/Lucide, Framer Motion.
+- ExcelJS, jsPDF y jspdf-autotable para exportaciones.
+- html5-qrcode y qrcode; Recharts y tablas TanStack/DataTable.
+- Toastify y SweetAlert2 para mensajes.
+
+Infraestructura:
+- Railway/Railpack para backend, Vercel para frontend y Cloudflare Worker/R2 para archivos.
+- Docker Compose y HTTPS local opcionales para funcionamiento en red local.
+
+3. ESTRUCTURA DE CARPETAS
+=========================
+/
+|- backend/
+|  |- src/config: MongoDB, CORS y Swagger.
+|  |- src/models: esquemas e índices MongoDB.
+|  |- src/routes: endpoints, validación y autorización.
+|  |- src/controllers: coordinación HTTP/casos de uso.
+|  |- src/services: reglas reutilizables, consistencia, archivos y reportes.
+|  |- src/middleware: auth, permisos, auditoría y uploads.
+|  |- src/security: catálogo central de permisos.
+|  |- src/scripts: migraciones, auditorías y reparaciones explícitas.
+|  |- tests: pruebas Node sin tocar producción.
+|  |- public/uploads y storage/temp: soporte local/temporal de archivos.
+|- frontend/
+|  |- src/views: páginas enrutadas.
+|  |- src/components: formularios y piezas reutilizables.
+|  |- src/api: adaptadores HTTP.
+|  |- src/types: contratos TypeScript.
+|  |- src/layouts: panel, autenticación, comunicados y formación.
+|  |- src/hooks, Context, lib, constants, security, utils.
+|  |- public: recursos estáticos.
+|- r2-worker/: proxy autenticado hacia el bucket R2.
+|- docs/: arquitectura, módulos y handoff existentes.
+|- documentacion/: utilidades de diagramación.
+|- servicios-fedora, certificados-locales y scripts raíz: operación local.
+|- artifacts, output_acta_reunion, ZIP/PDF/DOCX/JPEG y respaldos: artefactos locales, no aplicación.
+
+4. ARQUITECTURA GENERAL
+=======================
+Patrón principal: ruta -> middleware -> controlador -> servicio/modelo -> MongoDB/R2.
+El frontend consume JSON y multipart con Axios; React Query mantiene caché y refrescos.
+PerfilUsuario es la identidad central. Rol y Gestion se referencian desde el perfil. La participación
+se agrega mediante Preregistro y, si corresponde, Fraterno. Cuotas, tallas, guía y bloque se relacionan
+con ese núcleo sin duplicar la identidad.
+
+El backend sirve /uploads primero mediante R2 y luego por almacenamiento local como fallback. En modo
+local de producción puede servir frontend/dist. En nube, frontend y backend se despliegan separados.
+Las transacciones Mongo se usan en operaciones críticas y algunos servicios contienen fallback para
+instancias Mongo que no soportan transacciones.
+
+5. FRONTEND
+===========
+Entrada: src/main.tsx. Rutas: src/router.tsx. Cliente: src/lib/axios.ts.
+Layouts: AppLayout (panel), AuthLayout, ComunicadosView y PortalFormacionLayout.
+
+Inventario de vistas (50):
+- Raíz: DashboardView.
+- auth: LoginView, CambiarPasswordObligatorioView.
+- perfilUsuario: AdminMiPerfilView, CrearCuenta, CrearPerfilUsuarioView, EditPerfilUsuarioView,
+  EscanerQrView, FacultadesView, MiCredencialQrView, PerfilUsuarioView, PerfilView.
+- gestion: GestionView, CrearGestionView, EditarGestionView.
+- preregistro: PreregistroView, CrearPreregistroView, EditarPreregistroView, MisPreregistrosView.
+- guia: PostulanteGuiaView, DetallePostulanteGuiaView, GuiaBloqueView, MiBloqueGuiaView,
+  DirectorioBloquesGuiaView, MisFraternosGuiaView, AsistenciaPostulanteGuiaView,
+  MiAsistenciaPostulanteGuiaView, PasosVideoView, CancioneroView.
+- fraterno: FraternoView, TraspasoView, AsistenciaView, MiAsistenciaView, MiBloqueFraternoView.
+- cuota: CuotaView, DetalleCuotaView, MisPagosView.
+- indumentaria: IndumentariaView, MisTallasView.
+- comunicacion: AnuncioAdminView, AuditoriaView, NotificacionesView.
+- reportes: ReportesView. respaldo: RespaldoView. rol: tres vistas. tokens: TokenRegistroView.
+- capacitacion: ModoCapacitacionView.
+- Existe además views/Fraterno/ComunicadosView.tsx con mayúscula, distinto del layout activo.
+
+Componentes (22): ErrorMessage, Loading, Logo, MenuListDashboard, ModoCapacitacionBanner, NavMenu,
+ThemeToggle, UsuarioMiniatura, card; ConfiguracionQrPago; GestionDetailModal/GestionForm;
+CuentaPerfilForm, EscanerTokenRegistro, PerfilUsuarioDetalleModal, PerfilUsuarioForm;
+AsignarEstadoPreregistroModal, PreregistroDetalleModal, PreregistroForm;
+ReporteTallasPrimeraCuota; RolDetailModal y RolForm.
+
+APIs (19): AsistenciaPostulanteGuiaApi, BloqueGuiaApi, ConfiguracionPagoApi, CredencialQrApi, CuotaApi,
+FacultadApi, FraternoApi, GestionApi, GuiaApi, IndumentariaApi, InscripcionApi, PasoVideoApi,
+PerfilUsuarioApi, PreregistroApi, ReporteApi, RespaldoApi, RolApi, TokenRegistroApi y apiError.
+
+Tipos (10): BloqueGuiaType, CommonType, CuotaType, DocumentoUsuarioType, FraternoType, GestionType,
+GuiaType, PerfilUsuarioType, PreregistroType y RolType.
+
+6. BACKEND
+==========
+server.ts configura CORS, JSON, compresión, logging, /uploads, salud, auditoría global, rutas,
+manejo de Multer, frontend local y Swagger. index.ts inicia HTTP o HTTPS según configuración.
+
+Controladores (26): Almacenamiento, Asistencia, AsistenciaPostulanteGuia, AutorizacionEdicionPerfil,
+Capacitacion, CompletarPerfil, Comunicacion, ConfiguracionPago, CredencialQr, Cuota, CuotaMasiva,
+Facultad, Fraterno, Gestion, Guia, Indumentaria, PasoVideo, PerfilUsuario, PostulanteGuia,
+Preregistro, Reporte, ReporteFormacion, Respaldo, Rol, TokenRegistro y Traspaso.
+
+Servicios (17): Almacenamiento, AsignacionBloque, Auditoria, Bloque, Capacitacion, CodigoFraterno,
+Fraterno, GuiaBloque, IndiceBloque, IndiceTalla, IndumentariaUsuarios, PlanPagos, Reporte,
+ReporteTallasPrimeraCuota, SincronizacionCuota, eliminacionUsuario y pdfService.
+
+Middlewares relevantes: auth, authorizePermission, soloAdministracion, soloAdministradorReal,
+administracionOGuia, soloPropietarioRespaldo, auditarActividad, validation y uploads específicos.
+
+Scripts operativos: migraciones de archivos por CI, planes y bloques/permisos; auditorías de bloques,
+integridad, tallas, R2 y reportes; reparación de promoción a fraterno; desbloqueo de login; limpieza y
+verificación de eliminación. Deben ejecutarse con respaldo, variables del entorno correcto y modo de
+solo lectura cuando el script lo permita.
+
+7. BASE DE DATOS
+================
+MongoDB mediante Mongoose. No hay migrador versionado tradicional: las migraciones son scripts TS y
+dos de ellas se ejecutan en preDeploy de Railway. Se usa eliminación lógica en múltiples entidades,
+con fechaEliminado/usuarioEliminador, pero no de forma uniforme: Bloque puede eliminarse físicamente.
+
+Colecciones explícitas observadas incluyen perfil_usuarios, roles, gestiones, documentos_usuarios,
+preregistros, fraternos, cuotas, detalle_cuotas, aceptaciones_terminos_pago, anuncios, notificaciones,
+asistencias, pasos_videos, tokens_registro y traspasos. Otros modelos usan pluralización de Mongoose.
+
+Índices críticos:
+- PerfilUsuario: CI y email únicos.
+- Rol: código único. Gestion: unicidad de año/nombre según esquema.
+- Preregistro: número único y usuario+gestión único activo.
+- Fraterno: preregistro y número únicos; usuario+gestión único.
+- Guia: preregistro, usuario y postulante únicos según condiciones.
+- Bloque: nombre+gestión único; guía única y guiasIds únicos si la lista existe.
+- DetalleBloque: una asignación activa por fraterno; índice bloque+género.
+- Cuota: una por preregistro; DetalleCuota: cuota+número de pago único.
+- TallaFraterno: una por fraterno y/o usuario mediante índices parciales.
+- AceptacionTerminosPago: usuario+gestión+versión única.
+
+8. MODELOS Y RELACIONES
+=======================
+Inventario de los 27 modelos:
+- PerfilUsuario: identidad, contacto, origen, sexo, estado, credenciales, roles, gestiones y auditoría.
+- Rol: código, nombre, permisos, estado y marca de rol del sistema.
+- Gestion: periodo, fechas, cupos H/M, estado y ventana de inscripción.
+- DocumentoUsuario: carnet anverso/reverso o registro universitario vinculado al perfil.
+- AutorizacionEdicionPerfil: autorización temporal y granular para editar perfil.
+- TokenRegistro: cupo/tarifa/plazo que habilita registro y enlaza resultados generados.
+- Preregistro: inscripción de usuario en gestión, número y estado de revisión.
+- Fraterno: membresía aprobada, número de fraterno y estado.
+- Cuota: obligación total, plan, saldo, vencimiento y prórrogas.
+- DetalleCuota: pago individual, método, montos, comprobante y revisión.
+- ConfiguracionPago: importes/QR/términos vigentes por gestión.
+- AceptacionTerminosPago: evidencia inmutable de versión/contenido aceptado.
+- PostulanteGuia: evaluación, puntajes, estado y vínculo al preregistro.
+- MeritoGuia: méritos puntuados del postulante.
+- Guia: persona designada en una gestión.
+- Bloque: agrupación administrativa, guías, contadores, capacidad y estado.
+- DetalleBloque: pertenencia activa/inactiva de fraterno, sin fila ni columna.
+- Asistencia: entrada/salida por usuario, gestión y fecha.
+- TallaFraterno: tallas de polera/chamarra, bloqueo y editor.
+- PrendaIndumentaria: catálogo de prendas.
+- EntregaIndumentaria: entrega/devolución de prenda al fraterno.
+- Anuncio: comunicación segmentada, publicación, vigencia y afiche.
+- Notificacion: mensaje individual y lectura.
+- Auditoria: acción, módulo, entidad, antes/después, IP y agente.
+- PasoVideo: contenido de pasos o canciones por archivo/YouTube.
+- Traspaso: solicitud y resolución de transferencia de cupo/pagos.
+- Secuencia: contador atómico de códigos/números.
+
+Mapa conceptual:
+PerfilUsuario -> Rol[] / Gestion[] / DocumentoUsuario[] / AutorizacionEdicionPerfil[]
+PerfilUsuario + Gestion -> Preregistro -> Cuota -> DetalleCuota[]
+Preregistro -> Fraterno -> DetalleBloque -> Bloque -> Guia[] -> PerfilUsuario
+Preregistro -> PostulanteGuia -> MeritoGuia[] -> Guia
+PerfilUsuario o Fraterno -> TallaFraterno
+Fraterno -> EntregaIndumentaria -> PrendaIndumentaria
+PerfilUsuario + Gestion -> Asistencia
+ConfiguracionPago + PerfilUsuario + Gestion -> AceptacionTerminosPago
+
+9. AUTENTICACIÓN
+================
+La ruta activa de login es POST /api/perfilusuario/login; loginRoutes.ts es heredado y no está montado.
+El frontend guarda AUTH_TOKEN y AUTH_USER en localStorage. Axios adjunta Authorization: Bearer <token>.
+auth.ts verifica JWT_SECRET, carga PerfilUsuario activo con roles poblados y lo asigna a req.usuario.
+El endpoint GET /api/perfilusuario/usuario hidrata la sesión para useAuth/React Query.
+
+Controles adicionales: intentosFallidos, bloqueadoHasta, ultimoLogin, requiereCambioPassword y cambio
+obligatorio. El modo capacitación agrega cabeceras X-Modo-Capacitacion-*; el backend limita su uso a
+administradores y crea una vista impersonada reducida. Cerrar sesión registra auditoría y elimina el
+token local. Riesgo: localStorage es accesible ante XSS; CSP y sanitización deben considerarse.
+
+10. ROLES Y PERMISOS
+====================
+Los roles son documentos configurables y un usuario puede tener múltiples. Códigos especiales
+reconocidos: ADMIN/ADMINISTRADOR/SUPERADMIN/SUPERADMINISTRADOR y GUIA.
+
+Catálogo backend: 53 permisos aproximadamente, agrupados en vistas y acciones: usuarios, roles,
+gestiones, preregistros, pagos, guías/bloques, asistencias, tallas, indumentaria, fraternos, traspasos,
+anuncios, auditoría, formación y tokens. normalizarPermisosRol agrega automáticamente la vista asociada
+a una acción. GUIA conserva permisos base compatibles en authorizePermission.
+
+Capas de protección:
+- Backend: authenticate, authorizePermission, soloAdministracion, soloAdministradorReal,
+  administracionOGuia y soloPropietarioRespaldo.
+- Frontend: AppLayout filtra menú por rol/permisos y redirige accesos no visibles.
+
+Hallazgo: permisoPorRuta contiene VISTA_DIRECTORIO_BLOQUES, pero no está en PERMISOS_CATALOGO.
+Además, administradores ven casi todas las opciones por código aunque no se evalúe cada permiso.
+La autorización decisiva debe seguir estando en backend; ocultar menú no es seguridad.
+Respaldo total depende además de un correo propietario codificado en frontend y middleware.
+
+11. MÓDULOS DEL SISTEMA
+=======================
+Formato: objetivo; acceso; frontend; backend/modelos; dependencias; riesgo.
+
+USUARIOS / GESTIÓN INTEGRAL
+Objetivo: alta, consulta, aprobación, edición, documentos, bloqueo y eliminación integral.
+Acceso: administración o permisos USUARIOS_*; usuario consulta/edita su perfil según autorización.
+Frontend: vistas perfilUsuario, PerfilUsuarioApi, formularios y tipos PerfilUsuario/Documento.
+Backend: perfilUsuarioRoutes; PerfilUsuarioController, CompletarPerfil, AutorizacionEdicionPerfil;
+PerfilUsuario, DocumentoUsuario, AutorizacionEdicionPerfil; eliminacionUsuarioService.
+Dependencias: roles, gestión, preregistro, R2, correo, pagos, guía, tallas y auditoría.
+Riesgo: controlador/ruta/API/formularios gigantes y eliminación transversal compleja.
+
+GESTIONES
+Objetivo: periodos, cupos, fechas, apertura/cierre y gestión activa.
+Acceso: permisos GESTIONES_*.
+Frontend: vistas gestion, GestionApi, GestionForm/DetailModal, GestionType.
+Backend: GestionRoutes/Controller y Gestion.
+Dependencias: casi todos los registros operativos.
+Riesgo: controller/routes/type muy grandes; cambiar gestión activa afecta todo el sistema.
+
+PRERREGISTROS Y TOKENS
+Objetivo: inscripción previa y alta controlada mediante token/cupo/tarifa.
+Acceso: usuario sobre sus registros; administración para revisar/editar/eliminar/tokens.
+Frontend: vistas preregistro/tokens, APIs y formularios.
+Backend: PreregistroRoutes/Controller, TokenRegistroRoutes/Controller y modelos homónimos.
+Dependencias: usuario, gestión, cuota, fraterno, documentos y auditoría.
+Riesgo: concurrencia de cupos y consistencia del consumo atómico del token.
+
+FRATERNOS Y TRASPASOS
+Objetivo: membresía aprobada, lista de espera y transferencia de cupo.
+Acceso: administración y consulta propia.
+Frontend: vistas fraterno, FraternoApi y tipos.
+Backend: Fraterno/Traspaso routes, controllers, services y modelos.
+Dependencias: preregistro, cuota, bloque, tallas y usuario.
+Riesgo: no confundir cuenta, preregistro y fraterno; conservar historial al retirar.
+
+GUÍAS, POSTULANTES Y BLOQUES
+Objetivo: selección de guías, agrupación administrativa y asignación de integrantes.
+Acceso: administración supervisa; guía opera solo su bloque; fraterno ve su bloque/guías.
+Frontend: vistas guia y MiBloqueFraterno, BloqueGuiaApi/GuiaApi y tipos.
+Backend: GuiaRoutes/Controller, PostulanteGuiaController, servicios de bloque y modelos relacionados.
+Dependencias: usuario, rol, gestión, preregistro, fraterno, pagos, tallas, auditoría.
+Riesgo: sincronización de guiaId legado con guiasIds y contadores derivados.
+
+PAGOS Y TÉRMINOS
+Objetivo: planes dinámicos, pagos, revisión, saldos, QR, plazos y aceptación versionada.
+Acceso: usuario registra/consulta; administración revisa/configura.
+Frontend: vistas cuota, CuotaApi, ConfiguracionPagoApi/ConfiguracionQrPago.
+Backend: Cuota/ConfiguracionPago routes/controllers, PlanPagos/Sincronizacion services y cuatro modelos.
+Dependencias: preregistro, gestión, R2, notificación y auditoría.
+Riesgo: dinero, idempotencia, revisión y no recalcular fórmulas fuera del servicio vigente.
+
+TALLAS E INDUMENTARIA
+Objetivo: tallas por persona, resumen productivo y entrega/devolución de prendas.
+Acceso: actualmente administración registra/corrige; usuario consulta sus tallas.
+Frontend: IndumentariaView, MisTallasView, IndumentariaApi, constants/tallas.
+Backend: IndumentariaRoutes/Controller, servicios de índice/usuarios y tres modelos.
+Dependencias: usuario, fraterno, cuotas y QR.
+Riesgo: registros históricos por usuario o fraterno, normalización y categorías no válidas.
+
+ASISTENCIAS
+Objetivo: entrada/salida propia, administrativa o QR para fraternos/postulantes a guía.
+Acceso: usuario/guía y administración según endpoint.
+Frontend: vistas de asistencia y APIs correspondientes.
+Backend: dos routers/controllers y Asistencia.
+Dependencias: identidad QR, gestión, preregistro/fraterno/postulante.
+Riesgo: unicidad usuario+gestión+fecha y doble marcación concurrente.
+
+COMUNICACIÓN Y AUDITORÍA
+Objetivo: anuncios, notificaciones y trazabilidad.
+Acceso: anuncios publicados para usuarios; gestión/auditoría por permisos.
+Frontend: ComunicadosView, vistas comunicacion, GuiaApi histórico.
+Backend: ComunicacionRoutes/Controller, AuditoriaService, Anuncio/Notificacion/Auditoria.
+Dependencias: perfiles, roles y módulos auditados.
+Riesgo: datosAntes/datosDespues podrían incluir información sensible si no se filtran.
+
+FORMACIÓN
+Objetivo: biblioteca de pasos y cancionero con archivo o YouTube.
+Acceso: lectura autenticada; publicación por admin/guía o FORMACION_PUBLICAR.
+Frontend: PasosVideoView, CancioneroView, PortalFormacionLayout, PasoVideoApi.
+Backend: PasoVideoRoutes/Controller, PasoVideo, ffmpeg y R2.
+Dependencias: usuario, permisos y almacenamiento.
+Riesgo: vídeos grandes, tiempo/costo de conversión y disponibilidad de ffmpeg.
+
+REPORTES
+Objetivo: ejecutivo, formación, tallas, pagos/primera cuota y almacenamiento; Excel/PDF/impresión.
+Acceso: VISTA_REPORTES/administración según router.
+Frontend: ReportesView, ReporteTallasPrimeraCuota y ReporteApi.
+Backend: ReporteRoutes, ReporteController/ReporteFormacion y ReporteService especializados.
+Dependencias: prácticamente todos los modelos; Excel se genera principalmente en cliente.
+Riesgo: consultas extensas, diferencias entre usuario y fraterno, y memoria del navegador.
+
+RESPALDOS
+Objetivo: exportación total/organizada e importación.
+Acceso: propietario explícito.
+Frontend: RespaldoView/Api. Backend: RespaldoRoutes/Controller.
+Dependencias: MongoDB, R2/archivos y compresión.
+Riesgo crítico: datos personales, sobrescritura y dependencia en correo codificado.
+
+12. ENDPOINTS
+=============
+Todos los prefijos se montan en server.ts. Inventario compacto por router:
+- /api/perfilusuario (13): POST /registro, /login, /completar-perfil-autorizado,
+  /:id/autorizaciones-edicion, /password-temporal/:id; GET /usuario, /, /:id,
+  /autorizacion-edicion/mia, /:id/autorizaciones-edicion; PUT /password/:id, /:id; DELETE /:id.
+- /api/rol (5): POST/GET /; GET/PUT/DELETE /:id.
+- /api/gestiones (7): GET /activa y /; POST /; GET/PUT/DELETE /:gestionId; PATCH /:gestionId/estado.
+- /api/preregistros (6): POST/GET /; GET /mios y /:id; PUT/DELETE /:id.
+- /api/postulantes-guia (8): GET/POST /; POST /por-usuario/:usuarioId; GET/PUT/DELETE /:id;
+  POST /:id/meritos; DELETE /:id/meritos/:meritoId.
+- /api/guias (21): GET /mi-bloque, /mi-bloque/buscar-fraternos, /directorio-bloques, /,
+  /candidato, /bloques/buscar-usuarios; POST /mi-bloque/registrar-fraterno, /, /convertir-fraterno,
+  /postulantes/:id/decision, /bloques, /bloques/registrar-fraterno, /bloques/integrantes,
+  /mi-bloque/integrantes; PATCH /mi-bloque/nombre, /bloques/guias/:guiaId,
+  /bloques/:bloqueId/nombre, /bloques/:bloqueId/inscripciones; DELETE /:guiaId/rol,
+  /bloques/:bloqueId, /bloques/integrantes/:detalleId.
+- /api/fraternos (4): GET /mio, /mi-bloque y /; PATCH /:id/lista-espera.
+- /api/traspasos (2): GET/POST /.
+- /api/cuotas (16): GET /, /pagos/todos, /mia, /:id; POST /qr-saldo, /habilitar-masivo, /,
+  /:id/solicitar-qr, /:id/solicitar-prorroga, /:id/pagos; PATCH /prorroga/vencidas,
+  /:id/plan/admin, /:id/plan, /:id/prorroga-primera-cuota, /:id/pagos/:pagoId/revision;
+  DELETE /:id/pagos/:pagoId.
+- /api/configuracion-pagos (4): GET /mia y /admin; POST /aceptar; PUT /admin.
+- /api/credenciales-qr (4): GET /mia, /buscar, /identidad/:id; POST /verificar.
+- /api/asistencias (5): POST /entrada y /entrada-qr; PATCH /salida; GET /mias y /.
+- /api/asistencias-postulantes-guia (6): POST /entrada, /:id/entrada; PATCH /salida,
+  /:id/salida; GET /mias y /.
+- /api/indumentaria (10): GET /mia y /; PUT /mia/tallas, /configuracion-tallas, /tallas,
+  /tallas/usuario; PATCH /tallas/:fraternoId/bloqueo, /entregas/:id; POST /prendas, /entregas.
+- /api/comunicacion (8): GET/POST /anuncios; PUT/DELETE /anuncios/:id;
+  GET /notificaciones/mias y /auditoria; PATCH /notificaciones/:id/leida; POST /auditoria/logout.
+- /api/reportes (5): GET /formacion, /tallas, /tallas-primera-cuota, /almacenamiento, /ejecutivo.
+- /api/pasos-videos (4): GET /permiso-publicar y /; POST /; DELETE /:id.
+- /api/tokens-registro (8): POST /validar y /; GET /configuracion-publica, /configuracion y /;
+  PUT /configuracion; PATCH /:id/anular; DELETE /:id.
+- /api/respaldo (3): GET /exportar y /exportar-organizado; POST /importar.
+- /api/facultades (1): GET /reporte. /api/capacitacion (1): GET /usuarios.
+- Públicas de infraestructura: GET /, /health, /uploads/* y /docs.
+
+Router no montado: loginRoutes.ts contiene CRUD/login/password genéricos. No forma parte de la API
+activa y no debe contarse como endpoint productivo sin comprobar imports.
+
+13. FLUJOS PRINCIPALES
+======================
+Registro: token/configuración -> CrearCuenta -> POST registro -> PerfilUsuario/documentos -> posible
+consumo transaccional de TokenRegistro -> Preregistro -> Cuota/fraterno según reglas -> login.
+
+Login: credenciales -> bcrypt/JWT -> token local -> GET usuario -> AppLayout/Comunicados según rol ->
+cambio obligatorio si aplica.
+
+Inscripción: gestión abierta y cupo -> Preregistro -> revisión/aprobación -> Fraterno con código
+secuencial -> cuota sincronizada -> asignación opcional a bloque.
+
+Pago: configuración vigente -> aceptación de términos por versión -> selección dinámica de plan ->
+solicitud/visualización de QR -> registro de DetalleCuota -> revisión administrativa -> sincronización
+de saldo/estado -> habilitaciones posteriores.
+
+Guía/bloque: usuario/preregistro -> postulante -> evaluación/elección o promoción administrativa ->
+Guia/rol -> asignación única a Bloque -> búsqueda de usuario/fraterno -> creación de membresía si
+corresponde -> DetalleBloque con validación de cupos.
+
+Tallas: administración localiza usuario/fraterno -> registra TallaFraterno -> resumen por sexo/talla ->
+entrega solo cuando la cuota total cumple la condición del backend.
+
+QR/asistencia: usuario genera credencial firmada/versionada -> administrador escanea o busca -> backend
+verifica identidad -> presenta ficha -> registra entrada evitando duplicado diario.
+
+14. PAGOS
+=========
+Cuota representa deuda; DetalleCuota representa movimientos. ConfiguracionPago guarda tarifas, QR y
+términos por gestión. PlanPagosService es la autoridad de distribución para 1, 2 o 3 cuotas;
+SincronizacionCuotaService recalcula saldo y estado a partir de pagos válidos. No deben duplicarse
+fórmulas en vistas, reportes ni bloques.
+
+Estados de cuota: PENDIENTE, PAGO_PARCIAL, PAGADA, VENCIDA, CANCELADA. Revisión de pago: PENDIENTE,
+VERIFICADO, OBSERVADO o RECHAZADO. Métodos: EFECTIVO, QR o MIXTO. Los comprobantes se guardan por
+ruta y deben resolverse vía backend/R2.
+
+Los términos se aceptan por usuario+gestión+versionTerminos. Cambiar solo el texto sin elevar la
+versión conserva aceptaciones; elevarla exige una nueva aceptación. La evidencia guarda el contenido
+aceptado, fecha, IP y agente.
+
+15. TALLAS E INDUMENTARIA
+=========================
+TallaFraterno admite vínculo por fraterno o usuario para cubrir cuentas aún no promovidas. Los índices
+parciales evitan duplicados. El backend normaliza/valida mediante IndiceTallaService y los reportes
+distinguen talla válida, ausente y valor no reconocido. Un valor no reconocido no debe sumarse como
+producción ni corregirse automáticamente sin revisión.
+
+Indumentaria administra polera, chamarra e indumentaria del traje. EntregaIndumentaria conserva estado,
+responsables y devolución. La entrega exige cuota PAGADA y saldo cero según controlador.
+
+16. GUÍAS Y BLOQUES
+===================
+Bloque es administrativo, sin matriz ni posiciones. Límites vigentes: máximo 2 guías hombres, 2 mujeres,
+40 integrantes hombres, 80 mujeres, total 120. Un guía activo solo puede pertenecer a un bloque.
+DetalleBloque representa pertenencia, no ubicación física.
+
+guiaId es una referencia principal heredada y guiasIds es la lista vigente; ambos deben mantenerse
+sincronizados hasta completar una migración de consumidores. Retirar guía del bloque conserva Guia y
+rol; quitar rol limpia asociaciones, inactiva Guia, pero conserva identidad, preregistro, fraterno,
+pagos y tallas. La asignación crítica usa servicios con transacción, índices únicos y recuperación ante
+colisiones. Los contadores del bloque son derivados y deben auditarse contra detalles reales.
+
+17. REPORTES
+============
+ReporteRoutes ofrece formación, tallas, tallas/primera cuota, almacenamiento y ejecutivo. ReporteService
+parte de usuarios cuando el reporte exige todas las cuentas y enlaza opcionalmente fraterno, pagos,
+tallas y bloque. Esto evita perder administradores/guías sin perfil fraterno. El frontend muestra
+tarjetas desplegables y genera hojas Excel con resúmenes y listados.
+
+Riesgos: consultas y joins manuales en memoria, tablas muy anchas, generación Excel en navegador,
+distinción semántica entre SIN REGISTRO/PENDIENTE/NO APLICA y normalización de sexo/talla.
+
+18. QR
+======
+Hay tres conceptos distintos:
+1) QR de credencial personal: token de identidad firmado/versionado.
+2) QR de pago: imagen configurada por plan/cuota y QR de saldo.
+3) QR de token de registro: código de alta/cupo.
+
+CredencialQrRoutes permite credencial propia, búsqueda, identificación manual y verificación. La cámara
+requiere HTTPS; existe alternativa de foto/archivo. credencialQrVersion permite invalidar credenciales
+anteriores. El navegador nunca recibe R2_WORKER_TOKEN.
+
+19. AUDITORÍA
+=============
+auditarActividad se monta antes de routers. AuditoriaService registra acciones específicas con usuario,
+módulo, entidad, descripción, antes/después, IP y user-agent. Se registran también logout, cambios de
+bloque, formación, pagos y operaciones administrativas. La vista AuditoriaView consulta el módulo.
+
+Debe revisarse periódicamente que no se guarden password, JWT, comprobantes binarios ni información
+innecesaria dentro de datosAntes/datosDespues. Auditoría no sustituye backups ni control transaccional.
+
+20. CONEXIÓN FRONTEND-BACKEND
+=============================
+Axios usa VITE_API_URL como base y agrega Bearer token. En desarrollo Vite proxifica /api y /uploads a
+localhost:4001. En nube, VITE_API_URL debe señalar al backend Railway con prefijo /api. CORS usa
+FRONTEND_URL/entorno para autorizar el origen Vercel. Las imágenes relativas se resuelven retirando
+/api del origen del backend y consultando /uploads/...; backend prueba R2 y fallback local.
+
+Un push solo despliega ambos servicios si Railway y Vercel están vinculados al mismo repositorio/rama
+o a repositorios que reciban el mismo commit. Esa asociación pertenece a las cuentas externas y no
+puede deducirse únicamente del código; debe verificarse en los paneles de Deployments/Settings.
+
+21. VARIABLES DE ENTORNO
+========================
+Nombres referenciados, sin valores:
+- Backend: DATABASE_URL o MONGO_URI, JWT_SECRET, PORT, HOST, NODE_ENV, FRONTEND_URL,
+  HTTPS_CERT_PATH, HTTPS_KEY_PATH, HTTPS_CA_PATH, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS,
+  R2_WORKER_URL y R2_WORKER_TOKEN.
+- Frontend: VITE_API_URL.
+- Worker: binding ARCHIVOS y secreto/autorización definidos en Cloudflare, no en Git.
+
+Clasificación: JWT_SECRET, SMTP_PASS, URI Mongo con credenciales y tokens R2 son secretos. No deben
+aparecer en este TXT, commits, logs ni VITE_*. VITE_* es público al compilar.
+
+22. DEPLOY
+==========
+Railway raíz: build con Railpack ejecuta npm run build, que instala/compila backend. PreDeploy ejecuta
+migrarArchivosPorCi.js y migrarPermisosYBloquesGuia.js; luego node backend/dist/index.js. Healthcheck:
+/health, timeout 120 s y reinicio por fallo. Railpack instala Ghostscript.
+
+Vercel frontend: framework Vite, npm run build, salida dist y rewrite SPA a index.html. Assets tienen
+caché inmutable. El proyecto de Vercel debe tener Root Directory=frontend o configuración equivalente.
+
+Cloudflare: Worker tinkus-r2-storage, binding ARCHIVOS al bucket configurado, observabilidad activa.
+El código backend actúa como única puerta de acceso a archivos. Operación local: Docker Mongo, HTTPS
+y scripts documentados en RED_LOCAL.md.
+
+23. DEPENDENCIAS ENTRE MÓDULOS
+==============================
+Núcleo: PerfilUsuario <- Rol y Gestion. Casi todos dependen del núcleo.
+Inscripción: TokenRegistro -> Preregistro -> Fraterno -> Bloque/Talla/Asistencia.
+Finanzas: Gestion+Preregistro -> ConfiguracionPago/Cuota -> DetalleCuota -> reportes/indumentaria.
+Guías: PerfilUsuario+Preregistro -> PostulanteGuia -> Guia -> Bloque -> DetalleBloque.
+Archivos: formularios/pagos/formación -> middleware upload -> AlmacenamientoService -> Worker R2.
+Comunicación/auditoría son transversales. Reportes dependen de todos, pero ningún módulo operativo
+debería depender del frontend de reportes.
+
+24. ARCHIVOS CRÍTICOS
+=====================
+- backend/src/server.ts, index.ts, config/db.ts, config/cors.ts.
+- backend/src/models/PerfilUsuario.ts, Rol.ts, Gestion.ts, Preregistro.ts, Fraterno.ts, Cuota.ts.
+- backend/src/middleware/auth.ts, authorizePermission.ts, soloAdministracion.ts.
+- backend/src/security/PermisosCatalogo.ts.
+- backend/src/controllers/PerfilUsuarioController.ts, GestionController.ts, CuotaController.ts,
+  GuiaController.ts y sus rutas.
+- backend/src/services/PlanPagosService.ts, SincronizacionCuotaService.ts, GuiaBloqueService.ts,
+  AsignacionBloqueService.ts, AlmacenamientoService.ts, eliminacionUsuarioService.ts.
+- frontend/src/router.tsx, layouts/AppLayout.tsx, layouts/ComunicadosView.tsx, lib/axios.ts,
+  hooks/useAuth.ts, PerfilUsuarioApi.ts y formularios de perfil.
+- package.json, railway.json, railpack.json, frontend/vercel.json y r2-worker/wrangler.jsonc.
+
+25. ARCHIVOS POSIBLEMENTE ANTIGUOS/DUPLICADOS
+==============================================
+No eliminar sin buscar imports, rutas y uso productivo:
+- backend/src/routes/loginRoutes.ts: no montado; funcionalidad duplicada por perfilUsuarioRoutes.
+- Bloque.guiaId frente a Bloque.guiasIds: legado deliberado aún consumido.
+- frontend/src/Context/AuthContext.tsx frente a hooks/useAuth.ts: dos conceptos llamados Auth; el
+  Context casi no representa la sesión real, que proviene de React Query.
+- frontend/src/views/Fraterno/ComunicadosView.tsx frente a layouts/ComunicadosView.tsx: posible vista
+  histórica; el router usa el layout.
+- MenuListDashboard/NavMenu frente al menú de AppLayout: posible navegación histórica/alternativa.
+- InscripcionApi.ts importa un InscripcionType inexistente y no se observó un router Inscripcion activo.
+- Comentarios extensos con implementaciones viejas en server.ts, vite.config.ts y tsconfig backend.
+- Carpeta anómala local "File: output_acta_reunion/" y múltiples output/artefactos: no son fuente.
+- Tres ZIP del proyecto y un respaldo .tinkus.gz en raíz: copias locales, no versionar.
+
+26. RIESGOS DETECTADOS
+======================
+CRÍTICOS/ALTOS
+- Frontend no pasa tsc estricto: alias @/constants y @/security faltan en paths; InscripcionType no
+  existe; hay errores de unión string/rol, readOnly no admitido, Map<unknown,unknown>, enum no borrable
+  y otros. Vite puede resolver @ genéricamente, pero el compilador/editor no está alineado.
+- Archivos de 1.000-3.205 líneas concentran reglas y elevan el riesgo de regresión.
+- PreDeploy ejecuta migraciones en cada deploy: aunque se declaren idempotentes, un fallo bloquea salida.
+- Eliminación de usuario atraviesa muchas colecciones y R2; requiere respaldo, dry-run y verificación.
+- Importar respaldo y scripts de reparación pueden alterar masivamente producción.
+- Respaldo autorizado por correo codificado: frágil ante cambio de propietario.
+
+MEDIOS
+- strict=false en backend y muchos any/unknown reducen garantías.
+- Permisos/roles se normalizan con variantes en varios archivos; riesgo de divergencia.
+- VISTA_DIRECTORIO_BLOQUES aparece en frontend pero no en catálogo backend.
+- Conteos de Bloque son derivados y pueden desviarse; existen scripts de auditoría/reconstrucción.
+- Transacciones Mongo dependen del tipo de despliegue; algunos fallbacks pierden atomicidad total.
+- R2 con fallback local puede ocultar archivos faltantes hasta cambiar de instancia.
+- Excel/PDF y agregaciones grandes en cliente pueden consumir memoria.
+- Auditoría con snapshots puede almacenar datos personales de más.
+
+BAJOS/DEUDA
+- Nombres con mayúsculas inconsistentes y código comprimido en una línea dificultan mantenimiento.
+- Documentación existente afirma que loginRoutes autentica, pero la ruta activa es perfilUsuarioRoutes.
+- Código comentado y varias bibliotecas UI/tablas sugieren evolución sin limpieza.
+- Hay artefactos personales y respaldos junto al repositorio; riesgo de commit accidental.
+
+Errores concretos del chequeo frontend: imports no resueltos de constants/origenAcademico,
+constants/tallas, constants/terminosParticipacion, security/permisosCatalogo y types/InscripcionType;
+prop readOnly ausente en campos; acceso a codigo/nombre/permisos sobre unión string/objeto en Dashboard,
+Cuota, PostulanteGuia, DetallePostulanteGuia y EscanerQr; tipos unknown en GuiaBloque; error en
+PerfilUsuarioApi y EditRolView. No se modificaron por el alcance documental.
+
+27. MAPA PARA ENTREGAR MÓDULOS A OTROS DESARROLLADORES
+======================================================
+Siempre incluir package.json/lock, tsconfig, .env.example sin valores, lib/axios, auth/permisos y tipos
+transversales. Nunca incluir .env, backups, fotos, carnets, comprobantes ni credenciales.
+
+Usuarios/auth: modelos PerfilUsuario/Rol/Documento/Autorizacion; rutas/controladores perfil/rol;
+middleware auth/permisos/uploads; APIs/tipos/vistas/formularios de perfil y auth.
+
+Gestiones: Gestion model/controller/routes; GestionApi/Type y vistas/componentes; incluir usuario y
+permisos. Prerregistro/tokens: modelos/rutas/controladores respectivos, usuario/gestión, cuota/fraterno,
+APIs/tipos/vistas y pruebas de código/cupos.
+
+Pagos: Cuota, DetalleCuota, ConfiguracionPago, AceptacionTerminosPago; routes/controllers/services de
+planes/sincronización; uploads/R2; CuotaApi/ConfiguracionPagoApi, tipos, vistas y componentes; pruebas.
+
+Guías/bloques: PerfilUsuario, Rol, Gestion, Preregistro, Fraterno, Guia, PostulanteGuia, MeritoGuia,
+Bloque, DetalleBloque; GuiaRoutes/Controller; cuatro servicios de bloque; APIs/tipos/cinco vistas;
+migración, auditorías y cinco pruebas específicas.
+
+Tallas: TallaFraterno, PrendaIndumentaria, EntregaIndumentaria; Indumentaria routes/controller/services;
+Cuota/Fraterno/Perfil; API/constants/vistas y pruebas. QR: CredencialQr/TokenRegistro/Asistencia,
+auth, APIs, vistas de credencial/escáner y HTTPS.
+
+Reportes: Reporte routes/controllers/services; todos los modelos consultados; ReporteApi,
+ReportesView/ReporteTallasPrimeraCuota; ExcelJS/jsPDF y pruebas. R2: worker completo, almacenamiento,
+uploads y consumidores, con secretos configurados fuera del paquete.
+
+Checklist de handoff: explicar objetivo y reglas; mapa de datos; endpoints y permisos; variables por
+nombre; migraciones; casos de prueba; datos que no deben tocarse; rollback; dueño del despliegue.
+
+28. RESUMEN FINAL
+=================
+Conteos:
+- 253 archivos fuente TS/TSX en backend, frontend y worker.
+- 41.935 líneas aproximadas.
+- 27 modelos; 22 routers (21 activos); 148 operaciones declaradas (141 activas estimadas).
+- 26 controladores, 17 servicios, 12 middlewares.
+- 50 vistas, 22 componentes, 19 módulos API y 10 archivos de tipos frontend.
+- 11 pruebas backend ejecutadas: 11 aprobadas, 0 fallidas.
+
+Módulos funcionales principales: 13 grupos descritos (usuarios, gestiones, prerregistros/tokens,
+fraternos/traspasos, guías/bloques, pagos, tallas, asistencias, comunicación/auditoría, formación,
+reportes, respaldos y QR transversal).
+
+Archivos especialmente grandes: PerfilUsuarioController (3.205), EditPerfilUsuarioView (1.944),
+PerfilUsuarioForm (1.924), CuentaPerfilForm (1.870), GestionController (1.594), PerfilUsuarioApi
+(1.333), perfilUsuarioRoutes (1.181), PerfilUsuarioDetalleModal (1.103), PerfilUsuarioView (1.022),
+GestionRoutes (985) y PerfilUsuarioType (954 líneas).
+
+Verificación realizada:
+- Backend npm test: correcto, 11/11.
+- Backend TypeScript: correcto como parte del build de pruebas.
+- Frontend TypeScript estricto: fallido por los problemas enumerados; no se corrigió código.
+- No se conectó a producción ni se ejecutaron scripts contra base de datos/R2.
+- No se hizo commit, push, merge ni deploy.
+- Único archivo creado por esta auditoría: DOCUMENTACION_COMPLETA_SISTEMA.txt.
+
+Prioridades recomendadas, sin ejecutarlas:
+1) Recuperar compilación TypeScript limpia del frontend y alinear paths con alias Vite.
+2) Añadir pruebas de integración/autorización y pruebas frontend.
+3) Extraer gradualmente responsabilidades de los archivos monolíticos.
+4) Consolidar nombres de permisos, auth y navegación; retirar código antiguo solo con evidencia.
+5) Proteger artefactos/respaldos locales contra commits y revisar política de auditoría/PII.
+6) Documentar rollback y validar migraciones de preDeploy en copia de producción.
+
+FIN DEL DOCUMENTO

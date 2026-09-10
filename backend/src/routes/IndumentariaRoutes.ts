@@ -3,13 +3,14 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { soloAdministracion } from "../middleware/soloAdministracion";
 import { handleInputErrors } from "../middleware/validation";
-import { cambiarBloqueoTalla, cambiarEstadoEntrega, configurarRegistroTallas, crearPrenda, entregar, guardarMiTalla, guardarTalla, guardarTallaUsuario, miIndumentaria, resumenIndumentaria } from "../controllers/IndumentariaController";
+import { cambiarBloqueoTalla, cambiarEstadoEntrega, configurarRegistroTallas, configurarRequisitosEntrega, crearPrenda, entregar, guardarMiTalla, guardarTalla, guardarTallaUsuario, miIndumentaria, resumenIndumentaria } from "../controllers/IndumentariaController";
 const router = Router();
 router.get("/mia", authenticate, miIndumentaria);
 router.put("/mia/tallas", authenticate, body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarMiTalla);
 router.use(authenticate, soloAdministracion);
 router.get("/", resumenIndumentaria);
 router.put("/configuracion-tallas", body("habilitado").isBoolean(), body("sinFechaLimite").isBoolean(), body("fechaLimite").optional({ nullable: true, checkFalsy: true }).isISO8601(), handleInputErrors, configurarRegistroTallas);
+router.put("/configuracion-entregas", body("requisitos").isObject(), handleInputErrors, configurarRequisitosEntrega);
 router.put("/tallas", body("fraternoId").isMongoId(), body("tallaPolera").trim().notEmpty(), body("tallaChamarra").trim().notEmpty(), handleInputErrors, guardarTalla);
 router.put("/tallas/usuario", body("usuarioId").isMongoId(), body().custom((datos) => {
   if (!String(datos.tallaPolera ?? "").trim() && !String(datos.tallaChamarra ?? "").trim()) throw new Error("Debe registrar al menos una talla");
