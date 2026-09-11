@@ -1,0 +1,125 @@
+CORRECCIÓN 404 Y CONTROL DE PAGOS EN EXCEL
+Fecha: 11 de septiembre de 2026
+
+1. CAUSA DEL 404
+================
+El frontend publicado solicita correctamente GET /reportes/integrantes-matricula sobre una base VITE_API_URL que debe terminar en /api. El código local del backend declara GET /integrantes-matricula en ReporteRoutes y monta el router en /api/reportes. La URL final correcta es GET /api/reportes/integrantes-matricula.
+
+La reproducción contra Railway devolvió HTTP 404 y "Cannot GET /api/reportes/integrantes-matricula", mientras la misma ruta sí existe en main local. La causa es un desfase de despliegue: el frontend contiene la opción nueva, pero el backend activo de Railway corresponde a una revisión anterior que aún no expone el endpoint. No existe /api duplicado, diferencia singular/plural ni incompatibilidad GET/POST.
+
+2. REQUEST ANTES Y RUTA REAL
+============================
+Frontend: GET /reportes/integrantes-matricula.
+Base Axios: VITE_API_URL (esperada con sufijo /api; no se modificó ni se reveló su valor).
+Backend: router GET /integrantes-matricula montado bajo /api/reportes.
+URL efectiva: GET /api/reportes/integrantes-matricula.
+
+3. CORRECCIÓN
+=============
+No se cambió una URL que ya era correcta. Se añadió una prueba de contrato que verifica simultáneamente método/ruta frontend, declaración del router y montaje en server.ts. La corrección operativa requiere publicar en Railway el mismo commit de main que consume Vercel. El endpoint conserva autenticación y soloAdministradorReal.
+
+4. ARCHIVOS MODIFICADOS
+=======================
+- backend/src/services/ReporteIntegrantesBloqueService.ts
+- backend/tests/reporte-integrantes-bloque.test.js
+- frontend/src/api/ReporteApi.ts
+- frontend/src/components/reportes/ReporteIntegrantesMatricula.tsx
+
+5. ARCHIVOS CREADOS
+===================
+- AUDITORIA_404_REPORTE_MATRICULA.txt
+- CORRECCION_404_Y_CONTROL_PAGOS_EXCEL.txt
+
+6. REPORTE EXCEL
+================
+Se genera un .xlsx en el navegador mediante ExcelJS. El botón evita doble ejecución, muestra GENERANDO EXCEL y comunica errores con un mensaje administrativo, conservando el error técnico en consola para diagnóstico. Los filtros disponibles son bloque, sexo y clasificación/estado de pago. Sin resultados, no genera un archivo vacío.
+
+7. MATRÍCULA Y BLOQUE
+=====================
+Matrícula real: PerfilUsuario.registroUniversitario. CI, número de fraterno y código de preregistro no se usan como matrícula. Los vacíos se muestran como SIN MATRÍCULA.
+
+Pertenencia: DetalleBloque con FILTRO_ASIGNACION_ACTIVA (estado distinto de INACTIVO y fechaEliminado null), asociado a un Bloque ACTIVO de la gestión elegida/activa. No se leen contadores para decidir pertenencia y no se modifica ningún bloque.
+
+8. PAGOS
+=========
+Fuentes de solo lectura: Cuota y DetalleCuota. Se realizan consultas masivas por preregistro/cuota; no hay una consulta por integrante. No se modificaron PlanPagosService ni SincronizacionCuotaService.
+
+- Pago completo: Cuota.estado=PAGADA y saldo<=0.
+- Pagos verificados: cantidad real de DetalleCuota con estadoRevision=VERIFICADO.
+- Primer/segundo/tercer pago: movimiento identificado por numeroPago 1/2/3, mostrando estado, monto, fechaPago, fechaRevision y método reales.
+- Total pagado verificado: suma de montos únicamente VERIFICADO.
+- Saldo: campo vigente Cuota.saldo, sin fórmula nueva.
+- Fecha de pago completo: última fechaRevision (o fechaPago si no existe revisión) entre pagos verificados, únicamente si la cuota está completa.
+- Pendientes/observados/rechazados: conteos independientes por estadoRevision.
+
+9. PLAN VS PAGOS
+================
+numeroCuotasElegidas se muestra como Plan de pagos. pagosVerificados se calcula desde movimientos VERIFICADO. Elegir tres cuotas no incrementa pagos verificados. Los planes de 1 o 2 cuotas pueden ser PAGO_COMPLETO si la cuota está PAGADA y su saldo es cero.
+
+10. CLASIFICACIONES
+===================
+- PAGO_COMPLETO: obligación vigente pagada y saldo cero.
+- SOLO_PRIMER_PAGO: pago 1 verificado sin pago 2 verificado.
+- HASTA_SEGUNDO_PAGO: pagos 1 y 2 verificados, sin obligación marcada completa.
+- TRES_PAGOS_VERIFICADOS: pagos 1, 2 y 3 verificados sin que la cuota figure completa.
+- SIN_PAGO: ningún movimiento verificado.
+- REVISAR: combinación anómala de números verificados.
+
+Las hojas PENDIENTES, OBSERVADOS y RECHAZADOS son conjuntos independientes; una persona puede estar en uno de ellos además de su clasificación por pagos verificados.
+
+11. HOJAS GENERADAS
+===================
+RESUMEN; TODOS; CON MATRICULA; SIN MATRICULA; PAGO COMPLETO; SOLO PRIMER PAGO; HASTA SEGUNDO PAGO; TRES PAGOS VERIFICADOS; SIN PAGO; PENDIENTES VERIFICACION; OBSERVADOS; RECHAZADOS; y una hoja dinámica por cada bloque.
+
+12. PRUEBAS
+===========
+- Contrato HTTP: frontend GET exacto, router declarado y router montado.
+- Orden natural y separación de matrícula vacía.
+- Plan de 3 cuotas con uno, dos o tres pagos verificados.
+- Planes de una y dos cuotas pagados con saldo cero.
+- Pendiente, observado y rechazado no cuentan como verificados.
+- Regresión backend completa: npm test, 14/14 archivos aprobados.
+- ExcelJS: generación y reapertura en memoria verificada en la implementación anterior; se conserva el mismo mecanismo.
+
+13. REGRESIÓN Y BUILD
+=====================
+Backend: TypeScript compila y todas las pruebas existentes pasan, incluyendo bloques, guías, permisos, QR, tallas, términos y asignaciones.
+Frontend: npx tsc --noEmit aprobado con 0 errores. Vite build aprobado. Persiste únicamente la advertencia no bloqueante por tamaño de chunks.
+
+14. ERRORES
+===========
+Errores preexistentes relevantes: advertencia Vite de chunks mayores a 500 kB.
+Errores introducidos: 0 en TypeScript, build y pruebas.
+
+15. SEGURIDAD E INTEGRIDAD
+=========================
+No se modificaron pagos, saldos, planes, tallas, usuarios, bloques, guías, roles, autenticación, .env, índices ni datos. El endpoint sigue protegido en backend. No se ejecutaron migraciones ni escrituras en producción.
+
+16. GIT DIFF
+============
+El cambio funcional está limitado al servicio de reporte, sus tipos/componente frontend y pruebas. Los TXT documentan auditoría e implementación. Los archivos personales y respaldos existentes permanecen sin seguimiento y fuera del commit.
+
+17. RIESGOS
+===========
+- Railway debe completar el despliegue del mismo commit de main para eliminar el 404 público.
+- El Excel ancho puede consumir memoria en navegadores con conjuntos muy grandes; ExcelJS continúa cargándose dinámicamente.
+- Una combinación histórica anómala de pagos verificados se marca REVISAR, no se corrige automáticamente.
+
+18. ROLLBACK
+============
+Revertir únicamente el commit de esta corrección mediante git revert <commit>, volver a publicar backend/frontend y verificar GET /api/reportes/integrantes-matricula. No requiere rollback de base de datos porque no hay migraciones ni cambios de datos.
+
+19. CHECKLIST
+=============
+[OK] Causa del 404 identificada y corrección de despliegue preparada.
+[OK] Endpoint existe, está montado y el frontend usa la URL correcta.
+[OK] Excel .xlsx y hojas por bloque conservados.
+[OK] Solo aparecen asignaciones activas.
+[OK] Matrícula, ausencia de matrícula y orden natural conservados.
+[OK] Pago completo, primero, segundo y tercero diferenciados.
+[OK] Plan no se confunde con pagos verificados.
+[OK] Pendientes, observados, rechazados y saldo incluidos.
+[OK] No se modificaron pagos, tallas, bloques, usuarios, auth ni .env.
+[OK] Login/bloques/pagos/reportes previos cubiertos por compilación y pruebas de regresión disponibles.
+[OK] 0 errores nuevos.
+[PENDIENTE HASTA PUBLICAR] Verificación HTTP pública sin 404 en Railway.

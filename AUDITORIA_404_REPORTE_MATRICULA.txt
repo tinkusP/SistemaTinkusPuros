@@ -1,0 +1,56 @@
+AUDITORÍA DEL ERROR 404 — REPORTE INTEGRANTES POR MATRÍCULA
+Fecha: 11 de septiembre de 2026
+
+ERROR OBSERVADO
+================
+El botón DESCARGAR EXCEL termina mostrando HTTP 404. Se reprodujo contra el backend público configurado en Railway: GET /api/reportes/integrantes-matricula respondió 404 con "Cannot GET /api/reportes/integrantes-matricula".
+
+REQUEST FRONTEND
+================
+Método: GET.
+Ruta relativa: /reportes/integrantes-matricula.
+Parámetros actuales: ninguno por defecto; el componente aplica los filtros de bloque y sexo en memoria después de obtener el reporte.
+Cliente: instancia Axios de frontend/src/lib/axios.ts.
+Base URL esperada: VITE_API_URL debe apuntar al backend Railway y terminar en /api. No se reproduce aquí ningún valor privado.
+URL efectiva esperada: [backend Railway]/api/reportes/integrantes-matricula.
+No existe /api duplicado: la base aporta /api y ReporteApi aporta /reportes/...
+
+RUTA BACKEND ESPERADA Y LOCAL
+=============================
+Ruta del router: GET /integrantes-matricula en backend/src/routes/ReporteRoutes.ts.
+Montaje: app.use("/api/reportes", reporteRoutes) en backend/src/server.ts.
+Ruta completa local: GET /api/reportes/integrantes-matricula.
+Protección: authenticate + soloAdministradorReal.
+Controlador: reporteIntegrantesPorMatricula.
+Servicio: obtenerReporteIntegrantesBloque.
+
+RUTA BACKEND DESPLEGADA
+=======================
+La comprobación HTTP de solo lectura al dominio público devolvió 404 y no 401. Esto demuestra que la aplicación Railway que respondió no contiene la ruta. Si la ruta estuviera desplegada, una solicitud sin token llegaría a authenticate y respondería 401, no "Cannot GET".
+
+CAUSA RAÍZ
+==========
+No hay diferencia de singular/plural, método o prefijo entre el frontend y el código backend local. La causa comprobada es una diferencia de versión entre servicios: el frontend ya solicita el endpoint nuevo, mientras el backend activo de Railway continúa ejecutando una compilación anterior que no lo incluye. El código local y origin/main contienen el endpoint y su montaje, pero el despliegue público observado está desactualizado.
+
+ARCHIVOS INVOLUCRADOS
+=====================
+- frontend/src/lib/axios.ts
+- frontend/src/api/ReporteApi.ts
+- frontend/src/components/reportes/ReporteIntegrantesMatricula.tsx
+- backend/src/routes/ReporteRoutes.ts
+- backend/src/controllers/ReporteController.ts
+- backend/src/services/ReporteIntegrantesBloqueService.ts
+- backend/src/server.ts
+- railway.json y railpack.json (solo auditados, no se modificarán)
+
+CAMBIO MÍNIMO PROPUESTO
+=======================
+1. Conservar la URL frontend y la ruta backend, porque coinciden correctamente.
+2. Añadir una prueba de contrato que compruebe método, ruta y montaje para evitar regresión.
+3. Mejorar el mensaje localizado del frontend para no exponer el texto técnico de Axios.
+4. Extender únicamente el servicio de lectura y el Excel existente con el control de pagos solicitado.
+5. Publicar el commit final en main y verificar que Railway despliegue esa revisión; si la integración automática no está activa, desplegar el backend desde el proyecto Railway autorizado y volver a comprobar que la ruta responda 401 sin token (o 200 con una sesión administrativa válida).
+
+RIESGO
+======
+MEDIO. La corrección de disponibilidad es de bajo riesgo porque no cambia la URL; el riesgo medio proviene de coordinar las versiones desplegadas de frontend y backend. La ampliación financiera será exclusivamente de lectura y utilizará Cuota/DetalleCuota sin modificar PlanPagosService, SincronizacionCuotaService ni datos.
