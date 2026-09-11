@@ -1,0 +1,59 @@
+AUDITORÍA: EXCEL DE INTEGRANTES Y ASISTENCIA POR EVENTOS
+Fecha: 11 de septiembre de 2026
+
+1-3. MATRÍCULA REAL
+Campo: registroUniversitario.
+Modelo: PerfilUsuario.
+Tipo: String opcional, trim, máximo 30 caracteres.
+Vacíos posibles: campo ausente, null, cadena vacía o espacios. CI, númeroFraterno y numeroPreRegistro no son matrícula.
+
+4-5. PERTENENCIA A BLOQUE
+La fuente de verdad es DetalleBloque con FILTRO_ASIGNACION_ACTIVA de AsignacionBloqueService: estado distinto de INACTIVO y fechaEliminado=null. El reporte además exige que el Bloque relacionado esté ACTIVO. No consulta contadores como fuente de pertenencia.
+
+6. GUÍAS ACTUALES
+Bloque conserva guiaId heredado y guiasIds vigente. GuiaBloqueService.idsGuiasDelBloque unifica ambas referencias sin duplicarlas. Se reutilizará esa regla y se separarán por sexo del PerfilUsuario del guía.
+
+7-9. EXCEL EXISTENTE
+ExcelJS se carga dinámicamente en ReportesView, ReporteTallasPrimeraCuota, ReportePagosCronologicos, PendientesBloquePanel y vistas de bloques. Los patrones reutilizables son Workbook, writeBuffer, descarga Blob, encabezado granate, autoFilter y frozen row. No existe un helper general estable; se creará un componente especializado sin refactorizar reportes anteriores.
+
+10-12. ASISTENCIA EXISTENTE
+Asistencia registra usuario+gestión+fechaClave con índice único, entrada/salida diaria y métodos PORTAL/ADMINISTRACION. AsistenciaPostulanteGuia utiliza el mismo ámbito diario. No se modificarán porque dos eventos el mismo día necesitan independencia por eventoId.
+
+13-15. EVENTOS YA EXISTENTES
+Existen Evento y AsistenciaEvento, montados en /api/eventos, más EventoController, EventoRoutes, EventoApi y EventosView. Evento admite PROGRAMADO, ACTIVO, CERRADO y CANCELADO. AsistenciaEvento ya registra eventoId, usuarioId, fraternoId, horaIngreso, método y registrador. Su índice único parcial eventoId+usuarioId para estado=PRESENTE evita duplicados. La implementación parcial solo registraba entrada y contaba presentes; no tenía salida, estado derivado, universo esperado, detalle completo ni Excel.
+
+16. ARCHIVOS A MODIFICAR
+- backend/src/models/AsistenciaEvento.ts
+- backend/src/controllers/EventoController.ts
+- backend/src/routes/EventoRoutes.ts
+- backend/src/routes/ReporteRoutes.ts
+- frontend/src/api/EventoApi.ts
+- frontend/src/api/ReporteApi.ts
+- frontend/src/views/eventos/EventosView.tsx
+- frontend/src/views/reportes/ReportesView.tsx
+
+17. ARCHIVOS A CREAR
+- backend/src/services/ReporteIntegrantesBloqueService.ts
+- backend/src/services/EventoAsistenciaService.ts
+- backend/tests/reporte-integrantes-bloque.test.js
+- backend/tests/eventos-asistencia.test.js
+- frontend/src/components/reportes/ReporteIntegrantesMatricula.tsx
+- AUDITORIA_EXCEL_Y_EVENTOS.txt
+- IMPLEMENTACION_REPORTE_EXCEL_Y_EVENTOS.txt
+
+18. RIESGOS
+- Los documentos AsistenciaEvento existentes no tienen horaSalida; se interpretan como DENTRO_DEL_EVENTO, compatible hacia atrás.
+- El universo esperado se limitará a fraternos activos de la gestión con perfil activo, primera versión segura para eventos generales.
+- Los nombres de hojas Excel deben sanearse, truncarse a 31 caracteres y evitar colisiones.
+- No se creará ni eliminará ningún índice; el índice existente ya soporta una asistencia presente por persona/evento.
+
+19. PRUEBAS RELACIONADAS
+El backend posee pruebas Node sobre bloques, credencial QR, permisos y reglas. No había pruebas específicas de Evento/AsistenciaEvento ni del orden natural de matrícula.
+
+20. SOLUCIÓN DE MENOR IMPACTO
+- Endpoint de solo lectura que compone integrantes desde DetalleBloque activo, PerfilUsuario, TallaFraterno, guías y condición existente.
+- Excel generado en cliente con ExcelJS, dentro de un componente nuevo insertado en ReportesView.
+- Extender AsistenciaEvento con campos opcionales de salida y métodos separados, preservando horaIngreso/metodoRegistro/registradoPor.
+- Servicio pequeño para estado y duración derivados.
+- Reutilizar el endpoint de búsqueda de identidad y el QR personal existente mediante validación JWT equivalente a la credencial vigente.
+- Mantener /api/asistencias y /api/asistencias-postulantes-guia intactos.

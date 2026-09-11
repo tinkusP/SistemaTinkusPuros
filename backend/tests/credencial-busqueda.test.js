@@ -7,6 +7,12 @@ test("la búsqueda manual conserva la coincidencia exacta por CI", () => {
   assert.deepEqual(filtro.$or[0], { ci: "12894284" });
 });
 
+test("la búsqueda manual incluye la matrícula universitaria exacta", () => {
+  const filtro = construirFiltroBusquedaIdentidad("1764219");
+  const matricula = filtro.$or.find((criterio) => criterio.registroUniversitario);
+  assert.equal(matricula.registroUniversitario.source, "^1764219$");
+});
+
 test("la búsqueda manual divide el nombre completo en términos obligatorios", () => {
   const filtro = construirFiltroBusquedaIdentidad("Luis Alberto Larico");
   const criterioNombre = filtro.$or.find((criterio) => criterio.$and);

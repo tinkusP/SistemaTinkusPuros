@@ -1,0 +1,128 @@
+IMPLEMENTACIÓN: REPORTE EXCEL POR MATRÍCULA Y ASISTENCIA DE EVENTOS
+Fecha: 11 de septiembre de 2026
+
+ALCANCE IMPLEMENTADO
+====================
+Se agregaron dos funciones localizadas, sin modificar datos reales ni desplegar:
+1. Reporte XLSX de integrantes con asignación activa a un bloque, ordenado por la matrícula real PerfilUsuario.registroUniversitario.
+2. Control administrativo de entrada/salida por Evento, reutilizando Evento, AsistenciaEvento, el QR personal y la búsqueda de identidades existentes.
+
+REPORTE DE INTEGRANTES
+======================
+- Fuente de pertenencia: DetalleBloque con FILTRO_ASIGNACION_ACTIVA y Bloque ACTIVO de la gestión activa (o gestionId explícito).
+- No usa contadores de Bloque para decidir pertenencia y no modifica asignaciones.
+- Conserva el valor real de registroUniversitario; únicamente recorta espacios exteriores para decidir si está vacío.
+- Orden natural: 1, 2, 10; después aparecen las personas sin matrícula ordenadas alfabéticamente.
+- No excluye personas sin matrícula y las muestra como SIN MATRÍCULA.
+- Evita duplicar personas en la salida y marca INCONSISTENCIA: DOS BLOQUES ACTIVOS si detecta más de una asignación activa.
+- Reutiliza guiaId y guiasIds mediante idsGuiasDelBloque, sin migrarlos ni eliminarlos.
+- Consulta tallas por fraterno o usuario sin normalizar ni modificar datos.
+- El botón está al inicio del módulo Reportes, con filtros por bloque y sexo.
+- Hojas: RESUMEN, TODOS, CON MATRICULA, SIN MATRICULA y una hoja dinámica por bloque.
+- Formato: encabezados, autofiltro, fila congelada, anchos, bordes básicos y nombre de archivo sanitizado.
+
+ENDPOINT NUEVO
+==============
+GET /api/reportes/integrantes-matricula
+Acceso: usuario autenticado y administrador real.
+Parámetro opcional: gestionId (MongoId).
+Es un endpoint de solo lectura.
+
+EVENTOS Y ASISTENCIA
+====================
+- Se mantuvo intacto el módulo diario Asistencia y AsistenciaPostulanteGuia.
+- Evento conserva PROGRAMADO, ACTIVO, CERRADO y CANCELADO; ACTIVO equivale a registro abierto.
+- AsistenciaEvento conserva horaIngreso/metodoRegistro/registradoPor y añade campos opcionales compatibles hacia atrás: horaSalida, metodoSalida y registradoSalidaPor.
+- El primer registro crea la entrada; el segundo completa la salida; un tercero devuelve conflicto y no crea duplicados.
+- El índice parcial existente eventoId+usuarioId para estado PRESENTE continúa siendo la barrera de concurrencia.
+- El mismo QR personal se verifica por firma, issuer y credencialQrVersion antes de registrar.
+- La búsqueda manual ahora incluye registroUniversitario exacto, además de CI, nombre/apellido y número de fraterno.
+- Las marcaciones solo se permiten con evento ACTIVO. Un evento CERRADO no acepta marcaciones normales.
+- El universo esperado inicial es: fraternos activos de la gestión del evento con PerfilUsuario activo.
+- El detalle deriva SIN_REGISTRO, DENTRO_DEL_EVENTO o ASISTENCIA_COMPLETA desde entrada/salida.
+- La duración se calcula, no se almacena.
+- React Query refresca detalle y listado inmediatamente y cada 10 segundos mientras el panel está abierto.
+- Correcciones requieren motivo de al menos cinco caracteres, confirmación y guardan auditoría antes/después con el administrador autenticado.
+- El Excel del evento contiene RESUMEN, TODOS, ASISTENCIA COMPLETA, DENTRO y SIN ASISTENCIA. El resumen incluye gestión, esperados, entradas, salidas, dentro, completas, ausentes, porcentaje, sexo y personas por bloque.
+
+ENDPOINTS EXTENDIDOS/NUEVOS DE EVENTO
+=====================================
+POST  /api/eventos/:id/asistencias
+      Conserva el endpoint y ahora alterna entrada/salida según el estado real.
+POST  /api/eventos/:id/asistencias/qr
+      Verifica el QR personal y ejecuta la misma lógica de entrada/salida.
+PATCH /api/eventos/:id/asistencias/:asistenciaId
+      Corrección administrativa auditada.
+GET   /api/eventos/:id
+      Incluye universo esperado, filas y estadísticas completas.
+GET   /api/eventos
+      Incluye entradas, salidas y personas dentro por evento.
+
+ARCHIVOS MODIFICADOS
+====================
+- backend/src/controllers/CredencialQrController.ts
+- backend/src/controllers/EventoController.ts
+- backend/src/controllers/ReporteController.ts
+- backend/src/models/AsistenciaEvento.ts
+- backend/src/routes/EventoRoutes.ts
+- backend/src/routes/ReporteRoutes.ts
+- backend/tests/credencial-busqueda.test.js
+- frontend/src/api/CredencialQrApi.ts
+- frontend/src/api/EventoApi.ts
+- frontend/src/api/ReporteApi.ts
+- frontend/src/views/eventos/EventosView.tsx
+- frontend/src/views/reportes/ReportesView.tsx
+
+ARCHIVOS CREADOS
+================
+- AUDITORIA_EXCEL_Y_EVENTOS.txt
+- IMPLEMENTACION_REPORTE_EXCEL_Y_EVENTOS.txt
+- backend/src/services/EventoAsistenciaService.ts
+- backend/src/services/ReporteIntegrantesBloqueService.ts
+- backend/tests/eventos-asistencia.test.js
+- backend/tests/reporte-integrantes-bloque.test.js
+- frontend/src/components/reportes/ReporteIntegrantesMatricula.tsx
+
+PRUEBAS Y VERIFICACIÓN
+======================
+- Backend: npm test. Resultado: 14/14 archivos de prueba aprobados; build TypeScript aprobado.
+- Pruebas nuevas: estados/acciones/duración de eventos; orden natural y ausencia de matrícula; búsqueda por matrícula.
+- Frontend: npx tsc --noEmit. Resultado: aprobado sin errores.
+- Frontend: npm run build. Resultado: aprobado. Vite mantiene una advertencia preexistente/no bloqueante por tamaño de chunks.
+- ExcelJS: se generó un libro en memoria, se volvió a abrir y se verificó su celda; resultado correcto.
+- git diff --check: aprobado, sin errores de espacios.
+
+COMPATIBILIDAD E ÍNDICES
+========================
+No se crearon ni eliminaron índices. No se necesita migración: los nuevos campos de salida son opcionales y los registros anteriores se interpretan como personas aún dentro del evento. El índice único parcial existente evita dos asistencias PRESENTE para la misma persona y evento, pero permite conservar registros ANULADA históricos.
+
+RIESGOS/PENDIENTES DOCUMENTADOS
+===============================
+- La primera versión considera como esperados a todos los fraternos activos de la gestión. Segmentación futura por bloque o grupo requerirá ampliar Evento de forma explícita.
+- Los registros históricos de AsistenciaEvento sin horaSalida aparecen como DENTRO_DEL_EVENTO hasta que administración los corrija o se defina una política histórica.
+- La generación Excel sucede en el navegador; conjuntos excepcionalmente grandes consumen memoria del equipo del administrador.
+- Vite reporta chunks grandes, incluido ExcelJS; ExcelJS ya se carga dinámicamente en los reportes nuevos.
+
+CAMBIOS DELIBERADAMENTE NO REALIZADOS
+====================================
+- No se modificaron pagos, tallas, asignación/cupos/contadores de bloques, guías, roles, autenticación ni JWT.
+- No se modificó .env ni infraestructura Railway/Vercel/Cloudflare.
+- No se conectó ni se escribió en producción.
+- No se ejecutaron migraciones ni reparaciones de datos.
+- No se hizo commit, push, merge ni deploy, conforme a la prohibición expresa de esta tarea.
+
+RESULTADO
+=========
+[OK] Reporte XLSX de todas las personas con bloque activo.
+[OK] Matrícula real y orden natural.
+[OK] Personas sin matrícula separadas y conservadas.
+[OK] Hojas por bloque dinámicas.
+[OK] Entrada y salida independientes por eventoId.
+[OK] Dos eventos el mismo día son compatibles.
+[OK] Tercera marcación bloqueada.
+[OK] QR personal reutilizado.
+[OK] Búsqueda por CI, matrícula, nombre/apellido y número de fraterno.
+[OK] Estado y métricas actualizados sin recargar la página.
+[OK] Correcciones administrativas auditadas.
+[OK] Excel de asistencia por evento.
+[OK] Sin cambios en asistencia diaria ni datos productivos.

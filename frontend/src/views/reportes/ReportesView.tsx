@@ -9,6 +9,7 @@ import {
 } from "@/api/ReporteApi";
 import ReporteTallasPrimeraCuota from "@/components/reportes/ReporteTallasPrimeraCuota";
 import ReportePagosCronologicos from "@/components/reportes/ReportePagosCronologicos";
+import ReporteIntegrantesMatricula from "@/components/reportes/ReporteIntegrantesMatricula";
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
@@ -124,6 +125,7 @@ export default function ReportesView() {
   const almacenamiento = alm.data;
 
   return <main className="space-y-5">
+    <ReporteIntegrantesMatricula />
     <ReporteTallasPrimeraCuota />
     <ReportePagosCronologicos />
     <section className="print:hidden">

@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { obtenerReporteIntegrantesBloque } from "../services/ReporteIntegrantesBloqueService";
 import Gestion from "../models/Gestion";
 import Preregistro from "../models/Preregistro";
 import Cuota from "../models/Cuota";
@@ -30,5 +31,11 @@ export async function reporteEjecutivo(req:Request,res:Response){
 export async function reporteTallasPrimeraCuota(req: Request, res: Response) {
  const reporte = await generarReporteTallasPrimeraCuota(req.query.gestionId ? String(req.query.gestionId) : undefined);
  if (!reporte) return res.status(404).json({ error: "No existe una gestión para generar el reporte" });
+ return res.json(reporte);
+}
+
+export async function reporteIntegrantesPorMatricula(req: Request, res: Response) {
+ const reporte = await obtenerReporteIntegrantesBloque(req.query.gestionId ? String(req.query.gestionId) : undefined);
+ if (!reporte.gestion) return res.status(404).json({ error: "No existen bloques activos para generar el reporte" });
  return res.json(reporte);
 }

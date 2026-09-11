@@ -1,7 +1,11 @@
 import api from "@/lib/axios";
-export type Evento = { _id: string; nombre: string; descripcion?: string; tipo: string; fecha: string; horaInicio?: string; horaFin?: string; estado: "PROGRAMADO"|"ACTIVO"|"CERRADO"|"CANCELADO"; presentes: number };
+export type Evento = { _id: string; nombre: string; descripcion?: string; tipo: string; fecha: string; horaInicio?: string; horaFin?: string; gestionId?: string|{_id:string;nombre?:string;anio?:number}; estado: "PROGRAMADO"|"ACTIVO"|"CERRADO"|"CANCELADO"; presentes: number; entradas?: number; salidas?: number; dentro?: number };
+export type FilaAsistenciaEvento = { asistenciaId: string|null; usuarioId: string; fraternoId: string; matricula: string; nombreCompleto: string; ci: string; sexo: string; telefono: string; bloque: string; entrada: string|null; salida: string|null; duracionMinutos: number|null; duracion: string; estado: "SIN_REGISTRO"|"DENTRO_DEL_EVENTO"|"ASISTENCIA_COMPLETA"; metodoEntrada: string; metodoSalida: string; observacion: string; condicion: string };
+export type DetalleEvento = { evento: Evento; asistencias: FilaAsistenciaEvento[]; estadisticas: { totalEsperado:number; entradas:number; salidas:number; dentro:number; completas:number; sinAsistencia:number; presentes:number; hombres:number; mujeres:number; nuevos:number; antiguos:number } };
 export const listarEventos = async () => (await api.get("/eventos")).data as { eventos: Evento[] };
 export const crearEvento = async (datos: { nombre:string; tipo:string; fecha:string; horaInicio?:string; horaFin?:string; descripcion?:string }) => (await api.post("/eventos", datos)).data;
 export const cambiarEstadoEvento = async (id:string, estado:Evento["estado"]) => (await api.patch(`/eventos/${id}/estado`,{estado})).data;
-export const obtenerEvento = async (id:string) => (await api.get(`/eventos/${id}`)).data;
+export const obtenerEvento = async (id:string) => (await api.get(`/eventos/${id}`)).data as DetalleEvento;
 export const registrarAsistenciaEvento = async (id:string, usuarioId:string, metodoRegistro:"QR"|"CI"|"NOMBRE"|"MANUAL"="MANUAL") => (await api.post(`/eventos/${id}/asistencias`,{usuarioId,metodoRegistro})).data;
+export const registrarAsistenciaEventoQr = async (id:string, token:string) => (await api.post(`/eventos/${id}/asistencias/qr`,{token})).data;
+export const corregirAsistenciaEvento = async (eventoId:string,asistenciaId:string,datos:{motivo:string;horaIngreso?:string;horaSalida?:string|null}) => (await api.patch(`/eventos/${eventoId}/asistencias/${asistenciaId}`,datos)).data;

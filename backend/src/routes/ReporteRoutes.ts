@@ -3,7 +3,7 @@ import { query } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { handleInputErrors } from "../middleware/validation";
-import { reporteEjecutivo, reporteTallasPrimeraCuota } from "../controllers/ReporteController";
+import { reporteEjecutivo, reporteIntegrantesPorMatricula, reporteTallasPrimeraCuota } from "../controllers/ReporteController";
 import { estadoAlmacenamiento, reporteTallas } from "../controllers/AlmacenamientoController";
 import { reporteFormacion } from "../controllers/ReporteFormacionController";
 import { centroControl, pagosCronologicos } from "../controllers/AdministracionController";
@@ -16,5 +16,6 @@ router.get("/almacenamiento", authenticate, soloAdministracion, estadoAlmacenami
 router.get("/ejecutivo", authenticate, soloAdministracion, query("gestionId").optional().isMongoId(), handleInputErrors, reporteEjecutivo);
 router.get("/pagos-cronologicos", authenticate, soloAdministracion, pagosCronologicos);
 router.get("/centro-control", authenticate, soloAdministracion, centroControl);
+router.get("/integrantes-matricula", authenticate, soloAdministradorReal, query("gestionId").optional().isMongoId(), handleInputErrors, reporteIntegrantesPorMatricula);
 
 export default router;

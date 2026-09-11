@@ -64,14 +64,14 @@ async function construirIdentidad(req: Request, usuario: any, metodo: "QR" | "BU
     const bloqueGuia = guia ? await Bloque.findOne({ estado: "ACTIVO", $or: [{ guiaId: guia._id }, { guiasIds: guia._id }] }).select("nombre").lean() : null;
     const bloque = (asignacion?.bloqueId as any)?.nombre ?? bloqueGuia?.nombre ?? "SIN BLOQUE";
     await registrarAuditoria(req, { accion: metodo === "QR" ? "ESCANEAR_QR" : "IDENTIFICAR_MANUALMENTE", modulo: "CREDENCIALES", entidad: "PerfilUsuario", entidadId: usuario._id, descripcion: `Se verificó la identidad de ${usuario.ci} mediante ${metodo}` });
-    return { valida: usuario.estado === "ACTIVO", metodoIdentificacion: metodo, usuario: { _id: usuario._id, nombres: usuario.nombres, apellidoPaterno: usuario.apellidoPaterno, apellidoMaterno: usuario.apellidoMaterno, ci: usuario.ci, fotoPerfil: usuario.fotoPerfil, email: usuario.email, estado: usuario.estado, roles: usuario.roles }, fraterno, bloque, talla, pago };
+    return { valida: usuario.estado === "ACTIVO", metodoIdentificacion: metodo, usuario: { _id: usuario._id, nombres: usuario.nombres, apellidoPaterno: usuario.apellidoPaterno, apellidoMaterno: usuario.apellidoMaterno, ci: usuario.ci, registroUniversitario: usuario.registroUniversitario, fotoPerfil: usuario.fotoPerfil, email: usuario.email, estado: usuario.estado, roles: usuario.roles }, fraterno, bloque, talla, pago };
 }
 
 const seleccionarUsuario = (filtro: Record<string, unknown>) => PerfilUsuario.findOne({
   ...filtro,
   fechaEliminado: null,
   estado: { $ne: "ELIMINADO" },
-}).select("nombres apellidoPaterno apellidoMaterno ci fotoPerfil email estado roles credencialQrVersion").populate("roles", "nombre codigo");
+}).select("nombres apellidoPaterno apellidoMaterno ci registroUniversitario fotoPerfil email estado roles credencialQrVersion").populate("roles", "nombre codigo");
 
 const escaparRegex = (valor: string) => valor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -86,6 +86,7 @@ export function construirFiltroBusquedaIdentidad(termino: string, usuarioIdsFrat
     estado: { $ne: "ELIMINADO" },
     $or: [
       { ci: termino },
+      { registroUniversitario: new RegExp(`^${escaparRegex(termino)}$`, "i") },
       ...(porNombreCompleto.length ? [{ $and: porNombreCompleto }] : []),
       ...(usuarioIdsFraternos.length ? [{ _id: { $in: usuarioIdsFraternos } }] : []),
     ],
@@ -111,8 +112,8 @@ export async function buscarIdentidades(req: Request, res: Response) {
   const seguro = escaparRegex(termino);
   const regex = new RegExp(seguro, "i");
   const fraternos = await Fraterno.find({ numeroFraterno: regex, fechaEliminado: null }).select("usuarioId").limit(20).lean();
-  const usuarios = await PerfilUsuario.find(construirFiltroBusquedaIdentidad(termino, fraternos.map((fraterno) => fraterno.usuarioId))).select("nombres apellidoPaterno apellidoMaterno ci fotoPerfil roles").populate("roles", "nombre codigo").limit(20).lean();
-  usuarios.sort((a, b) => Number(String(b.ci) === termino) - Number(String(a.ci) === termino) || [a.nombres, a.apellidoPaterno].join(" ").localeCompare([b.nombres, b.apellidoPaterno].join(" "), "es"));
+  const usuarios = await PerfilUsuario.find(construirFiltroBusquedaIdentidad(termino, fraternos.map((fraterno) => fraterno.usuarioId))).select("nombres apellidoPaterno apellidoMaterno ci registroUniversitario fotoPerfil roles").populate("roles", "nombre codigo").limit(20).lean();
+  usuarios.sort((a, b) => Number(String(b.ci) === termino || String(b.registroUniversitario).toLocaleLowerCase() === termino.toLocaleLowerCase()) - Number(String(a.ci) === termino || String(a.registroUniversitario).toLocaleLowerCase() === termino.toLocaleLowerCase()) || [a.nombres, a.apellidoPaterno].join(" ").localeCompare([b.nombres, b.apellidoPaterno].join(" "), "es"));
   return res.json({ resultados: usuarios });
 }
 
