@@ -122,4 +122,6 @@ Revertir únicamente el commit de esta corrección mediante git revert <commit>,
 [OK] No se modificaron pagos, tallas, bloques, usuarios, auth ni .env.
 [OK] Login/bloques/pagos/reportes previos cubiertos por compilación y pruebas de regresión disponibles.
 [OK] 0 errores nuevos.
-[PENDIENTE HASTA PUBLICAR] Verificación HTTP pública sin 404 en Railway.
+[OK] Railway deployment 26ef6921-a6ef-454e-bfd5-608bae3a5b6b finalizó SUCCESS.
+[OK] Verificación pública: GET /api/reportes/integrantes-matricula devuelve 401 sin token (ruta existente y protegida), no 404.
+[OK] Verificación pública: GET /health devuelve 200.
