@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { esIndiceAsignacionActivaCorrecto, esIndiceFraternoBloque, esIndicePosicionFisica, FILTRO_ASIGNACION_ACTIVA, resumirAsignacion } = require("../dist/services/AsignacionBloqueService");
+const { esDuplicadoAsignacionActiva, esIndiceAsignacionActivaCorrecto, esIndiceCompuestoHistoricoIncompatible, esIndiceFraternoBloque, esIndicePosicionFisica, FILTRO_ASIGNACION_ACTIVA, resumirAsignacion } = require("../dist/services/AsignacionBloqueService");
 
 test("identifica el índice absoluto heredado de fraterno por bloque", () => {
   assert.equal(esIndiceFraternoBloque({ key: { fraternoId: 1 } }), true);
@@ -16,6 +16,17 @@ test("identifica índices heredados de la matriz física", () => {
 test("distingue el índice parcial correcto de índices únicos antiguos", () => {
   assert.equal(esIndiceAsignacionActivaCorrecto({ key: { fraternoId: 1 }, unique: true, partialFilterExpression: { estado: "ACTIVO", fechaEliminado: null } }), true);
   assert.equal(esIndiceAsignacionActivaCorrecto({ key: { fraternoId: 1 }, unique: true }), false);
+});
+
+test("reproduce el índice único histórico que bloquea una reasignación al mismo bloque", () => {
+  assert.equal(esIndiceCompuestoHistoricoIncompatible({ key: { bloqueId: 1, fraternoId: 1 }, unique: true }), true);
+  assert.equal(esIndiceCompuestoHistoricoIncompatible({ key: { bloqueId: 1, fraternoId: 1 }, unique: false }), false);
+});
+
+test("solo un duplicado del índice activo representa concurrencia real", () => {
+  assert.equal(esDuplicadoAsignacionActiva({ code: 11000, keyPattern: { fraternoId: 1 } }), true);
+  assert.equal(esDuplicadoAsignacionActiva({ code: 11000, keyPattern: { bloqueId: 1, fraternoId: 1 } }), false);
+  assert.equal(esDuplicadoAsignacionActiva({ code: 11000, keyPattern: { otroCampo: 1 } }), false);
 });
 
 test("una pertenencia exige una relación activa y no eliminada", () => {

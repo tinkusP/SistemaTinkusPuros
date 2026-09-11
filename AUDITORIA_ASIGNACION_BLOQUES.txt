@@ -1,0 +1,66 @@
+AUDITORÍA DEL FLUJO DE ASIGNACIÓN DE BLOQUES
+Fecha: 11 de septiembre de 2026
+
+1. FLUJO ACTUAL FRONTEND -> BACKEND
+- La vista administrativa frontend/src/views/guia/GuiaBloqueView.tsx busca una persona y decide entre incorporar un Fraterno existente o crear/reactivar su perfil fraterno.
+- La mutación administrativa conserva rutas separadas de las rutas de guía y está protegida por soloAdministracion + soloAdministradorReal.
+- La respuesta se refresca mediante la consulta general del panel; el buscador usa el estado local del término consultado.
+
+2. ENDPOINT DE BÚSQUEDA
+GET /api/guias/bloques/buscar-usuarios?bloqueId=<id>&buscar=<texto>
+Controlador: buscarUsuariosParaBloqueComoAdmin.
+
+3. ENDPOINTS DE ASIGNACIÓN Y RETIRO
+- POST /api/guias/bloques/integrantes con bloqueId + fraternoId.
+- POST /api/guias/bloques/registrar-fraterno con bloqueId + usuarioId.
+- DELETE /api/guias/bloques/integrantes/:detalleId.
+
+4. MODELOS INVOLUCRADOS
+PerfilUsuario, Gestion, Preregistro, Fraterno, Bloque y DetalleBloque. Guia se utiliza para los responsables del bloque, no como pertenencia de integrante.
+
+5. SERVICIOS INVOLUCRADOS
+AsignacionBloqueService define la asignación activa, resume la pertenencia y administra el índice. BloqueService valida sexo y capacidades. IndiceBloqueService mantiene los índices de guías.
+
+6. CONDICIÓN EXACTA DEL MENSAJE
+asignarFraterno reserva cupo e intenta DetalleBloque.create(). En el catch, cualquier error Mongo code=11000 se trata como conflicto concurrente. Si obtenerAsignacionActivaValida() no encuentra una asignación ganadora, responde: “La asignación cambió durante la operación. Actualiza la búsqueda.”
+
+7. CAUSA RAÍZ CONFIRMADA
+La colección de producción detalle_bloques conserva dos índices relevantes:
+- fraternoId_activo_1: único y parcial para estado=ACTIVO + fechaEliminado=null (correcto).
+- bloqueId_1_fraternoId_1: único, sin filtro parcial (heredado e incorrecto para conservar historial).
+Después de retirar a una persona, su documento histórico INACTIVO mantiene el mismo bloqueId/fraternoId. Reasignarla al mismo bloque intenta crear otro documento y el índice heredado produce E11000. No existe asignación activa ganadora, pero el catch genérico lo presenta como concurrencia. La búsqueda, que sí usa la definición activa vigente, muestra correctamente “Disponible para agregar”.
+
+8. DATOS NECESARIOS PARA REPRODUCIR
+Un DetalleBloque INACTIVO histórico para el mismo par bloqueId/fraternoId y el índice único absoluto bloqueId_1_fraternoId_1. No se necesita una segunda asignación activa.
+
+9. UBICACIÓN DEL PROBLEMA
+Combinación de índice heredado de base de datos y clasificación demasiado amplia de E11000 en backend. El frontend envía correctamente bloqueId y fraternoId.
+
+10. RIESGO DE MODIFICACIÓN
+Bajo-medio. Eliminar la unicidad del índice compuesto no reduce la protección contra doble asignación porque fraternoId_activo_1 continúa garantizando una sola asignación ACTIVA por fraterno. Debe conservarse un índice compuesto no único para consultas/historial.
+
+11. SOLUCIÓN MÍNIMA PROPUESTA
+- Reconocer explícitamente índices compuestos históricos incompatibles.
+- En la migración idempotente, reemplazar el índice único bloqueId+fraternoId por uno no único.
+- Mantener intacto el índice único parcial de asignación activa.
+- Clasificar como concurrencia únicamente un E11000 originado en fraternoId_activo_1 y cuando exista una asignación activa ganadora.
+- Sincronizar contadores desde relaciones activas después de agregar/retirar/mover.
+- Añadir movimiento administrativo atómico o transaccional, manteniendo restricciones del guía.
+
+12. ARCHIVOS PREVISTOS
+- backend/src/services/AsignacionBloqueService.ts
+- backend/src/controllers/GuiaController.ts
+- backend/src/routes/GuiaRoutes.ts
+- backend/src/scripts/migrarPermisosYBloquesGuia.ts
+- backend/src/scripts/auditarAsignacionesBloques.ts
+- backend/tests/asignaciones-bloques.test.js
+- frontend/src/api/BloqueGuiaApi.ts
+- frontend/src/views/guia/GuiaBloqueView.tsx
+- CORRECCION_ASIGNACION_BLOQUES.txt
+
+DIAGNÓSTICO DE SOLO LECTURA
+- 304 asignaciones activas.
+- 0 asignaciones activas duplicadas.
+- 0 relaciones huérfanas.
+- 0 perfiles Fraterno duplicados por usuario/gestión.
+- No se modificaron datos ni índices durante esta auditoría.

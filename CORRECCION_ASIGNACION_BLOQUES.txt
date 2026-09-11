@@ -1,0 +1,118 @@
+CORRECCIÓN DEL FLUJO DE ASIGNACIÓN DE BLOQUES
+Fecha: 11 de septiembre de 2026
+
+CAUSA RAÍZ
+-----------
+Producción conservaba el índice MongoDB heredado bloqueId_1_fraternoId_1 con unique=true. Aunque retirar un integrante marcaba su DetalleBloque como INACTIVO, el documento histórico seguía ocupando para siempre el par bloque/fraterno. Al volver a asignarlo al mismo bloque, MongoDB respondía E11000. El catch de asignarFraterno consideraba cualquier E11000 como una carrera de asignación y, al no encontrar una pertenencia activa ganadora, mostraba falsamente “La asignación cambió durante la operación”.
+
+La auditoría de solo lectura confirmó además que no existían asignaciones activas duplicadas, relaciones huérfanas ni perfiles Fraterno duplicados. El problema era el índice heredado, no una doble asignación real del usuario buscado.
+
+CORRECCIÓN
+----------
+- La definición común vigente continúa siendo: estado distinto de INACTIVO y fechaEliminado=null; el índice de exclusión usa estrictamente estado=ACTIVO y fechaEliminado=null.
+- La migración idempotente detecta y sustituye el índice compuesto único bloqueId+fraternoId por el mismo índice no único, apto para consultar y conservar historial.
+- Se mantiene fraternoId_activo_1, único y parcial, como protección definitiva contra dos asignaciones activas simultáneas.
+- Ya no se ejecutan reparaciones globales de índices dentro del clic de asignación.
+- Solo los E11000 atribuibles al índice fraternoId_activo_1 se clasifican como conflicto concurrente.
+- Retirar recalcula el contador desde DetalleBloque activos.
+- Se agregó movimiento administrativo transaccional entre bloques, con validación de gestión, sexo, cupo por género, cupo total, desactivación del origen, creación del destino y recálculo de ambos contadores.
+
+ARCHIVOS MODIFICADOS
+--------------------
+- backend/src/models/DetalleBloque.ts
+- backend/src/services/AsignacionBloqueService.ts
+- backend/src/controllers/GuiaController.ts
+- backend/src/routes/GuiaRoutes.ts
+- backend/src/scripts/auditarAsignacionesBloques.ts
+- backend/tests/asignaciones-bloques.test.js
+- frontend/src/api/BloqueGuiaApi.ts
+- frontend/src/views/guia/GuiaBloqueView.tsx
+
+ARCHIVOS NUEVOS
+---------------
+- AUDITORIA_ASIGNACION_BLOQUES.txt
+- CORRECCION_ASIGNACION_BLOQUES.txt
+
+LÓGICA CONSERVADA
+-----------------
+- Bloques administrativos sin filas ni columnas.
+- Una sola pertenencia activa por fraterno.
+- 40 hombres, 80 mujeres y 120 integrantes.
+- 2 guías hombres y 2 guías mujeres.
+- Administración opera cualquier bloque mediante soloAdministradorReal.
+- El guía sigue limitado a su bloque mediante el endpoint y permiso propios.
+- No se cambiaron pagos, tallas, perfiles, fraternos, guías ni roles.
+
+PRUEBAS
+-------
+- Se añadió primero una prueba del índice único heredado bloqueId+fraternoId. Antes del cambio falló porque el código no identificaba el índice incompatible.
+- Después del cambio: backend 12 archivos/suites aprobados, 0 fallidos.
+- La prueba nueva confirma que el índice compuesto único es incompatible y el compuesto no único es válido.
+- La prueba nueva confirma que solo el duplicado de fraternoId_activo_1 representa concurrencia de asignación.
+- Las pruebas existentes confirman límites 40/80/120 y 2 guías por género.
+- Build TypeScript backend: aprobado.
+- Chequeo TypeScript frontend: aprobado.
+- Build Vite frontend: aprobado; únicamente permanece la advertencia preexistente sobre tamaño de chunks.
+
+CONCURRENCIA
+------------
+El índice único parcial fraternoId_activo_1 es la autoridad final. Dos administradores pueden leer “libre”, pero solo el primer insert ACTIVO gana. El segundo recibe E11000 de ese índice, consulta la asignación ganadora y obtiene un conflicto real con el bloque actual. El movimiento se ejecuta dentro de una transacción MongoDB y no deja simultáneamente origen y destino activos.
+
+DATOS HISTÓRICOS
+----------------
+Retirar conserva el DetalleBloque original como INACTIVO con fechaRetiro. Reasignar crea un documento ACTIVO nuevo. El índice compuesto deja de ser único para permitir múltiples periodos históricos del mismo par bloque/fraterno.
+
+ÍNDICES
+-------
+Índice incorrecto observado: bloqueId_1_fraternoId_1, unique=true, sin filtro.
+Índice recomendado/aplicado por migración: bloqueId_1_fraternoId_1, unique=false.
+Índice de seguridad conservado: fraternoId_activo_1, unique=true, parcial estado=ACTIVO y fechaEliminado=null.
+Riesgo: bajo; se relaja únicamente la unicidad histórica redundante, no la unicidad activa.
+Rollback: recrear el índice compuesto como único solo sería posible eliminando/consolidando historial repetido, por lo que no se recomienda. El rollback funcional seguro es conservar el índice parcial activo y retirar temporalmente el índice compuesto no único.
+
+FRONTEND
+--------
+- Después de agregar, retirar o mover se invalidan guias-bloques, buscar-usuarios-bloque-admin, pendientes-bloque y candidato-guia.
+- Cada integrante administrativo ofrece “Mover a...” con confirmación y bloques destino activos.
+- La interfaz se actualiza sin recargar manualmente la página.
+
+BACKEND
+-------
+- Búsqueda: GET /api/guias/bloques/buscar-usuarios.
+- Agregar existente: POST /api/guias/bloques/integrantes.
+- Registrar/agregar: POST /api/guias/bloques/registrar-fraterno.
+- Retirar: DELETE /api/guias/bloques/integrantes/:detalleId.
+- Mover (nuevo): PATCH /api/guias/bloques/integrantes/:detalleId/mover.
+- Todas las rutas administrativas afectadas requieren soloAdministradorReal.
+
+RIESGOS
+-------
+- El movimiento transaccional requiere MongoDB con soporte de transacciones; producción Atlas lo proporciona.
+- El proyecto mantiene controladores extensos preexistentes; no se refactorizaron fuera del flujo afectado.
+
+CAMBIOS NO REALIZADOS
+---------------------
+- No se modificaron pagos ni tallas.
+- No se eliminaron usuarios, perfiles, fraternos o guías.
+- No se reasignaron personas reales automáticamente.
+- No se modificaron archivos .env ni secretos.
+- No se ejecutó reparación masiva de documentos.
+
+RESULTADO FINAL
+---------------
+[X] Administrador puede agregar fraterno.
+[X] Administrador puede retirar fraterno.
+[X] Administrador puede mover fraterno.
+[X] Fraterno retirado puede ser reasignado.
+[X] No existen dobles asignaciones activas.
+[X] Límites 40 hombres / 80 mujeres continúan funcionando.
+[X] Guías siguen limitados a su propio bloque.
+[X] Búsqueda muestra estado real mediante la definición activa común.
+[X] Falso error “La asignación cambió” corregido.
+[X] Conflicto concurrente REAL continúa protegido.
+[X] Contadores quedan sincronizados.
+[X] Tests existentes continúan pasando.
+[X] No se modificaron pagos.
+[X] No se modificaron tallas.
+[X] No se eliminaron usuarios.
+[X] No se ejecutaron cambios de datos de producción durante auditoría/desarrollo.

@@ -13,6 +13,7 @@ export const buscarUsuariosBloque = async (bloqueId: string, buscar: string) => 
 export const agregarFraternoExistente = (bloqueId: string, fraternoId: string) => api.post("/guias/bloques/integrantes", { bloqueId, fraternoId });
 export const registrarYAgregarFraterno = (bloqueId: string, usuarioId: string) => api.post("/guias/bloques/registrar-fraterno", { bloqueId, usuarioId });
 export const retirarIntegrante = (detalleId: string) => api.delete(`/guias/bloques/integrantes/${detalleId}`);
+export const moverIntegrante = (detalleId: string, bloqueId: string) => api.patch(`/guias/bloques/integrantes/${detalleId}/mover`, { bloqueId });
 export type PendienteBloque = { fraternoId:string; usuarioId:string; nombre:string; ci:string; sexo:"HOMBRE"|"MUJER"|null; telefono?:string; facultad?:string; roles:string[]; condiciones:string[]; esFraterno:boolean; esGuia:boolean; estadoGuia:string; esPostulante:boolean; estadoPostulante:string; condicion:string; fechaPrimeraCuota:string|null; primeraCuota:string; tallaPolera:string|null; tallaChamarra:string|null; estado:string; listo:boolean };
 export type BloqueDisponible = { _id:string; nombre:string; inscripcionesAbiertas?:boolean; capacidad:{HOMBRE:number;MUJER:number} };
 export const obtenerPendientesBloque = async () => (await api.get("/guias/bloques/pendientes")).data as { gestion:any; personas:PendienteBloque[]; bloques:BloqueDisponible[] };

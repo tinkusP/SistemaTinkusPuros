@@ -11,7 +11,7 @@ import TallaFraterno from "../models/TallaFraterno";
 import Preregistro from "../models/Preregistro";
 import { inscripcionesBloqueAbiertas, LIMITES_BLOQUE, mensajeCupoCompleto, normalizarGeneroBloque, puedeIncorporarAlBloque, validarCupoGuia, validarCupoIntegrante, validarNombreBloque } from "../services/BloqueService";
 import { asegurarIndiceGuiaBloqueDisperso, asegurarIndiceGuiasBloqueParcial, asegurarIndicePostulanteGuiaDisperso } from "../services/IndiceBloqueService";
-import { asegurarIndiceAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion } from "../services/AsignacionBloqueService";
+import { esDuplicadoAsignacionActiva, FILTRO_ASIGNACION_ACTIVA, obtenerAsignacionActivaValida, resumirAsignacion, sincronizarContadoresIntegrantes } from "../services/AsignacionBloqueService";
 import { idsGuiasDelBloque, retirarGuiaDeBloques, sincronizarContadoresGuias } from "../services/GuiaBloqueService";
 import { crearPreregistroParaUsuario } from "./PreregistroController";
 import { obtenerOCrearFraterno } from "../services/CodigoFraternoService";
@@ -110,24 +110,54 @@ async function asignarFraterno(req: Request, res: Response, bloque: any, exigeGe
   const reservado = await Bloque.findOneAndUpdate(filtroReserva, { $inc: { [campoCantidad]: 1 } }, { new: true });
   if (!reservado) { const vigente = await Bloque.findById(bloque._id).select("nombre inscripcionesAbiertas").lean(); if (!permitirBloqueCerrado && vigente && !inscripcionesBloqueAbiertas(vigente)) return res.status(409).json({ code: "BLOCK_CLOSED", error: `El bloque ${vigente.nombre} tiene las inscripciones cerradas.`, message: `El bloque ${vigente.nombre} tiene las inscripciones cerradas.` }); return res.status(409).json({ error: mensajeCupoCompleto(genero) }); }
   try {
-    await asegurarIndiceAsignacionActiva();
     const detalle = await DetalleBloque.create({ bloqueId: bloque._id, fraternoId: fraterno._id, genero, estado: "ACTIVO" });
     await registrarAuditoria(req, { accion: "INCORPORAR_FRATERNO", modulo: "BLOQUES", entidad: "DetalleBloque", entidadId: detalle._id, descripcion: `Se incorporó un fraterno al bloque ${bloque.nombre}`, datosDespues: { bloqueId: bloque._id, fraternoId: fraterno._id, genero } });
-    console.info(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, ci: fraterno.usuarioId?.ci, resultado: "OK" }));
+    console.info(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, administradorId: req.usuario?._id, resultado: "OK" }));
     return res.status(201).json({ message: "Fraterno agregado al bloque", detalle });
   } catch (error) {
-    console.error(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, ci: fraterno.usuarioId?.ci, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
+    console.error(JSON.stringify({ requestId, accion: "ADD_TO_BLOCK", bloqueId: bloque._id, fraternoId: fraterno._id, administradorId: req.usuario?._id, resultado: "ERROR", error: error instanceof Error ? error.message : String(error) }));
     await Bloque.updateOne({ _id: bloque._id, [campoCantidad]: { $gt: 0 } }, { $inc: { [campoCantidad]: -1 } });
-    if ((error as { code?: number }).code === 11000) {
+    if (esDuplicadoAsignacionActiva(error)) {
       const ganadora: any = await obtenerAsignacionActivaValida(fraterno._id);
       const resumen = resumirAsignacion(ganadora);
-      return res.status(409).json({ error: resumen ? `Este fraterno pertenece actualmente al bloque ${resumen.bloqueNombre}.` : "La asignación cambió durante la operación. Actualiza la búsqueda.", asignacion: resumen });
+      return res.status(409).json({ code: "ASSIGNMENT_CHANGED", error: resumen ? `La persona fue asignada por otro administrador después de tu búsqueda. Ahora pertenece al bloque ${resumen.bloqueNombre}.` : "La persona fue asignada por otro administrador después de tu búsqueda. Actualiza los datos.", asignacion: resumen });
     }
     return res.status(409).json({ error: error instanceof Error ? error.message : "No se pudo asignar el fraterno" });
   }
 }
 export const asignarIntegrante = async (req: Request, res: Response) => { const bloque = await Bloque.findOne({ _id: req.body.bloqueId, estado: "ACTIVO" }); if (!bloque) return res.status(404).json({ error: "Bloque activo no encontrado" }); return asignarFraterno(req, res, bloque, req.body.genero, true); };
-export const quitarIntegranteComoAdmin = async (req: Request, res: Response) => { const detalle: any = await DetalleBloque.findOneAndUpdate({ _id: req.params.detalleId, ...FILTRO_ASIGNACION_ACTIVA }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } }, { new: true }).populate("bloqueId", "nombre"); if (!detalle) return res.status(404).json({ error: "Integrante activo no encontrado" }); const bloqueId=detalle.bloqueId?._id??detalle.bloqueId; const campoCantidad=detalle.genero==="HOMBRE"?"cantidadHombres":"cantidadMujeres"; await Bloque.updateOne({ _id: bloqueId, [campoCantidad]: { $gt: 0 } }, { $inc: { [campoCantidad]: -1 } }); await registrarAuditoria(req, { accion: "RETIRAR_FRATERNO_BLOQUE", modulo: "BLOQUES", entidad: "DetalleBloque", entidadId: detalle._id, descripcion: `Administración retiró un fraterno del bloque ${detalle.bloqueId?.nombre ?? ""}`.trim(), datosAntes: { bloqueId, fraternoId: detalle.fraternoId, genero: detalle.genero }, datosDespues: { estado: "INACTIVO" } }); return res.json({ message: "Fraterno retirado del bloque; vuelve a estar disponible" }); };
+export const quitarIntegranteComoAdmin = async (req: Request, res: Response) => { const detalle: any = await DetalleBloque.findOneAndUpdate({ _id: req.params.detalleId, ...FILTRO_ASIGNACION_ACTIVA }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } }, { new: true }).populate("bloqueId", "nombre"); if (!detalle) return res.status(404).json({ error: "Integrante activo no encontrado" }); const bloqueId=detalle.bloqueId?._id??detalle.bloqueId; await sincronizarContadoresIntegrantes([bloqueId]); await registrarAuditoria(req, { accion: "RETIRAR_FRATERNO_BLOQUE", modulo: "BLOQUES", entidad: "DetalleBloque", entidadId: detalle._id, descripcion: `Administración retiró un fraterno del bloque ${detalle.bloqueId?.nombre ?? ""}`.trim(), datosAntes: { bloqueId, fraternoId: detalle.fraternoId, genero: detalle.genero }, datosDespues: { estado: "INACTIVO" } }); return res.json({ message: "Fraterno retirado correctamente" }); };
+
+export const moverIntegranteComoAdmin = async (req: Request, res: Response) => {
+  const origen: any = await DetalleBloque.findOne({ _id: req.params.detalleId, ...FILTRO_ASIGNACION_ACTIVA }).populate("bloqueId", "nombre gestionId estado");
+  if (!origen?.bloqueId) return res.status(404).json({ error: "Integrante activo no encontrado" });
+  if (String(origen.bloqueId._id) === String(req.body.bloqueId)) return res.status(409).json({ error: `El fraterno ya pertenece al ${origen.bloqueId.nombre}.` });
+  const destino: any = await Bloque.findOne({ _id: req.body.bloqueId, estado: "ACTIVO", gestionId: origen.bloqueId.gestionId });
+  if (!destino) return res.status(404).json({ error: "Bloque destino activo no encontrado en esta gestión" });
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const vigente: any = await DetalleBloque.findOne({ _id: origen._id, ...FILTRO_ASIGNACION_ACTIVA }).session(session);
+      if (!vigente) throw Object.assign(new Error("La asignación cambió antes de confirmar el movimiento."), { statusCode: 409 });
+      const cantidadGenero = await DetalleBloque.countDocuments({ bloqueId: destino._id, genero: vigente.genero, ...FILTRO_ASIGNACION_ACTIVA }).session(session);
+      const total = await DetalleBloque.countDocuments({ bloqueId: destino._id, ...FILTRO_ASIGNACION_ACTIVA }).session(session);
+      const errorCupo = validarCupoIntegrante(vigente.genero, cantidadGenero);
+      if (errorCupo) throw Object.assign(new Error(errorCupo), { statusCode: 409 });
+      if (total >= LIMITES_BLOQUE.TOTAL) throw Object.assign(new Error("El bloque alcanzó su capacidad total."), { statusCode: 409 });
+      const retirado = await DetalleBloque.updateOne({ _id: vigente._id, ...FILTRO_ASIGNACION_ACTIVA }, { $set: { estado: "INACTIVO", fechaRetiro: new Date() } }, { session });
+      if (retirado.modifiedCount !== 1) throw Object.assign(new Error("La asignación cambió antes de confirmar el movimiento."), { statusCode: 409 });
+      await DetalleBloque.create([{ bloqueId: destino._id, fraternoId: vigente.fraternoId, genero: vigente.genero, estado: "ACTIVO" }], { session });
+      await sincronizarContadoresIntegrantes([origen.bloqueId._id, destino._id], session);
+    });
+  } catch (error) {
+    const activa: any = await obtenerAsignacionActivaValida(origen.fraternoId);
+    const resumen = resumirAsignacion(activa);
+    if (esDuplicadoAsignacionActiva(error)) return res.status(409).json({ code: "ASSIGNMENT_CHANGED", error: resumen ? `La persona fue asignada por otro administrador después de tu búsqueda. Ahora pertenece al bloque ${resumen.bloqueNombre}.` : "La asignación cambió antes de confirmar el movimiento.", asignacion: resumen });
+    return res.status((error as any)?.statusCode ?? 409).json({ error: error instanceof Error ? error.message : "No se pudo mover el fraterno" });
+  } finally { await session.endSession(); }
+  await registrarAuditoria(req, { accion: "MOVER_FRATERNO_BLOQUE", modulo: "BLOQUES", entidad: "DetalleBloque", entidadId: origen._id, descripcion: `Administración movió un fraterno de ${origen.bloqueId.nombre} a ${destino.nombre}`, datosAntes: { bloqueId: origen.bloqueId._id, fraternoId: origen.fraternoId }, datosDespues: { bloqueId: destino._id, fraternoId: origen.fraternoId } });
+  return res.json({ message: "Fraterno movido correctamente" });
+};
 
 export const obtenerMiBloque = async (req: Request, res: Response) => {
   const guia = await Guia.findOne({ usuarioId: req.usuario?._id, estado: "ACTIVO" }).populate(poblarGuia);

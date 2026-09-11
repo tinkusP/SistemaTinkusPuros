@@ -9,5 +9,6 @@ const schema = new Schema({
   fechaEliminado: Date,
 }, { versionKey: false, collection: "detalle_bloques" });
 schema.index({ fraternoId: 1 }, { unique: true, name: "fraternoId_activo_1", partialFilterExpression: { estado: "ACTIVO", fechaEliminado: null } });
+schema.index({ bloqueId: 1, fraternoId: 1 }, { name: "bloqueId_1_fraternoId_1" });
 schema.index({ bloqueId: 1, genero: 1 });
 export default mongoose.model("DetalleBloque", schema);
