@@ -15,6 +15,7 @@ export default function MisTallasView() {
       {talla ? <div className="mt-6 grid gap-4 sm:grid-cols-2"><Talla nombre="Polera" valor={talla.tallaPolera}/><Talla nombre="Chamarra" valor={talla.tallaChamarra}/></div> : <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 font-bold text-amber-900">{pago?.primeraCuotaVerificada ? "Tus tallas todavía no fueron registradas. Acércate a un administrador y presenta tu QR." : "Tus tallas todavía no fueron registradas. Acércate a un administrador o completa el pago verificado de tu primera cuota."}</p>}
       <p className="mt-5 rounded-xl bg-blue-50 p-4 text-sm font-semibold text-blue-900">Si alguna talla es incorrecta, solicita a un administrador que escanee nuevamente tu QR y realice la corrección.</p>
       <Link to="/comunicados" className="mt-5 block text-center font-bold text-[#74122A] dark:text-[#e9cf91]">← Volver</Link>
+      <section className="mt-5 rounded-2xl border p-4"><h2 className="font-black text-[#74122A]">MI INDUMENTARIA</h2><div className="mt-3 grid gap-3 sm:grid-cols-2">{(["polera","chamarra"] as const).map(a=>{const e=consulta.data?.ropa?.[a];return <article key={a}><h3 className="font-bold uppercase">{a}</h3><p>{e?.estado??"PENDIENTE"}</p>{e?.fecha&&<p className="text-sm">{new Date(e.fecha).toLocaleDateString("es-BO")}</p>}</article>})}</div><p className="mt-3 font-bold">{(consulta.data?.ropa?.estadoGeneral??"PENDIENTE").replaceAll("_"," ")}</p></section>
     </section>
   </main>;
 }

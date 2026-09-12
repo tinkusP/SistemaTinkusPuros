@@ -1,0 +1,51 @@
+IMPLEMENTACIÓN: ENTREGA INDEPENDIENTE DE POLERA Y CHAMARRA
+
+CAUSA Y CORRECCIÓN
+El requisito histórico contaba pagos verificados y podía bloquear un plan de una cuota completamente pagado. Para POLERA/CHAMARRA se admite cuota PAGADA con saldo cero o el mínimo vigente de pagos verificados. No se recalculan cuotas, importes ni planes. Otros artículos mantienen sus requisitos.
+
+MODELOS, HISTORIAL Y CONCURRENCIA
+Se reutilizan PrendaIndumentaria y EntregaIndumentaria. No hay migraciones ni índices nuevos. Se conserva el índice único parcial fraternoId/prendaId con estado ENTREGADO para impedir duplicados. La reversión exige confirmación y motivo de al menos cinco caracteres; cambia estado mediante comparación atómica del estado anterior, conserva el documento y registra auditoría. El cliente bloquea doble clic. Debe comprobarse que el índice existente esté instalado en producción; no se alteraron índices externos.
+
+ARCHIVOS MODIFICADOS
+backend/src/services/EntregaPackService.ts
+backend/src/controllers/IndumentariaController.ts
+backend/src/controllers/ReporteController.ts
+backend/src/routes/IndumentariaRoutes.ts
+backend/src/routes/ReporteRoutes.ts
+frontend/src/api/IndumentariaApi.ts
+frontend/src/views/indumentaria/IndumentariaView.tsx
+frontend/src/views/indumentaria/MisTallasView.tsx
+frontend/src/views/perfilUsuario/EscanerQrView.tsx
+frontend/src/views/reportes/ReportesView.tsx
+
+ARCHIVOS NUEVOS
+backend/src/services/EntregaRopaService.ts
+backend/tests/entrega-ropa.test.js
+frontend/src/components/EntregaRopaTarjeta.tsx
+frontend/src/components/reportes/ReporteEntregaRopa.tsx
+AUDITORIA_ENTREGA_POLERA_CHAMARRA.txt
+IMPLEMENTACION_ENTREGA_POLERA_CHAMARRA.txt
+
+ENDPOINTS Y PERMISOS
+GET /api/indumentaria/entregas/ropa/usuario/:usuarioId
+POST /api/indumentaria/entregas/ropa
+GET /api/reportes/entregas-ropa
+Se reutiliza PATCH /api/indumentaria/entregas/:id para reversión.
+Protecciones administrativas/permisos existentes; ningún rol ni permiso nuevo.
+
+FRONTEND Y PRIVACIDAD
+Escáner QR: tarjeta debajo de tallas, botones independientes y estado general derivado: PENDIENTE, ENTREGA_PARCIAL, ENTREGA_COMPLETA. No se modificaron cámara, lectura QR ni asistencia. Después de escribir se invalidan consultas de entrega individual, reporte, indumentaria y tallas personales. Mis tallas muestra prenda, estado y fecha; el endpoint personal excluye responsables y observaciones internas.
+
+EXCEL
+Reportes incorpora Control de entrega de indumentaria, filtros por estado, bloque y sexo. Excel contiene RESUMEN, TODOS, ENTREGA COMPLETA, SOLO POLERA, SOLO CHAMARRA, SIN ENTREGAS, FALTA POLERA, FALTA CHAMARRA y hojas por bloque. Fuente: fraternos activos de la gestión activa, con relaciones opcionales; no se crean inscripciones para cuentas sin fraterno.
+
+VERIFICACIÓN
+Backend npm test y compilación: 15 archivos de pruebas aprobados, cero fallos.
+Pruebas nuevas: cuatro estados independientes; planes totalmente pagados de 1/2/3 cuotas; pagos parciales con mínimo configurado; historial revertido excluido de entregas activas; privacidad del resumen público; contrato del índice parcial; contrato de autorización, motivo, comparación atómica y auditoría.
+Frontend TypeScript --noEmit: aprobado.
+Frontend build Vite: aprobado, advertencia de chunks grandes.
+git diff --check: aprobado.
+No se realizaron entregas reales ni pruebas de cámara/navegador autenticado. No se ejecutó prueba de concurrencia contra MongoDB real ni apertura manual del Excel generado; las pruebas nuevas son unitarias y de contrato, no integración completa.
+
+CONSERVADO / RIESGOS
+Sin cambios en modelos, autenticación, roles, pagos almacenados, tallas almacenadas, .env o datos personales. Sin limpieza masiva ni borrado de usuarios. El reporte no incluye cuentas sin inscripción fraterna; la tarjeta lo explica. Una prenda sin talla requiere advertencia/confirmación, sin fabricar talla. Auditoría y unicidad dependen de infraestructura vigente. Rollback de código mediante revert del commit, sin borrar historial de entregas. La publicación se realiza por autorización directa del usuario; resultados del despliegue se informan al finalizar.

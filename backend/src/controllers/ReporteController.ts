@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { reporteEntregaRopa } from "../services/EntregaRopaService";
+export const reporteEntregasRopa = async (_req: Request, res: Response) => res.json(await reporteEntregaRopa());
 import { obtenerReporteIntegrantesBloque } from "../services/ReporteIntegrantesBloqueService";
 import Gestion from "../models/Gestion";
 import Preregistro from "../models/Preregistro";

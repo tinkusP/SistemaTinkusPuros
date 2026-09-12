@@ -5,10 +5,15 @@ import EntregaIndumentaria from "../models/EntregaIndumentaria";
 import Fraterno from "../models/Fraterno";
 import Gestion from "../models/Gestion";
 import PrendaIndumentaria from "../models/PrendaIndumentaria";
+import PerfilUsuario from "../models/PerfilUsuario";
 
 export const ARTICULOS_PACK = ["POLERA", "CHAMARRA", "CHALINA", "ETIQUETA PUROS"] as const;
 export type ArticuloPack = typeof ARTICULOS_PACK[number];
 export const REQUISITOS_ENTREGA_DEFAULT: Record<ArticuloPack, number> = { POLERA: 2, CHAMARRA: 2, CHALINA: 3, "ETIQUETA PUROS": 3 };
+
+export function puedeEntregarRopa(cuota: { estado?: string; saldo?: number } | null, verificadas: number, minimo: number) {
+  return (cuota?.estado === "PAGADA" && cuota.saldo === 0) || verificadas >= minimo;
+}
 
 export function estadoPack(entregados: Iterable<string>) {
   const conjunto = new Set(Array.from(entregados, (item) => String(item).trim().toUpperCase()));
@@ -32,8 +37,10 @@ export async function requisitosGestion(gestionId: unknown) {
 }
 
 export async function validarEntrega(fraternoId: unknown, prendaId: unknown) {
-  const fraterno = await Fraterno.findOne({ _id: fraternoId, fechaEliminado: null }).lean();
+  const fraterno = await Fraterno.findOne({ _id: fraternoId, estado: "ACTIVO", fechaEliminado: null }).lean();
   if (!fraterno) throw new Error("Fraterno no encontrado");
+  const usuario = await PerfilUsuario.findOne({ _id: fraterno.usuarioId, estado: "ACTIVO", fechaEliminado: null }).select("_id").lean();
+  if (!usuario) throw new Error("La cuenta no está activa para recibir indumentaria");
   const prenda = await PrendaIndumentaria.findOne({ _id: prendaId, activo: true }).lean();
   if (!prenda) throw new Error("Artículo activo no encontrado");
   const articulo = String(prenda.nombre).trim().toUpperCase() as ArticuloPack;
@@ -41,7 +48,8 @@ export async function validarEntrega(fraternoId: unknown, prendaId: unknown) {
   const minimo = requisitos[articulo] ?? 0;
   const cuota = await Cuota.findOne({ preregistroId: fraterno.preregistroId, fechaEliminado: null }).lean();
   const verificadas = cuota ? await DetalleCuota.countDocuments({ cuotaId: cuota._id, estadoRevision: "VERIFICADO", fechaEliminado: null }) : 0;
-  if (verificadas < minimo) throw new Error(`${prenda.nombre} requiere ${minimo} cuota(s) verificada(s). Actualmente tiene ${verificadas}.`);
+  const habilitado = ["POLERA", "CHAMARRA"].includes(articulo) ? puedeEntregarRopa(cuota, verificadas, minimo) : verificadas >= minimo;
+  if (!habilitado) throw new Error(`${prenda.nombre} requiere ${["POLERA", "CHAMARRA"].includes(articulo) ? "pago completo o " : ""}${minimo} cuota(s) verificada(s). Actualmente tiene ${verificadas}.`);
   return { fraterno, prenda, verificadas, minimo };
 }
 

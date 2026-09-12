@@ -10,6 +10,7 @@ import {
 import ReporteTallasPrimeraCuota from "@/components/reportes/ReporteTallasPrimeraCuota";
 import ReportePagosCronologicos from "@/components/reportes/ReportePagosCronologicos";
 import ReporteIntegrantesMatricula from "@/components/reportes/ReporteIntegrantesMatricula";
+import ReporteEntregaRopa from "@/components/reportes/ReporteEntregaRopa";
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
@@ -126,6 +127,7 @@ export default function ReportesView() {
 
   return <main className="space-y-5">
     <ReporteIntegrantesMatricula />
+    <ReporteEntregaRopa />
     <ReporteTallasPrimeraCuota />
     <ReportePagosCronologicos />
     <section className="print:hidden">

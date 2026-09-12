@@ -1,0 +1,20 @@
+AUDITORÍA ENTREGA POLERA Y CHAMARRA — 12/09/2026
+
+EscanerQrView usa CredencialQrApi para cámara, foto, CI/nombre/matrícula y selección manual. CredencialQrController verifica firma y versión del QR, hidrata usuario, bloque, Cuota/DetalleCuota y TallaFraterno. Las tallas se actualizan por guardarTallaUsuario y la asistencia por marcarAsistenciaQr. Esas operaciones se conservarán intactas.
+
+Modelos existentes: PrendaIndumentaria identifica artículos; EntregaIndumentaria referencia fraterno/prenda/gestión, estado, fecha, responsable y observación. Su índice único parcial fraternoId+prendaId (estado ENTREGADO) evita duplicados activos. DEVUELTO permite conservar historial y una entrega posterior. No hacen falta modelos, campos ni índices nuevos.
+
+EntregaPackService actualmente administra POLERA, CHAMARRA, CHALINA y ETIQUETA PUROS. validarEntrega exige el mínimo de pagos verificados configurado por gestión (2 para polera/chamarra por defecto). CAUSA: no reconoce la excepción de obligación completamente pagada en un solo movimiento. Cambio mínimo: estado PAGADA+saldo cero habilita polera/chamarra independientemente del número de pagos; para pagos parciales se conserva el mínimo configurado. Los requisitos de los otros artículos se mantienen.
+
+El modelo no exige una talla para entregar. Se mantendrá esta regla con advertencia y confirmación cuando no exista talla; no se guardará otra talla en la operación nueva. El registro actual talla de EntregaIndumentaria es legado y no se eliminará.
+
+MiIndumentaria ya sirve al propietario autenticado y MisTallasView es el lugar personal apropiado. Se agregarán estados derivados privados (artículo/estado/fecha), sin responsable ni observaciones internas. La respuesta histórica se limitará a campos públicos.
+
+Endpoints nuevos administrativos: lectura por usuario y entrega por nombre de artículo en /api/indumentaria/entregas/ropa; reporte de fraternos activos de gestión en /api/reportes/entregas-ropa. Escrituras reutilizan entregar y cambiarEstadoEntrega. La reversión exige motivo y compara estado anterior para no sobrescribir cambios concurrentes. Permisos existentes: INDUMENTARIA_GESTIONAR y administración; reporte VISTA_REPORTES. No se agregarán roles/permisos.
+
+Archivos a modificar: EntregaPackService, IndumentariaController/Routes, ReporteController/Routes, IndumentariaApi, EscanerQrView, MisTallasView, ReportesView e IndumentariaView (motivo de reversión).
+Archivos nuevos: servicio de lectura EntregaRopaService; tarjeta EntregaRopaTarjeta; reporte ReporteEntregaRopa; pruebas; informes.
+
+Universo Excel: fraternos activos de la gestión activa con usuario no eliminado, incluyendo personas sin bloque y sin pagos/tallas. Usuarios sin perfil fraterno se muestran en escáner sin habilitación, porque el modelo de entrega requiere fraterno; no se crean perfiles automáticamente.
+
+Riesgo MEDIO: proteger reversión y compatibilidad con UI existente; NO modificar pagos/tallas/QR/auth/bloques. Sin migraciones ni reparaciones productivas. La instrucción directa del usuario autoriza commit/push/publicación al concluir, sobre la prohibición de publicación del documento adjunto.

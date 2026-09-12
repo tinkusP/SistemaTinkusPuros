@@ -68,7 +68,10 @@ export default function IndumentariaView() {
   };
   const alternarEntrega = (fraternoId: string, prenda: Prenda, talla?: string) => {
     const actual = entregaActual(fraternoId, prenda._id);
-    mutacion.mutate(() => actual ? cambiarEntrega(actual._id, "DEVUELTO") : crearEntrega({ fraternoId, prendaId: prenda._id, cantidad: 1, talla: talla || undefined }));
+    const motivo = actual ? window.prompt("Motivo de reversión (mínimo 5 caracteres):")?.trim() : "";
+    if (actual && (!motivo || motivo.length < 5)) return;
+    if (!window.confirm(`¿${actual ? "Revertir" : "Confirmar"} entrega de ${prenda.nombre}?`)) return;
+    mutacion.mutate(() => actual ? cambiarEntrega(actual._id, "DEVUELTO", motivo!) : crearEntrega({ fraternoId, prendaId: prenda._id, cantidad: 1, talla: talla || undefined }));
   };
 
   return <div className="space-y-6">

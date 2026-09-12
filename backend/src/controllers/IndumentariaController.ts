@@ -16,6 +16,7 @@ import { normalizarTallaAdministrativa, TALLA_SIN_REGISTRAR } from "../constants
 import { asegurarIndiceTallasOpcionales } from "../services/IndiceTallaService";
 import { randomUUID } from "node:crypto";
 import { ARTICULOS_PACK, asegurarArticulosPack, requisitosGestion, resumenPackFraterno, validarEntrega } from "../services/EntregaPackService";
+import { reporteEntregaRopa, resumirEntregaRopa } from "../services/EntregaRopaService";
 
 const poblarEntrega = [{ path: "fraternoId", populate: { path: "usuarioId", select: "nombres apellidoPaterno apellidoMaterno ci" } }, { path: "prendaId" }];
 const asegurarPrendasPrincipales = async (usuarioCreador?: unknown) => {
@@ -70,12 +71,13 @@ export const miIndumentaria = async (req: Request, res: Response) => {
   const [talla, entregas, configuracionTallas] = await Promise.all([
     TallaFraterno.findOne({ $or: [{ usuarioId: req.usuario?._id }, { fraternoId: fraterno._id }] }),
     EntregaIndumentaria.find({ fraternoId: fraterno._id })
+      .select("prendaId fraternoId cantidad talla estado fechaEntrega")
       .populate("prendaId")
       .sort({ fechaEntrega: -1 }),
     ConfiguracionPago.findOne({ gestionId: fraterno.gestionId }).select("registroTallasHabilitado fechaLimiteRegistroTallas"),
   ]);
 
-  return res.json({ fraterno, talla, entregas, edicionTallasBloqueada: talla?.edicionBloqueada === true, pago, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null, gestion: gestion?.nombre } });
+  return res.json({ fraterno, talla, entregas, ropa: resumirEntregaRopa(entregas), edicionTallasBloqueada: talla?.edicionBloqueada === true, pago, configuracionTallas: { habilitado: configuracionTallas?.registroTallasHabilitado === true, fechaLimite: configuracionTallas?.fechaLimiteRegistroTallas ?? null, gestion: gestion?.nombre } });
 };
 export const guardarTalla = async (req: Request, res: Response) => { const talla = await TallaFraterno.findOneAndUpdate({ fraternoId: req.body.fraternoId }, { ...req.body, fechaActualizado: new Date(), usuarioEditor: req.usuario?._id }, { upsert: true, new: true, runValidators: true }); res.json({ message: "Tallas guardadas", talla }); };
 export const guardarTallaUsuario = async (req: Request, res: Response) => {
@@ -155,13 +157,34 @@ export const cambiarBloqueoTalla = async (req: Request, res: Response) => {
 export const crearPrenda = async (req: Request, res: Response) => { try { const prenda = await PrendaIndumentaria.create({ ...req.body, usuarioCreador: req.usuario?._id }); res.status(201).json({ message: "Prenda creada", prenda }); } catch { res.status(409).json({ error: "La prenda ya existe" }); } };
 export const entregar = async (req: Request, res: Response) => { try {
   const validacion = await validarEntrega(req.body.fraternoId, req.body.prendaId);
-  const entrega = await EntregaIndumentaria.create({ ...req.body, gestionId: validacion.fraterno.gestionId, responsableEntrega: req.usuario?._id });
+  const entrega = await EntregaIndumentaria.create({ fraternoId: validacion.fraterno._id, prendaId: validacion.prenda._id, cantidad: req.body.cantidad ?? 1, talla: req.body.talla, estado: "ENTREGADO", gestionId: validacion.fraterno.gestionId, responsableEntrega: req.usuario?._id });
   await entrega.populate(poblarEntrega);
   const pack = await resumenPackFraterno(req.body.fraternoId);
-  await registrarAuditoria(req, { accion: "ENTREGAR_PRENDA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Se entregó ${validacion.prenda.nombre}`, datosDespues: { fraternoId: req.body.fraternoId, prenda: validacion.prenda.nombre, cuotasVerificadas: validacion.verificadas, estadoPack: pack.estado } });
+  await registrarAuditoria(req, { accion: "ENTREGAR_PRENDA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Se entregó ${validacion.prenda.nombre}`, datosAntes: { estado: "PENDIENTE" }, datosDespues: { fraternoId: req.body.fraternoId, gestionId: validacion.fraterno.gestionId, fechaEntrega: entrega.fechaEntrega, prenda: validacion.prenda.nombre, cuotasVerificadas: validacion.verificadas, estadoPack: pack.estado } });
   return res.status(201).json({ message: `${validacion.prenda.nombre} entregada. Pack: ${pack.estado}`, entrega, pack });
 } catch (e) { if ((e as { code?: number }).code === 11000) return res.status(409).json({ error: "Esta prenda ya está entregada al fraterno" }); return res.status(400).json({ error: e instanceof Error ? e.message : "No se pudo registrar la entrega" }); } };
-export const cambiarEstadoEntrega = async (req: Request, res: Response) => { const anterior = await EntregaIndumentaria.findById(req.params.id).populate("prendaId", "nombre"); const estado = req.body.estado; const entrega = await EntregaIndumentaria.findByIdAndUpdate(req.params.id, { estado, observacion: req.body.observacion, ...(estado === "DEVUELTO" ? { fechaDevolucion: new Date(), responsableRecepcion: req.usuario?._id } : {}) }, { new: true, runValidators: true }).populate(poblarEntrega); if (!entrega) return res.status(404).json({ error: "Entrega no encontrada" }); await registrarAuditoria(req, { accion: "CAMBIAR_ESTADO_ENTREGA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Entrega actualizada a ${estado}`, datosAntes: { estado: anterior?.estado }, datosDespues: { estado, observacion: req.body.observacion } }); return res.json({ message: "Estado actualizado", entrega }); };
+export const cambiarEstadoEntrega = async (req: Request, res: Response) => {
+  const anterior = await EntregaIndumentaria.findById(req.params.id).populate("prendaId", "nombre");
+  if (!anterior) return res.status(404).json({ error: "Entrega no encontrada" });
+  const estado = req.body.estado, motivo = String(req.body.observacion ?? "").trim();
+  if (motivo.length < 5) return res.status(400).json({ error: "Indica un motivo de corrección de al menos 5 caracteres" });
+  if (estado === anterior.estado) return res.status(409).json({ error: "La entrega ya tiene ese estado" });
+  try {
+    if (estado === "ENTREGADO") await validarEntrega(anterior.fraternoId, (anterior.prendaId as any)._id);
+    const entrega = await EntregaIndumentaria.findOneAndUpdate({ _id: anterior._id, estado: anterior.estado }, { $set: { estado, observacion: motivo, ...(estado === "DEVUELTO" ? { fechaDevolucion: new Date(), responsableRecepcion: req.usuario?._id } : {}) } }, { new: true, runValidators: true }).populate(poblarEntrega);
+    if (!entrega) return res.status(409).json({ error: "La entrega cambió durante la operación. Actualiza los datos." });
+    await registrarAuditoria(req, { accion: "CAMBIAR_ESTADO_ENTREGA", modulo: "INDUMENTARIA", entidad: "EntregaIndumentaria", entidadId: entrega._id, descripcion: `Corrección de ${(anterior.prendaId as any)?.nombre}: ${motivo}`, datosAntes: { estado: anterior.estado, observacion: anterior.observacion }, datosDespues: { estado, motivo, fraternoId: anterior.fraternoId, gestionId: anterior.gestionId } });
+    return res.json({ message: "Estado actualizado y auditado", entrega });
+  } catch (error) { return res.status((error as any).code === 11000 ? 409 : 400).json({ error: (error as any).code === 11000 ? "Esta prenda ya está entregada" : error instanceof Error ? error.message : "No se pudo corregir" }); }
+};
+
+export const entregaRopaUsuario = async (req: Request, res: Response) => res.json(await reporteEntregaRopa(String(req.params.usuarioId)));
+export const entregarRopa = async (req: Request, res: Response) => {
+  const nombre = req.body.articulo;
+  const prenda = await PrendaIndumentaria.findOneAndUpdate({ nombre }, { $setOnInsert: { nombre, requiereTalla: true, activo: true, usuarioCreador: req.usuario?._id } }, { upsert: true, new: true });
+  req.body = { fraternoId: req.body.fraternoId, prendaId: prenda._id, cantidad: 1 };
+  return entregar(req, res);
+};
 
 export const configurarRequisitosEntrega = async (req: Request, res: Response) => {
   const gestion = await Gestion.findOne({ estado: { $in: ["ACTIVA", "INSCRIPCIONES"] }, fechaEliminado: null }).sort({ anio: -1 });
