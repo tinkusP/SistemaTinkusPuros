@@ -1,32 +1,129 @@
-AUDITORÍA DEL MÓDULO DE PAGOS Y BLOQUES
+AUDITORÍA FINANCIERA GENERAL — TINKUS PUROS Y NATURALES
+Fecha de revisión: 16 de septiembre de 2026
 
-Universo: DetalleBloque ACTIVO, no eliminado, perteneciente a Bloque ACTIVO. Cada usuario se cuenta una vez. La herramienta es exclusivamente de lectura y no concilia bancos ni modifica datos.
+ALCANCE
+-------
+Auditoría matemática de solo lectura sobre la gestión activa. No cambia montos, saldos, pagos,
+comprobantes, exenciones, bloques, perfiles ni estados. Los cálculos parten de usuarios activos,
+cuotas no eliminadas, pagos no eliminados y asignaciones vigentes.
 
-CLASIFICACIÓN REAL
-Cuota.tipoOrigenTarifa congela INTERNO/EXTERNO. La creación/sincronización convierte INTERNO e INTERNO_UMSA a INTERNO; EXTERNO, EXTERNO_UMSA y EXTERNO_NO_UMSA a EXTERNO. Si falta cuota, se aplica la misma conversión explícita desde PerfilUsuario.tipoOrigen. Sin ambos datos queda SIN CLASIFICAR.
+DEFINICIONES
+------------
+UNIVERSO GENERAL:
+- Usuarios activos con una cuota vigente en la gestión.
+- Esperado: Cuota.montoTotal.
+- Pagado/registrado: suma de todos los DetalleCuota no eliminados, conservando su estado.
+- Verificado: únicamente DetalleCuota.estadoRevision = VERIFICADO.
+- Por verificar: únicamente DetalleCuota.estadoRevision = PENDIENTE.
+- OBSERVADO y RECHAZADO se muestran, pero no reducen la deuda verificada.
 
-PAGOS
-Cuota.montoPagado/saldo reflejan pagos verificados tras sincronización. DetalleCuota diferencia PENDIENTE, VERIFICADO, OBSERVADO y RECHAZADO. El reporte separa registrado, verificado y pendiente. OBSERVADO/RECHAZADO conservan historial, pero no reducen el saldo económico.
+UNIVERSO BLOQUES:
+- Usuario ACTIVO.
+- DetalleBloque ACTIVO y no eliminado.
+- Bloque ACTIVO.
+- Una persona se cuenta una sola vez.
+- Tarifa normal: INTERNO Bs 770; EXTERNO Bs 850.
+- Una exención formalizada en Cuota.exentoPago se resta del esperado, sin borrar pagos históricos.
 
-LIMITACIÓN CRÍTICA: EXENCIONES
-No existe campo, colección ni regla explícita de exención o motivo. No se puede identificar con certeza a DIRECTIVA ni determinados CHACHA/WARMI. Nadie se presume exento por rol; por eso el reporte indica cero exentos confirmables y califica monto esperado/saldo como provisionales hasta contar con una fuente administrativa explícita.
+CAUSA DE LA DIFERENCIA REPORTADA
+--------------------------------
+Primera lectura productiva solicitada:
+- General esperado: Bs 303.760.
+- General verificado: Bs 207.340.
+- Bloques: 309 personas.
+- Bloques teórico: Bs 255.450.
+- Exenciones formalizadas en bloques: 3 internos por Bs 2.310.
+- Bloques real esperado: Bs 253.140.
+- Bloques verificado: Bs 199.630.
 
-PARTICIPACIÓN E INCONSISTENCIAS
-Fraterno posee ACTIVO, LISTA_ESPERA, INACTIVO y RETIRADO; PerfilUsuario también tiene estado. Una asignación activa asociada con estado inactivo/retirado se reporta, conservando sus pagos. También se detectan dobles asignaciones, falta de cuota/clasificación, sobrepago, PAGADA con saldo, saldo cero sin verificados y diferencias entre montoPagado y suma verificada. No se repara nada automáticamente.
+Conciliación del esperado:
+Bs 303.760 - Bs 253.140 = Bs 50.620.
+- Cuotas de 59 personas fuera de bloques activos: Bs 48.310.
+- Exenciones formalizadas dentro de bloques: Bs 2.310.
+- Diferencia sin explicar: Bs 0.
 
-Archivos/modelos: PerfilUsuario, Rol, Fraterno, Bloque, DetalleBloque, Cuota, DetalleCuota, PlanPagosService, SincronizacionCuotaService, CuotaController y TokenRegistroController. Script: backend/src/scripts/auditarFinanzasBloques.ts. Ejecutar desde backend: npm run audit:finanzas-bloques. La salida con datos personales se excluye de Git.
+Conciliación del verificado:
+Bs 207.340 - Bs 199.630 = Bs 7.710.
+- Bs 7.710 correspondían a pagos verificados de personas sin bloque activo.
+- Diferencia sin explicar: Bs 0.
 
-RESULTADO PRODUCTIVO DE SOLO LECTURA (16-09-2026)
-Personas únicas con bloque: 309. Internos: 90 × Bs 770 = Bs 69.300. Externos: 219 × Bs 850 = Bs 186.150. Sin clasificar: 0. Monto teórico: Bs 255.450.
+Los importes son dinámicos. Durante la segunda lectura de validación continuaron registrándose o
+verificándose pagos en producción; por eso el nuevo reporte siempre calcula el estado vigente y no
+congela los valores anteriores.
 
-Exentos confirmables: 0; internos 0; externos 0. Esto NO prueba que no existan exentos: significa que la base no posee un dato que permita identificarlos. Monto exento confirmable: Bs 0. Por ello el monto esperado provisional es Bs 255.450 y no puede presentarse como monto cobrable definitivo hasta registrar/confirmar exenciones.
+CLASIFICACIÓN DE BENEFICIOS
+---------------------------
+El sistema conserva como fuente formal:
+- EXENTO: Cuota.exentoPago = true.
+- DESCUENTO APLICADO: Cuota.montoTotal es menor que la tarifa normal correspondiente.
+- NORMAL: no existe exención ni reducción formalizada.
 
-Monto registrado histórico no eliminado: Bs 207.020. Monto verificado: Bs 197.590. Pendiente de revisión: Bs 8.195. La diferencia restante de Bs 1.235 corresponde a registros en otros estados de revisión (observados/rechazados), que no reducen saldo. Saldo económico provisional: Bs 57.860. Comprobación: 255.450 - 197.590 = 57.860.
+Las referencias entregadas por Administración (FREE, DESCUENTO y REVISAR) son informativas. Si el
+alias identifica una sola cuenta, se muestra el candidato; si es ambiguo, exige CI. Mientras no exista
+respaldo formal en la cuota, la etiqueta indica "POR FORMALIZAR; NO ALTERA EL CÁLCULO". El alias
+"YO" no puede resolverse sin nombre o CI. No se actualizaron cuotas automáticamente.
 
-Estados calculados con dinero verificado: sin pago 16; pago parcial 152; pago completo 141; con al menos un pago pendiente 31; con al menos un pago verificado 293.
+INCONSISTENCIAS REVISADAS
+-------------------------
+El auditor detecta y lista:
+- persona repetida en el universo;
+- más de una cuota/prerregistro según los controles existentes;
+- pago posiblemente repetido;
+- comprobante reutilizado;
+- desglose efectivo/QR que no coincide con el monto;
+- Cuota.montoPagado diferente de la suma verificada;
+- Cuota.saldo diferente del saldo auditado;
+- PAGADA sin monto verificado completo;
+- pago completo con cuota no marcada PAGADA;
+- beneficios declarados todavía no formalizados;
+- aliases ambiguos que requieren CI.
 
-BLOQUE B: 85 personas; 14 internos; 71 externos; teórico Bs 71.130; registrado Bs 55.225; verificado Bs 53.425; pendiente revisión Bs 1.525; saldo Bs 17.705; sin pago 3; parcial 47; completo 35.
-BLOQUE C: 114 personas; 42 internos; 72 externos; teórico Bs 93.540; registrado Bs 75.835; verificado Bs 72.430; pendiente revisión Bs 2.745; saldo Bs 21.110; sin pago 9; parcial 47; completo 58.
-CECILIA: 110 personas; 34 internos; 76 externos; teórico Bs 90.780; registrado Bs 75.960; verificado Bs 71.735; pendiente revisión Bs 3.925; saldo Bs 19.045; sin pago 4; parcial 58; completo 48.
+IMPLEMENTACIÓN
+--------------
+Endpoint nuevo de solo lectura:
+GET /api/reportes/auditoria-financiera
+Protección: authenticate + soloAdministradorReal.
 
-Inconsistencias dentro del universo con bloque: 0 según las reglas auditadas. Personas explícitamente INACTIVAS/RETIRADAS con pagos: 0. Cuentas con pagos pero sin bloque activo que requieren revisión manual de participación: 13; no se las declaró retiradas ni se las excluyó automáticamente. Las listas completas de personas sin pago, parciales, completas, pendientes y de revisión se encuentran en AUDITORIA_FINANCIERA_BLOQUES_PRODUCCION.json local, que no se publica por contener datos personales.
+Vista:
+Administración > Cuotas > Auditoría financiera general.
+
+Excel generado:
+01_RESUMEN
+02_TODOS_LOS_PAGOS
+03_CON_BLOQUE
+04_SIN_BLOQUE_CON_PAGO
+05_SIN_PAGO
+06_FREE_EXENTOS_DESCUENTOS
+07_INCONSISTENCIAS
+
+ARCHIVOS
+--------
+- backend/src/services/AuditoriaFinancieraService.ts
+- backend/src/controllers/ReporteController.ts
+- backend/src/routes/ReporteRoutes.ts
+- backend/tests/auditoria-financiera-general.test.js
+- frontend/src/api/ReporteApi.ts
+- frontend/src/components/cuota/AuditoriaFinancieraGeneral.tsx
+- frontend/src/views/cuota/CuotaView.tsx
+
+VERIFICACIÓN
+------------
+- Backend TypeScript: correcto.
+- Backend tests: 18/18 aprobados.
+- Frontend build Vite: correcto.
+- ESLint de archivos modificados: correcto.
+- Consulta productiva: solo lectura.
+- Persona única: correcto.
+- Diferencia esperada explicada: correcto.
+- Diferencia verificada explicada: correcto.
+- Suma de pagos verificados: coincide con el universo general.
+
+NO REALIZADO
+------------
+- No se modificó la lógica de pagos.
+- No se recalcularon cuotas.
+- No se aprobaron/rechazaron comprobantes.
+- No se aplicaron automáticamente FREE, descuentos ni exenciones.
+- No se modificaron bloques ni usuarios.
+- No se ejecutaron migraciones.
+- No se ejecutaron migraciones destructivas ni escrituras sobre pagos productivos.
