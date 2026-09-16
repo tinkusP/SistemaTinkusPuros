@@ -1,0 +1,208 @@
+============================================================
+AUDITORÍA PREVIA — MÓDULO DE NÓMINA OFICIAL DE MATRÍCULAS
+============================================================
+
+Fecha: 16 de septiembre de 2026
+Repositorio: /home/jimmy/tinkus
+Estado: AUDITORÍA E IMPLEMENTACIÓN COMPLETADAS
+
+1. PLANTILLA OFICIAL
+====================
+
+La plantilla oficial fue localizada, inspeccionada y versionada en:
+
+backend/templates/Plantilla_Nomina_TINKUS_PUROS_Y_NATURALES.xlsx
+
+SHA-256 verificado:
+
+21c4f35d1e105da5d5d115873435e08187deed3944d24f2029025d1eb4ff4dbd
+
+Se verificaron las hojas Nómina, Instrucciones y _EFU_META. La hoja de metadatos continúa veryHidden,
+las tres hojas conservan su protección y la hoja Nómina mantiene el rango A1:F86, sus estilos,
+validaciones y seis columnas oficiales. La capacidad real de la plantilla es 80 personas. El
+exportador modifica únicamente las celdas A7:F86 de una copia en memoria; nunca altera el archivo base.
+
+2. DÓNDE SE GUARDA LA MATRÍCULA
+==============================
+
+El archivo que acredita el registro universitario se guarda en la colección documentos_usuarios,
+modelo backend/src/models/DocumentoUsuario.ts, con:
+
+- perfilUsuario: referencia a PerfilUsuario;
+- tipoDocumento: REGISTRO_UNIVERSITARIO;
+- ruta: ruta relativa del archivo almacenado mediante el servicio de archivos/R2;
+- estado: PENDIENTE, APROBADO, OBSERVADO, RECHAZADO o ELIMINADO;
+- observacion y fechas de creación/edición/eliminación.
+
+Existe un índice único parcial por perfilUsuario + tipoDocumento para documentos no eliminados. Esto
+permite historial lógico, pero impide más de un documento activo del mismo tipo por usuario.
+
+El alta procesa el archivo registroUniversitarioPdf, lo convierte/comprime sin modificar su identidad,
+lo almacena con prefijo RU y crea el DocumentoUsuario relacionado. La existencia del documento activo
+es la evidencia técnica de que la matrícula fue subida. El estado indica su situación administrativa.
+
+3. DÓNDE ESTÁ EL REGISTRO UNIVERSITARIO
+=======================================
+
+El valor textual de RU se guarda en PerfilUsuario.registroUniversitario. Es un String opcional,
+independiente del archivo DocumentoUsuario. El formulario actual valida que solo contenga números en
+los flujos principales y lo exige a usuarios UMSA.
+
+Conclusión:
+
+- archivo de matrícula/RU: DocumentoUsuario.tipoDocumento = REGISTRO_UNIVERSITARIO;
+- número de Registro Universitario: PerfilUsuario.registroUniversitario.
+
+4. NÚMERO DE MATRÍCULA VS. RU
+=============================
+
+No existe en los modelos activos un campo independiente llamado numeroMatricula, matrículaNúmero o
+equivalente. Algunos reportes llaman “matrícula” a PerfilUsuario.registroUniversitario, pero se trata
+de una etiqueta de presentación, no de un segundo dato.
+
+Por tanto, con el modelo vigente:
+
+- RU sí existe;
+- número de matrícula independiente NO existe;
+- no se debe inventar ni duplicar el RU en un campo inexistente.
+
+5. IDENTIDAD Y NOMBRES
+======================
+
+La identidad principal es PerfilUsuario. Los datos requeridos por la plantilla ya están separados:
+
+- Nombre: PerfilUsuario.nombres;
+- Primer Apellido: PerfilUsuario.apellidoPaterno;
+- Segundo Apellido: PerfilUsuario.apellidoMaterno (opcional);
+- CI: PerfilUsuario.ci (String, conserva ceros iniciales);
+- Número de celular: PerfilUsuario.telefono (String);
+- Registro Universitario: PerfilUsuario.registroUniversitario (String).
+
+No es necesario ni correcto dividir un nombre completo heurísticamente.
+
+6. CLASIFICACIÓN INTERNO/EXTERNO
+================================
+
+La fuente real es PerfilUsuario.tipoOrigen. Las variantes INTERNO e INTERNO_UMSA corresponden a
+INTERNO. Las variantes EXTERNO, EXTERNO_UMSA y EXTERNO_NO_UMSA corresponden a EXTERNO. Un valor ausente
+o no reconocido debe mostrarse como SIN CLASIFICAR. Nunca debe inferirse por rol.
+
+7. RELACIONES QUE DEBEN REUTILIZARSE
+====================================
+
+- PerfilUsuario: identidad, nombres, CI, celular, correo, sexo, tipoOrigen y RU.
+- DocumentoUsuario: evidencia del archivo y estado documental.
+- Rol: todos los roles reales del usuario.
+- Gestion/Preregistro: pertenencia a la gestión seleccionada cuando corresponda.
+- Fraterno: código fraterno, si existe.
+- DetalleBloque/Bloque: asignación activa y bloque actual, si existe.
+
+Todas las relaciones deben ser opcionales salvo PerfilUsuario + DocumentoUsuario activo, porque la
+condición de entrada del nuevo módulo es haber subido el documento, no tener rol Fraterno ni bloque.
+
+8. REPORTE EXISTENTE Y LIMITACIONES
+===================================
+
+Ya existe GET /api/reportes/integrantes-matricula, protegido con soloAdministradorReal, junto con
+ReporteIntegrantesBloqueService y ReporteIntegrantesMatricula.tsx. Debe reutilizarse código útil, pero
+NO cumple el nuevo universo porque:
+
+- inicia en bloques activos;
+- exige Fraterno ACTIVO;
+- excluye usuarios con documento de matrícula pero sin bloque o sin perfil fraterno;
+- trata PerfilUsuario.registroUniversitario como si fuera evidencia suficiente de “matrícula”;
+- no consulta DocumentoUsuario para comprobar que el archivo fue subido;
+- no distingue archivo, RU y un supuesto número de matrícula;
+- genera un reporte de bloques/pagos, no la nómina oficial UMSA;
+- no utiliza ni conserva la plantilla oficial.
+
+No debe alterarse de forma que rompa consumidores actuales. La solución mínima será añadir un servicio
+y endpoints específicos de nómina, reutilizando modelos, normalización de origen y seguridad actuales.
+
+9. UNIVERSO CORRECTO DEL NUEVO MÓDULO
+=====================================
+
+DocumentoUsuario activo con tipo REGISTRO_UNIVERSITARIO
+        -> PerfilUsuario no eliminado
+        -> roles opcionales
+        -> Fraterno opcional
+        -> asignación activa/Bloque activo opcionales
+        -> RU textual opcional (si falta, la fila queda incompleta y NO exportable a nómina oficial)
+
+Una persona se agrupa por PerfilUsuario._id y aparece una sola vez. Si existiera más de un documento
+activo, debe reportarse como inconsistencia; no se corrige automáticamente.
+
+10. VALIDACIONES PREVISTAS PARA LA NÓMINA
+=========================================
+
+- nombres no vacío;
+- apellidoPaterno no vacío;
+- apellidoMaterno opcional;
+- CI no vacío y compuesto únicamente por dígitos;
+- teléfono local no vacío y compuesto únicamente por dígitos;
+- registroUniversitario no vacío;
+- documento REGISTRO_UNIVERSITARIO activo con ruta;
+- archivo disponible mediante el almacenamiento actual.
+
+Los valores CI, teléfono y RU deben escribirse como texto en Excel para conservar ceros iniciales y
+evitar notación científica.
+
+11. INCONSISTENCIAS A REPORTAR
+==============================
+
+- documento sin PerfilUsuario existente;
+- PerfilUsuario eliminado con documento activo;
+- CI o RU duplicado;
+- RU vacío;
+- teléfono vacío/no numérico;
+- nombres incompletos;
+- documento con ruta vacía o archivo no disponible;
+- más de un documento activo por usuario;
+- tipoOrigen ausente/no reconocido.
+
+No se realizará reparación automática.
+
+12. PROPUESTA MÍNIMA DE IMPLEMENTACIÓN
+======================================
+
+Backend:
+
+- NominaMatriculasService: consulta maestra desde DocumentoUsuario y relaciones opcionales.
+- NominaMatriculasController: listado, descarga oficial, reporte administrativo y ZIP opcional.
+- rutas bajo /api/reportes/nomina-matriculas, todas con authenticate + soloAdministradorReal.
+- auditoría NOMINA_OFICIAL_EXPORTADA, REPORTE_MATRICULAS_EXPORTADO y ZIP_MATRICULAS_DESCARGADO.
+- plantilla almacenada como recurso inmutable del backend; cada descarga trabajará sobre Buffer/copia.
+
+Frontend:
+
+- módulo administrativo “Nómina de fraternos — matrículas” dentro de Reportes o ruta administrativa
+  dedicada, reutilizando React Query y ReporteApi;
+- resumen, búsqueda, filtros, vista previa, incompletos y botones de exportación.
+
+13. IMPLEMENTACIÓN REALIZADA
+============================
+
+- Servicio maestro iniciado desde DocumentoUsuario REGISTRO_UNIVERSITARIO activo.
+- Una fila por PerfilUsuario, con relaciones opcionales de rol, gestión, fraterno, guía, postulante,
+  bloque, pagos y tallas.
+- Listado, búsqueda y filtros administrativos en Reportes.
+- Excel completo con nueve hojas.
+- Nómina oficial basada en el XLSX original y limitada a sus 80 filas reales.
+- Descarga individual protegida y ZIP por filtros, organizado en INTERNOS, EXTERNOS y SIN_CLASIFICAR.
+- Verificación de existencia física mediante el almacenamiento vigente, con reporte de faltantes.
+- Endpoints protegidos con authenticate + soloAdministradorReal y auditoría explícita de exportaciones.
+- No se modificó ninguna base de datos, documento, pago, bloque, usuario ni archivo R2.
+
+14. ARCHIVOS PRINCIPALES
+=======================
+
+- backend/templates/Plantilla_Nomina_TINKUS_PUROS_Y_NATURALES.xlsx
+- backend/src/services/NominaMatriculasService.ts
+- backend/src/controllers/NominaMatriculasController.ts
+- backend/src/routes/ReporteRoutes.ts
+- backend/tests/nomina-matriculas.test.js
+- frontend/src/api/ReporteApi.ts
+- frontend/src/components/reportes/ControlMatriculas.tsx
+- frontend/src/views/reportes/ReportesView.tsx
+
+FIN DEL INFORME

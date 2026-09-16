@@ -11,6 +11,7 @@ import ReporteTallasPrimeraCuota from "@/components/reportes/ReporteTallasPrimer
 import ReportePagosCronologicos from "@/components/reportes/ReportePagosCronologicos";
 import ReporteIntegrantesMatricula from "@/components/reportes/ReporteIntegrantesMatricula";
 import ReporteEntregaRopa from "@/components/reportes/ReporteEntregaRopa";
+import ControlMatriculas from "@/components/reportes/ControlMatriculas";
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
@@ -126,6 +127,7 @@ export default function ReportesView() {
   const almacenamiento = alm.data;
 
   return <main className="space-y-5">
+    <ControlMatriculas />
     <ReporteIntegrantesMatricula />
     <ReporteEntregaRopa />
     <ReporteTallasPrimeraCuota />

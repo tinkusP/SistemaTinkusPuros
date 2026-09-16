@@ -17,6 +17,7 @@
     "audit:indumentaria-users": "ts-node src/scripts/auditarUsuariosIndumentaria.ts",
     "audit:size-integrity": "ts-node src/scripts/auditarUsuariosIndumentaria.ts",
     "audit:finanzas-bloques": "ts-node src/scripts/auditarFinanzasBloques.ts",
+    "audit:financial-integrity": "ts-node src/scripts/auditarIntegridadFinanciera.ts",
     "repair:fraterno": "ts-node src/scripts/repararPromocionFraterno.ts",
     "audit:archivos-r2": "ts-node src/scripts/auditarArchivosR2.ts",
     "unlock:login-attempts": "ts-node src/scripts/desbloquearCuentasIntentos.ts"

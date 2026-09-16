@@ -66,4 +66,8 @@ export const corsConfig: CorsOptions = {
     "X-Modo-Capacitacion-Usuario",
     "X-Modo-Capacitacion-Tipo",
   ],
+
+  exposedHeaders: [
+    "Content-Disposition",
+  ],
 };
