@@ -1,0 +1,32 @@
+AUDITORÍA DEL MÓDULO DE PAGOS Y BLOQUES
+
+Universo: DetalleBloque ACTIVO, no eliminado, perteneciente a Bloque ACTIVO. Cada usuario se cuenta una vez. La herramienta es exclusivamente de lectura y no concilia bancos ni modifica datos.
+
+CLASIFICACIÓN REAL
+Cuota.tipoOrigenTarifa congela INTERNO/EXTERNO. La creación/sincronización convierte INTERNO e INTERNO_UMSA a INTERNO; EXTERNO, EXTERNO_UMSA y EXTERNO_NO_UMSA a EXTERNO. Si falta cuota, se aplica la misma conversión explícita desde PerfilUsuario.tipoOrigen. Sin ambos datos queda SIN CLASIFICAR.
+
+PAGOS
+Cuota.montoPagado/saldo reflejan pagos verificados tras sincronización. DetalleCuota diferencia PENDIENTE, VERIFICADO, OBSERVADO y RECHAZADO. El reporte separa registrado, verificado y pendiente. OBSERVADO/RECHAZADO conservan historial, pero no reducen el saldo económico.
+
+LIMITACIÓN CRÍTICA: EXENCIONES
+No existe campo, colección ni regla explícita de exención o motivo. No se puede identificar con certeza a DIRECTIVA ni determinados CHACHA/WARMI. Nadie se presume exento por rol; por eso el reporte indica cero exentos confirmables y califica monto esperado/saldo como provisionales hasta contar con una fuente administrativa explícita.
+
+PARTICIPACIÓN E INCONSISTENCIAS
+Fraterno posee ACTIVO, LISTA_ESPERA, INACTIVO y RETIRADO; PerfilUsuario también tiene estado. Una asignación activa asociada con estado inactivo/retirado se reporta, conservando sus pagos. También se detectan dobles asignaciones, falta de cuota/clasificación, sobrepago, PAGADA con saldo, saldo cero sin verificados y diferencias entre montoPagado y suma verificada. No se repara nada automáticamente.
+
+Archivos/modelos: PerfilUsuario, Rol, Fraterno, Bloque, DetalleBloque, Cuota, DetalleCuota, PlanPagosService, SincronizacionCuotaService, CuotaController y TokenRegistroController. Script: backend/src/scripts/auditarFinanzasBloques.ts. Ejecutar desde backend: npm run audit:finanzas-bloques. La salida con datos personales se excluye de Git.
+
+RESULTADO PRODUCTIVO DE SOLO LECTURA (16-09-2026)
+Personas únicas con bloque: 309. Internos: 90 × Bs 770 = Bs 69.300. Externos: 219 × Bs 850 = Bs 186.150. Sin clasificar: 0. Monto teórico: Bs 255.450.
+
+Exentos confirmables: 0; internos 0; externos 0. Esto NO prueba que no existan exentos: significa que la base no posee un dato que permita identificarlos. Monto exento confirmable: Bs 0. Por ello el monto esperado provisional es Bs 255.450 y no puede presentarse como monto cobrable definitivo hasta registrar/confirmar exenciones.
+
+Monto registrado histórico no eliminado: Bs 207.020. Monto verificado: Bs 197.590. Pendiente de revisión: Bs 8.195. La diferencia restante de Bs 1.235 corresponde a registros en otros estados de revisión (observados/rechazados), que no reducen saldo. Saldo económico provisional: Bs 57.860. Comprobación: 255.450 - 197.590 = 57.860.
+
+Estados calculados con dinero verificado: sin pago 16; pago parcial 152; pago completo 141; con al menos un pago pendiente 31; con al menos un pago verificado 293.
+
+BLOQUE B: 85 personas; 14 internos; 71 externos; teórico Bs 71.130; registrado Bs 55.225; verificado Bs 53.425; pendiente revisión Bs 1.525; saldo Bs 17.705; sin pago 3; parcial 47; completo 35.
+BLOQUE C: 114 personas; 42 internos; 72 externos; teórico Bs 93.540; registrado Bs 75.835; verificado Bs 72.430; pendiente revisión Bs 2.745; saldo Bs 21.110; sin pago 9; parcial 47; completo 58.
+CECILIA: 110 personas; 34 internos; 76 externos; teórico Bs 90.780; registrado Bs 75.960; verificado Bs 71.735; pendiente revisión Bs 3.925; saldo Bs 19.045; sin pago 4; parcial 58; completo 48.
+
+Inconsistencias dentro del universo con bloque: 0 según las reglas auditadas. Personas explícitamente INACTIVAS/RETIRADAS con pagos: 0. Cuentas con pagos pero sin bloque activo que requieren revisión manual de participación: 13; no se las declaró retiradas ni se las excluyó automáticamente. Las listas completas de personas sin pago, parciales, completas, pendientes y de revisión se encuentran en AUDITORIA_FINANCIERA_BLOQUES_PRODUCCION.json local, que no se publica por contener datos personales.
