@@ -118,6 +118,24 @@ export const listarPagosAdmin = async (_req: Request, res: Response) => {
     .lean();
   return res.json({ pagos });
 };
+
+export const actualizarExencionPago = async (req: Request, res: Response) => {
+  const cuota = await Cuota.findOne({ _id: req.params.id, fechaEliminado: null });
+  if (!cuota) return res.status(404).json({ error: "Cuota no encontrada" });
+  const exentoPago = Boolean(req.body.exentoPago);
+  const motivo = String(req.body.motivoExencion ?? "").trim();
+  if (exentoPago && motivo.length < 3) return res.status(400).json({ error: "Debe registrar el motivo real de la exención" });
+  const antes = { exentoPago: Boolean(cuota.exentoPago), motivoExencion: cuota.motivoExencion, observacionExencion: cuota.observacionExencion };
+  cuota.exentoPago = exentoPago;
+  cuota.motivoExencion = exentoPago ? motivo : undefined;
+  cuota.observacionExencion = exentoPago ? String(req.body.observacionExencion ?? "").trim() : undefined;
+  cuota.fechaExencion = exentoPago ? new Date() : undefined;
+  cuota.usuarioExencion = exentoPago ? req.usuario?._id : undefined;
+  cuota.fechaEditado = new Date(); cuota.usuarioEditor = req.usuario?._id;
+  await cuota.save();
+  await registrarAuditoria(req, { accion: exentoPago ? "MARCAR_EXENTO" : "RETIRAR_EXENCION", modulo: "CUOTAS", entidad: "Cuota", entidadId: cuota._id, descripcion: exentoPago ? `Exención administrativa: ${motivo}` : `Se retiró la exención. Motivo: ${motivo || "corrección administrativa"}`, datosAntes: antes, datosDespues: { exentoPago, motivoExencion: cuota.motivoExencion, observacionExencion: cuota.observacionExencion } });
+  return res.json({ message: exentoPago ? "Exención registrada" : "Exención retirada", cuota });
+};
 export const asignarQrSaldo = async (req: Request, res: Response) => {
   const idsEntrada = typeof req.body.cuotaIds === "string" ? JSON.parse(req.body.cuotaIds) : req.body.cuotaIds;
   const cuotaIds = Array.isArray(idsEntrada) ? [...new Set(idsEntrada.map(String))] : [];

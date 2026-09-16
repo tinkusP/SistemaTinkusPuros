@@ -3,7 +3,7 @@ import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputErrors } from "../middleware/validation";
 import { convertirBaucherAWebp, uploadBaucher } from "../middleware/uploadBaucher";
-import { asignarQrSaldo, crearCuota, detalleCuota, editarPlanCuotasAdmin, elegirPlanCuotas, eliminarPago, listarCuotas, listarPagosAdmin, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
+import { actualizarExencionPago, asignarQrSaldo, crearCuota, detalleCuota, editarPlanCuotasAdmin, elegirPlanCuotas, eliminarPago, listarCuotas, listarPagosAdmin, obtenerMiCuota, prorrogarCuotasVencidas, prorrogarPrimeraCuota, registrarPago, revisarPago, solicitarProrrogaPago, solicitarQrPago, validarPlazoAntesDeSubir } from "../controllers/CuotaController";
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 import { uploadQrPago } from "../middleware/uploadQrPago";
@@ -49,6 +49,7 @@ router.patch("/:id/plan", authenticate, id, body("numeroCuotas").isInt({ min: 1,
 router.post("/:id/solicitar-qr", authenticate, id, body("numeroCuotas").isInt({ min: 1, max: 3 }).toInt(), body("numeroPago").isInt({ min: 1, max: 3 }).toInt(), handleInputErrors, solicitarQrPago);
 router.post("/:id/solicitar-prorroga", authenticate, id, handleInputErrors, solicitarProrrogaPago);
 router.patch("/:id/prorroga-primera-cuota", authenticate, soloAdministracion, id, body("horas").isInt({ min: 1, max: 8760 }).toInt(), body("motivo").trim().isLength({ min: 3, max: 500 }), handleInputErrors, prorrogarPrimeraCuota);
+router.patch("/:id/exencion", authenticate, soloAdministradorReal, id, body("exentoPago").isBoolean(), body("motivoExencion").optional().trim().isLength({ max: 200 }), body("observacionExencion").optional().trim().isLength({ max: 1000 }), handleInputErrors, actualizarExencionPago);
 /** @openapi
  * /api/cuotas/{id}/pagos:
  *   post:

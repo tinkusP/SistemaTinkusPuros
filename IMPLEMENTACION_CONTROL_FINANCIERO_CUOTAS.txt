@@ -1,0 +1,16 @@
+IMPLEMENTACIÓN: CONTROL FINANCIERO DE INTEGRANTES CON BLOQUE
+
+Se mantuvo el resumen original de todas las cuotas y se lo rotuló claramente. Debajo se añadió el control dinámico exclusivo de asignaciones DetalleBloque activas pertenecientes a Bloque activo, deduplicado por usuario.
+
+Backend: ControlFinancieroBloquesService consulta en bloque PerfilUsuario, Rol, Fraterno, Bloque, DetalleBloque, Cuota y DetalleCuota. Clasifica por Cuota.tipoOrigenTarifa y usa PerfilUsuario.tipoOrigen solo cuando falta cuota. Separa registrado, VERIFICADO y PENDIENTE. No concilia bancos ni cambia pagos.
+
+Exenciones: se añadieron metadatos opcionales a Cuota (exentoPago, motivo, observación, fecha y responsable). Solo un administrador real puede marcar o retirar una exención. La operación exige motivo, conserva pagos/saldo/estado contable y registra auditoría. El control excluye su obligación y saldo; el dinero previamente verificado continúa visible. Los registros existentes son no exentos por defecto y no requieren migración destructiva.
+
+Frontend: nueva sección en Administración de pagos > Cuotas con tarjetas, fórmulas, explicación sin doble contabilizar pendientes, detalle de sin pago/parciales/pendientes/exentos, resumen por bloque, tabla buscable y filtros. Incluye Excel con RESUMEN, TODOS CON BLOQUE, INTERNOS, EXTERNOS, EXENTOS, SIN PAGO, PAGO PARCIAL, PAGO COMPLETO, PENDIENTE VERIFICACION, REVISION PARTICIPACION e INCONSISTENCIAS.
+
+Permisos/endpoints: GET /api/reportes/control-financiero-bloques y PATCH /api/cuotas/:id/exencion, ambos reservados a administrador real. No se modificaron comprobantes, fórmulas de planes, bloques, roles, usuarios ni lógica de revisión.
+
+VERIFICACIÓN CON DATOS PRODUCTIVOS (SOLO LECTURA)
+309 personas: 90 internas (Bs 69.300) y 219 externas (Bs 186.150), sin clasificar 0. Exentos inicialmente 0 porque no existía la marca. Monto teórico/real inicial Bs 255.450; verificado Bs 197.590; pendiente de verificación Bs 8.195 en 31 comprobantes; saldo Bs 57.860. Sin pago: 16 personas/Bs 12.800. Parciales: 152 personas/Bs 45.060 de saldo. Completos: 141. Inconsistencias: 0.
+
+Pruebas: backend 16/16; TypeScript frontend aprobado; build Vite aprobado. La consulta productiva no escribió datos. No se marcaron exentos reales automáticamente: Administración debe hacerlo individualmente con el motivo verdadero.

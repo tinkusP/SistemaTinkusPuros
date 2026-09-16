@@ -22,6 +22,11 @@ export interface CuotaType extends Document {
   motivoProrroga?: string;
   usuarioProrroga?: mongoose.Types.ObjectId;
   observacion?: string;
+  exentoPago?: boolean;
+  motivoExencion?: string;
+  observacionExencion?: string;
+  fechaExencion?: Date;
+  usuarioExencion?: mongoose.Types.ObjectId;
   fechaCreado: Date;
   usuarioCreador?: mongoose.Types.ObjectId;
   fechaEditado?: Date;
@@ -51,6 +56,11 @@ const schema = new Schema<CuotaType>({
   motivoProrroga: { type: String, trim: true, maxlength: 500 },
   usuarioProrroga: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
   observacion: { type: String, trim: true, maxlength: 1000 },
+  exentoPago: { type: Boolean, default: false, index: true },
+  motivoExencion: { type: String, trim: true, maxlength: 200 },
+  observacionExencion: { type: String, trim: true, maxlength: 1000 },
+  fechaExencion: Date,
+  usuarioExencion: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
   fechaCreado: { type: Date, default: Date.now },
   usuarioCreador: { type: Schema.Types.ObjectId, ref: "PerfilUsuario" },
   fechaEditado: Date,
