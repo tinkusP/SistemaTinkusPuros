@@ -1,0 +1,110 @@
+CORRECCIÓN DEL MÓDULO RESPALDO COMPLETO Y MIGRACIÓN
+Fecha: 17 de septiembre de 2026
+
+CAUSA DEL NETWORK ERROR
+=======================
+El endpoint GET /api/respaldo/exportar cargaba simultáneamente todas las colecciones y todos los
+archivos de R2. Cada archivo se convertía a Base64, después se construía un único objeto JSON y se
+ejecutaba EJSON.stringify + gzipSync. En producción existían 2.046 objetos. Railway registró dos
+respuestas 502 (110.998 ms y 78.527 ms) y Node terminó con:
+
+FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+
+El heap alcanzó aproximadamente 490 MB. Axios recibió una conexión cerrada y solo pudo mostrar
+"Network Error". CORS no era la causa: OPTIONS respondía 204.
+
+SOLUCIÓN APLICADA
+=================
+1. La preparación se ejecuta como trabajo en segundo plano.
+2. El frontend inicia el trabajo, consulta el progreso cada dos segundos y descarga al finalizar.
+3. MongoDB se exporta colección por colección usando cursor y lotes de 100 documentos.
+4. Cada JSON se escribe en un archivo temporal y se incorpora al ZIP progresivamente.
+5. Cada objeto de R2 se abre como stream y se incorpora de forma secuencial; no usa Base64.
+6. El ZIP final se conserva temporalmente y se devuelve mediante createReadStream con Content-Length.
+7. El archivo temporal se elimina después de la descarga o al vencer 30 minutos.
+8. Los fallos informan trabajo, etapa, colección/archivo y mensaje real.
+9. Restaurar/sincronizar ahora usa almacenamiento temporal de Multer y restaura archivos ZIP por
+   stream. El límite del servidor se amplió a 2 GB y el cliente ya no corta cargas/descargas largas
+   por timeout. Continúa aceptando los respaldos anteriores .tinkus.gz.
+10. "Descargar carpetas visibles" se conserva y genera el mismo ZIP completo, legible y restaurable.
+
+CONTENIDO DEL ZIP
+=================
+- LEEME-manifiesto.json.
+- base-de-datos/colecciones/<colección>.json para todas las colecciones.
+- base-de-datos/indices/<colección>.json para todos los índices.
+- documentos/... para fotografías, carnets, matrículas, comprobantes y demás objetos uploads/.
+- reportes/reporte-general.xlsx.
+
+HOJAS DEL EXCEL
+===============
+- Usuarios.
+- Fraternos.
+- Postulantes.
+- Guias.
+- Bloques.
+- Relaciones fraterno-bloque.
+- Pagos.
+- Tallas.
+- Entregas.
+- Asistencias.
+- Usuarios sin bloque.
+- Usuarios sin pago.
+- Pagos incompletos.
+
+VALIDACIÓN REAL DE SOLO LECTURA
+===============================
+Se ejecutó el generador contra MongoDB y R2 reales sin modificar datos:
+- Colecciones: 32.
+- Documentos: 26.554.
+- Archivos: 2.046.
+- Entradas del ZIP: 2.112.
+- Tamaño final: 294.304.889 bytes (280,67 MB).
+- Manifiesto: presente.
+- Excel: presente.
+- Pico de heap: 43,4 MB.
+- Resultado: OK.
+
+El ZIP temporal de validación fue eliminado al finalizar.
+
+PRUEBAS
+========
+- Respaldo pequeño con usuario, documento, JSON, índices y las 13 hojas Excel: aprobado.
+- Respaldo con 750 registros distribuidos en colecciones completas: aprobado.
+- Archivo de 24 MB producido en fragmentos de 64 KB: aprobado.
+- Suite completa backend: 19/19 archivos de pruebas aprobados.
+- Build TypeScript backend: aprobado.
+- TypeScript frontend: aprobado.
+- Build Vite frontend: aprobado.
+- ESLint de RespaldoApi y RespaldoView: aprobado.
+
+ARCHIVOS NUEVOS
+===============
+- backend/src/services/RespaldoCompletoService.ts
+- backend/src/services/RespaldoExcelService.ts
+- backend/tests/respaldo-completo-streaming.test.js
+- CORRECCION_RESPALDO_COMPLETO.txt
+
+ARCHIVOS MODIFICADOS
+====================
+- backend/package.json
+- backend/package-lock.json
+- backend/src/controllers/RespaldoController.ts
+- backend/src/routes/RespaldoRoutes.ts
+- backend/src/services/AlmacenamientoService.ts
+- frontend/src/api/RespaldoApi.ts
+- frontend/src/views/respaldo/RespaldoView.tsx
+
+NO SE MODIFICÓ
+==============
+- Información de pagos.
+- Usuarios, fraternos, guías o bloques.
+- Archivos almacenados en R2.
+- Variables .env.
+- Autorización exclusiva del administrador propietario.
+- Semántica de restauración: sincroniza/actualiza y no elimina datos adicionales.
+
+ESTADO GIT/DEPLOY
+=================
+Los cambios quedan preparados y verificados localmente. No se realizó commit, push ni deploy porque
+esta solicitud no autorizó explícitamente publicar los cambios.

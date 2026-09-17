@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
-import { createReadStream, promises as fs } from "node:fs";
+import { createReadStream, createWriteStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const urlBase = () => String(process.env.R2_WORKER_URL ?? "").replace(/\/+$/, "");
 const token = () => String(process.env.R2_WORKER_TOKEN ?? "");
@@ -39,6 +40,12 @@ export type ArchivoAlmacenado = {
   key: string;
   size: number;
   contentType?: string;
+};
+
+export type StreamArchivoAlmacenado = {
+  stream: Readable;
+  contentType: string;
+  size?: number;
 };
 
 const rutaPublicaDesdeClave = (key: string) => `/${claveDesdeRuta(key)}`;
@@ -107,6 +114,28 @@ export async function descargarArchivoAlmacenado(key: string): Promise<{ conteni
   return { contenido: await fs.readFile(absoluta), contentType: contentTypeDesdeRuta(key) };
 }
 
+/**
+ * Abre un archivo sin copiarlo completo al heap de Node. Los respaldos usan
+ * esta variante para transferir objetos grandes de R2 al ZIP por fragmentos.
+ */
+export async function abrirStreamArchivoAlmacenado(key: string): Promise<StreamArchivoAlmacenado> {
+  const rutaPublica = rutaPublicaDesdeClave(key);
+  if (almacenamientoR2Activo()) {
+    const respuesta = await fetch(endpoint(rutaPublica), { headers: headersAutorizacion() });
+    if (!respuesta.ok || !respuesta.body) throw new Error(`No se pudo abrir ${key} desde R2 (${respuesta.status})`);
+    return {
+      stream: Readable.fromWeb(respuesta.body as import("node:stream/web").ReadableStream),
+      contentType: respuesta.headers.get("content-type") || "application/octet-stream",
+      size: Number(respuesta.headers.get("content-length") || 0) || undefined,
+    };
+  }
+  const absoluta = path.resolve(process.cwd(), "public", claveDesdeRuta(key));
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  if (!absoluta.startsWith(`${raiz}${path.sep}`)) throw new Error("Ruta local inválida");
+  const estado = await fs.stat(absoluta);
+  return { stream: createReadStream(absoluta), contentType: contentTypeDesdeRuta(key), size: estado.size };
+}
+
 export async function restaurarArchivoAlmacenado(key: string, contenido: Buffer, contentType: string): Promise<void> {
   const rutaPublica = rutaPublicaDesdeClave(key);
   if (almacenamientoR2Activo()) {
@@ -118,6 +147,30 @@ export async function restaurarArchivoAlmacenado(key: string, contenido: Buffer,
   if (!absoluta.startsWith(`${raiz}${path.sep}`)) throw new Error("Ruta local inválida");
   await fs.mkdir(path.dirname(absoluta), { recursive: true });
   await fs.writeFile(absoluta, contenido);
+}
+
+/** Restaura un archivo grande por stream, sin mantenerlo completo en memoria. */
+export async function restaurarStreamArchivoAlmacenado(
+  key: string,
+  contenido: Readable,
+  contentType: string,
+): Promise<void> {
+  const rutaPublica = rutaPublicaDesdeClave(key);
+  if (almacenamientoR2Activo()) {
+    const respuesta = await fetch(endpoint(rutaPublica), {
+      method: "PUT",
+      headers: { ...headersAutorizacion(), "content-type": contentType },
+      body: Readable.toWeb(contenido),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    if (!respuesta.ok) throw new Error(`R2 rechazó la restauración de ${key} (${respuesta.status})`);
+    return;
+  }
+  const absoluta = path.resolve(process.cwd(), "public", claveDesdeRuta(key));
+  const raiz = path.resolve(process.cwd(), "public", "uploads");
+  if (!absoluta.startsWith(`${raiz}${path.sep}`)) throw new Error("Ruta local inválida");
+  await fs.mkdir(path.dirname(absoluta), { recursive: true });
+  await pipeline(contenido, createWriteStream(absoluta));
 }
 
 export async function subirArchivoProcesado(

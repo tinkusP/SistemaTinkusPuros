@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ArchiveRestore, CloudDownload, DatabaseBackup, FileArchive, FolderDown, ShieldAlert } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/hooks/useAuth";
-import { descargarRespaldoCompleto, descargarRespaldoOrganizado, importarRespaldoCompleto } from "@/api/RespaldoApi";
+import { descargarRespaldoCompleto, descargarRespaldoOrganizado, importarRespaldoCompleto, type ProgresoRespaldo } from "@/api/RespaldoApi";
 
 const CORREO_PROPIETARIO = "devdjcod@gmail.com";
 
@@ -12,15 +12,22 @@ export default function RespaldoView() {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [confirmacion, setConfirmacion] = useState("");
   const [progreso, setProgreso] = useState(0);
+  const [progresoDescarga, setProgresoDescarga] = useState<ProgresoRespaldo>();
   const autorizado = String(usuario?.email ?? "").trim().toLowerCase() === CORREO_PROPIETARIO;
 
   const descargar = useMutation({
-    mutationFn: descargarRespaldoCompleto,
+    mutationFn: async () => {
+      setProgresoDescarga({ etapa: "INICIALIZANDO", mensaje: "Iniciando respaldo" });
+      return descargarRespaldoCompleto(setProgresoDescarga);
+    },
     onSuccess: () => toast.success("Respaldo descargado correctamente"),
     onError: (error: Error) => toast.error(error.message),
   });
   const descargarOrganizado = useMutation({
-    mutationFn: descargarRespaldoOrganizado,
+    mutationFn: async () => {
+      setProgresoDescarga({ etapa: "INICIALIZANDO", mensaje: "Iniciando respaldo" });
+      return descargarRespaldoOrganizado(setProgresoDescarga);
+    },
     onSuccess: () => toast.success("ZIP organizado descargado correctamente"),
     onError: (error: Error) => toast.error(error.message),
   });
@@ -47,10 +54,11 @@ export default function RespaldoView() {
   return <main className="space-y-5">
     <header><p className="text-sm font-black uppercase tracking-widest text-[#C59A3A]">Acceso exclusivo del propietario</p><h1 className="text-3xl font-black text-[#74122A]">Respaldo completo y migración</h1><p className="mt-2 max-w-3xl text-slate-600">Descarga todas las colecciones, registros, imágenes, PDF y comprobantes. El mismo archivo permite pasar datos de la nube a local o de local a la nube.</p></header>
     <section className="grid gap-5 lg:grid-cols-3">
-      <article className="rounded-3xl border bg-white p-6 shadow-sm"><CloudDownload className="h-12 w-12 text-emerald-700"/><h2 className="mt-4 text-xl font-black text-[#74122A]">Descargar todo</h2><p className="mt-2 text-sm leading-6 text-slate-600">Genera un archivo comprimido con la base de datos, sus índices y todos los objetos almacenados. Guárdalo en un disco seguro.</p><button type="button" disabled={descargar.isPending} onClick={() => descargar.mutate()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:opacity-50"><DatabaseBackup className="h-5 w-5"/>{descargar.isPending ? "Preparando base y documentos..." : "Descargar respaldo completo"}</button></article>
-      <article className="rounded-3xl border border-blue-200 bg-white p-6 shadow-sm"><FolderDown className="h-12 w-12 text-blue-700"/><h2 className="mt-4 text-xl font-black text-[#74122A]">Descargar carpetas visibles</h2><p className="mt-2 text-sm leading-6 text-slate-600">Descarga un ZIP que puedes abrir normalmente. Incluye fotos, carnets, matrículas, PDF, comprobantes y la base en JSON, respetando las carpetas por CI.</p><button type="button" disabled={descargarOrganizado.isPending} onClick={() => descargarOrganizado.mutate()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><FolderDown className="h-5 w-5"/>{descargarOrganizado.isPending ? "Armando carpetas y documentos..." : "Descargar todo en ZIP"}</button></article>
+      <article className="rounded-3xl border bg-white p-6 shadow-sm"><CloudDownload className="h-12 w-12 text-emerald-700"/><h2 className="mt-4 text-xl font-black text-[#74122A]">Descargar todo</h2><p className="mt-2 text-sm leading-6 text-slate-600">Genera un ZIP restaurable con JSON, índices, Excel y todos los archivos. Se prepara por etapas sin cargar todo en memoria.</p><button type="button" disabled={descargar.isPending || descargarOrganizado.isPending} onClick={() => descargar.mutate()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:opacity-50"><DatabaseBackup className="h-5 w-5"/>{descargar.isPending ? "Preparando respaldo..." : "Descargar respaldo completo"}</button></article>
+      <article className="rounded-3xl border border-blue-200 bg-white p-6 shadow-sm"><FolderDown className="h-12 w-12 text-blue-700"/><h2 className="mt-4 text-xl font-black text-[#74122A]">Descargar carpetas visibles</h2><p className="mt-2 text-sm leading-6 text-slate-600">Descarga el mismo ZIP completo y legible, con fotos, carnets, matrículas, comprobantes, JSON y el reporte Excel.</p><button type="button" disabled={descargar.isPending || descargarOrganizado.isPending} onClick={() => descargarOrganizado.mutate()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><FolderDown className="h-5 w-5"/>{descargarOrganizado.isPending ? "Armando carpetas y documentos..." : "Descargar todo en ZIP"}</button></article>
       <article className="rounded-3xl border border-amber-300 bg-white p-6 shadow-sm"><ArchiveRestore className="h-12 w-12 text-amber-700"/><h2 className="mt-4 text-xl font-black text-[#74122A]">Restaurar o sincronizar</h2><p className="mt-2 text-sm leading-6 text-slate-600">Agrega los elementos que falten y actualiza los que tengan el mismo identificador. No elimina datos adicionales del destino.</p><label className="mt-4 block rounded-xl border-2 border-dashed p-4 text-sm font-bold"><FileArchive className="mb-2 h-6 w-6"/>Archivo ZIP o .tinkus.gz<input type="file" accept=".zip,.gz,.tinkus.gz,application/zip,application/gzip" className="mt-2 block w-full text-xs" onChange={(evento) => setArchivo(evento.target.files?.[0] ?? null)}/><span className="mt-2 block break-all font-normal text-slate-500">{archivo?.name ?? "Ningún respaldo seleccionado"}</span></label><label className="mt-4 block text-sm font-bold">Escribe RESTAURAR para confirmar<input value={confirmacion} onChange={(evento) => setConfirmacion(evento.target.value.toUpperCase())} className="mt-2 w-full rounded-xl border p-3" placeholder="RESTAURAR"/></label>{restaurar.isPending && <div className="mt-3"><div className="h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-[#74122A] transition-all" style={{width:`${progreso}%`}}/></div><p className="mt-1 text-center text-xs text-slate-500">Subiendo {progreso}% · después se sincronizarán registros y archivos sin borrar datos adicionales</p></div>}<button type="button" disabled={restaurar.isPending || !archivo || confirmacion !== "RESTAURAR"} onClick={() => restaurar.mutate()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#74122A] px-5 py-3 font-bold text-white disabled:opacity-50"><ArchiveRestore className="h-5 w-5"/>{restaurar.isPending ? "Sincronizando, no cierres esta página..." : "Restaurar o sincronizar"}</button></article>
     </section>
+    {(descargar.isPending || descargarOrganizado.isPending) && progresoDescarga ? <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950" aria-live="polite"><strong>{progresoDescarga.etapa.replaceAll("_", " ")}</strong><span className="ml-2">{progresoDescarga.mensaje}</span>{typeof progresoDescarga.total === "number" ? <div className="mt-3"><div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-700 transition-all" style={{ width: `${Math.min(100, Math.round(((progresoDescarga.procesados ?? 0) / Math.max(1, progresoDescarga.total)) * 100))}%` }}/></div><p className="mt-1 text-xs">{progresoDescarga.procesados ?? 0} de {progresoDescarga.total}{progresoDescarga.tabla ? ` · ${progresoDescarga.tabla}` : ""}</p></div> : null}</section> : null}
     <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950"><strong>Importante:</strong> el respaldo contiene información personal y contraseñas cifradas. No lo envíes por WhatsApp ni lo subas a un repositorio público.</section>
   </main>;
 }
