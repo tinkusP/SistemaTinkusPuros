@@ -1,0 +1,122 @@
+CORRECCIÓN DEL SELECTOR DE EXENCIONES
+Fecha: 17 de septiembre de 2026
+
+CAUSA RAÍZ
+----------
+El componente de Control financiero utilizaba la propiedad personas del endpoint
+GET /api/reportes/control-financiero-bloques. Esa propiedad se construye desde preregistros con cuota
+y después se limita a DetalleBloque ACTIVO dentro de Bloque ACTIVO. Por ello una cuenta activa sin
+cuota, perfil fraterno o bloque no podía aparecer ni recibir una exención administrativa.
+
+CORRECCIÓN
+----------
+Se separó el selector de exenciones del universo financiero por bloques. El selector comienza en
+PerfilUsuario con estado ACTIVO y fechaEliminado nula. Roles, preregistro, fraterno, cuota, pagos,
+bloque y tallas se relacionan opcionalmente; la ausencia de cualquiera de ellos no elimina al usuario.
+
+Los cálculos y tarjetas del control financiero no fueron modificados. Continúan trabajando con el
+universo original de integrantes con asignación activa.
+
+ENDPOINTS
+---------
+GET /api/cuotas/exenciones/usuarios
+- Devuelve todos los usuarios activos, relaciones opcionales, diferencias frente al control anterior
+  y validación de Jonny/Kenji.
+- Protegido con authenticate + soloAdministradorReal.
+
+PATCH /api/cuotas/exenciones/usuarios/:usuarioId
+- Registra o retira una exención administrativa para un usuario que no tiene cuota.
+- No crea cuotas y no altera los cálculos financieros.
+- Motivos permitidos: DIRECTIVA, ADMINISTRACION, GUIA, INVITADO y OTRO.
+- Registra descripción, administrador y fecha, además de Auditoria.
+
+Para personas con cuota se conserva PATCH /api/cuotas/:id/exencion y la lógica financiera vigente.
+
+CONSULTA CORREGIDA
+------------------
+Fuente principal:
+PerfilUsuario.find({ estado: "ACTIVO", fechaEliminado: null })
+
+Relaciones opcionales:
+- Rol
+- Preregistro
+- Fraterno
+- Guia
+- PostulanteGuia
+- Cuota y DetalleCuota
+- Bloque y DetalleBloque
+- TallaFraterno
+- ExencionPagoUsuario
+
+MODELO NUEVO
+------------
+ExencionPagoUsuario conserva exenciones administrativas de cuentas sin cuota por usuario y gestión.
+No representa deuda, no crea un plan de pagos y no participa en las sumas financieras.
+
+RESULTADO DE PRODUCCIÓN — CONSULTA DE SOLO LECTURA
+--------------------------------------------------
+Gestión: Gestión 2026.
+- Usuarios activos en Gestión Integral: 372.
+- Usuarios disponibles para exención: 372.
+- Usuarios visibles en el control financiero anterior: 309.
+- Usuarios antes no visibles: 63.
+- Validación universo completo: correcta.
+- Usuarios únicos: correcta.
+- Eliminados excluidos: correcta.
+
+Casos solicitados:
+- JONNY ALBERTO HERRERA CONDORI, CI 9939046: encontrado; SIN BLOQUE; pago PENDIENTE;
+  actualmente NO EXENTO.
+- KENJI GROVER SADAKATA CONDE, CI 8963878: encontrado; SIN BLOQUE; pago PENDIENTE;
+  actualmente NO EXENTO.
+
+La consulta se ejecutó con autoIndex=false y autoCreate=false. No modificó documentos ni índices.
+
+FRONTEND
+--------
+El nuevo selector permite buscar por nombre, apellido, CI, teléfono, código fraterno y correo.
+Muestra datos personales, roles, bloque o SIN BLOQUE, origen, estado de pago o SIN CUOTA, tallas y
+estado completo de la exención. Incluye el reporte desplegable Usuarios no visibles en el control
+financiero anterior con CI, nombre, rol y motivo de exclusión.
+
+ARCHIVOS NUEVOS
+---------------
+- backend/src/models/ExencionPagoUsuario.ts
+- backend/src/services/SelectorExencionesService.ts
+- backend/src/controllers/ExencionPagoController.ts
+- backend/tests/selector-exenciones.test.js
+- frontend/src/components/cuota/SelectorExencionesUsuarios.tsx
+- CORRECCION_SELECTOR_EXENCIONES.txt
+
+ARCHIVOS MODIFICADOS
+--------------------
+- backend/src/routes/CuotaRoutes.ts
+- backend/src/services/eliminacionUsuarioService.ts
+- frontend/src/api/CuotaApi.ts
+- frontend/src/views/cuota/CuotaView.tsx
+
+PRUEBAS
+-------
+- Usuario con bloque: incluido.
+- Usuario sin bloque: incluido.
+- Administrador sin cuota: incluido y marcado SIN CUOTA.
+- Guía sin bloque: incluido por PerfilUsuario y rol relacionado.
+- Postulante registrado: incluido; relación opcional agrega el rol derivado.
+- Usuario eliminado: excluido por estado ACTIVO y fechaEliminado nula.
+- Exención sin cuota: no crea Cuota.
+- Motivo, descripción, administrador y fecha: conservados.
+- Separación del cálculo financiero por bloques: validada.
+- Suite backend: 22/22 archivos de prueba aprobados después de integrar también los ajustes financieros.
+- TypeScript frontend: aprobado.
+- ESLint de archivos afectados: aprobado.
+- Build frontend Vite: aprobado; permanece únicamente la advertencia preexistente por tamaño de chunks.
+
+RESULTADO FINAL
+---------------
+[X] Todos los perfiles activos aparecen en el selector.
+[X] La ausencia de bloque, cuota o talla no oculta usuarios.
+[X] Jonny aparece.
+[X] Kenji aparece.
+[X] Las exenciones sin cuota pueden registrarse sin crear deuda.
+[X] Los cálculos financieros existentes no fueron modificados.
+[X] Existe reporte de las 63 cuentas antes no visibles.

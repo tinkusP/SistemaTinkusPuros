@@ -7,6 +7,8 @@ import { actualizarExencionPago, asignarQrSaldo, crearCuota, detalleCuota, edita
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { habilitarCuotasMasivas } from "../controllers/CuotaMasivaController";
 import { uploadQrPago } from "../middleware/uploadQrPago";
+import { actualizarExencionUsuarioSinCuota, listarUsuariosExencion } from "../controllers/ExencionPagoController";
+import { registrarAjusteFinanciero } from "../controllers/AjusteFinancieroController";
 const router = Router(); const id = param("id").isMongoId();
 /** @openapi
  * /api/cuotas:
@@ -16,6 +18,25 @@ const router = Router(); const id = param("id").isMongoId();
 router.get("/", authenticate, soloAdministracion, listarCuotas);
 router.get("/pagos/todos", authenticate, soloAdministracion, listarPagosAdmin);
 router.post("/qr-saldo", authenticate, soloAdministracion, uploadQrPago.single("qrSaldo"), asignarQrSaldo);
+router.get("/exenciones/usuarios", authenticate, soloAdministradorReal, listarUsuariosExencion);
+router.patch("/exenciones/usuarios/:usuarioId", authenticate, soloAdministradorReal,
+  param("usuarioId").isMongoId(),
+  body("exentoPago").isBoolean(),
+  body("categoria").optional({ checkFalsy: true }).isIn(["DIRECTIVA", "ADMINISTRACION", "GUIA", "INVITADO", "OTRO"]),
+  body("descripcion").optional().trim().isLength({ max: 1000 }),
+  handleInputErrors,
+  actualizarExencionUsuarioSinCuota,
+);
+router.post("/ajustes-financieros/:usuarioId", authenticate, soloAdministradorReal,
+  param("usuarioId").isMongoId(),
+  body("accion").isIn(["EXCLUIR_CALCULO", "RESTAURAR_CALCULO", "MARCAR_EXENTO", "MARCAR_DESCUENTO"]),
+  body("motivo").trim().isLength({ min: 3, max: 1000 }),
+  body("tipoExencion").optional({ checkFalsy: true }).isIn(["DIRECTIVA", "ADMINISTRADOR", "GUIA", "INVITADO", "OTRO"]),
+  body("porcentajeDescuento").optional().isFloat({ gt: 0, lt: 100 }).toFloat(),
+  body("montoEsperadoFinal").optional().isFloat({ min: 0 }).toFloat(),
+  handleInputErrors,
+  registrarAjusteFinanciero,
+);
 /** @openapi
  * /api/cuotas/habilitar-masivo:
  *   post:

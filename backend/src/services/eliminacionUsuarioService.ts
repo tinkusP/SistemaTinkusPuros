@@ -7,7 +7,7 @@ const find = (name: string, filter: object, session: ClientSession) => collectio
 export async function eliminarUsuarioDefinitivamente(perfilId: string, ciConfirmacion: string, administradorId?: Types.ObjectId) {
   const session = await mongoose.startSession();
   const loteId = new Types.ObjectId();
-  const auditFields = ["usuarioCreador", "usuarioEditor", "usuarioAprobador", "usuarioRevisor", "usuarioEliminador", "usuarioHabilitador", "usuarioEvaluador", "usuarioVerificador", "responsableEntrega", "administradorId", "generadoPor", "createdBy", "updatedBy", "approvedBy", "verifiedBy"];
+  const auditFields = ["usuarioCreador", "usuarioEditor", "usuarioAprobador", "usuarioRevisor", "usuarioEliminador", "usuarioHabilitador", "usuarioEvaluador", "usuarioVerificador", "usuarioAdministrador", "responsableEntrega", "administradorId", "generadoPor", "createdBy", "updatedBy", "approvedBy", "verifiedBy"];
   const names = (await mongoose.connection.db!.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name);
   try {
     return await session.withTransaction(async () => {
@@ -40,6 +40,8 @@ export async function eliminarUsuarioDefinitivamente(perfilId: string, ciConfirm
         documentos_usuarios: { perfilUsuario: usuario._id },
         notificaciones: { usuarioId: usuario._id },
         aceptaciones_terminos_pago: { usuarioId: usuario._id },
+        exenciones_pago_usuario: { usuarioId: usuario._id },
+        ajustes_financieros: { $or: [{ usuarioId: usuario._id }, { cuotaId: { $in: cuotaIds } }] },
         autorizaciones_edicion_perfil: { perfilUsuarioId: usuario._id },
         tokens_registro: { $or: [{ utilizadoPor: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }, { fraternoId: { $in: fraternoIds } }] },
         traspasos: { $or: [{ usuarioOrigenId: usuario._id }, { usuarioDestinoId: usuario._id }, { preregistroId: { $in: preregistroIds } }, { cuotaId: { $in: cuotaIds } }] },

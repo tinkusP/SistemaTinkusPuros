@@ -1,0 +1,102 @@
+GESTIÓN ADMINISTRATIVA DE REGISTROS FINANCIEROS ESPECIALES
+Fecha: 17 de septiembre de 2026
+
+RESULTADO
+---------
+La Auditoría financiera de Cuotas permite excluir, restaurar, eximir o aplicar un
+descuento a una persona sin modificar ni eliminar Cuota, DetalleCuota o archivos
+de comprobantes. Cada decisión se agrega como un evento histórico y el último
+evento de la persona determina su participación en los cálculos auditados.
+
+MODELO NUEVO
+------------
+- backend/src/models/AjusteFinanciero.ts
+- Colección: ajustes_financieros.
+- Guarda gestión, persona, cuota, acción, motivo, tipo de exención, porcentaje,
+  monto original, monto final, administrador y fecha inmutable.
+- No reemplaza los registros financieros originales.
+
+ENDPOINT CREADO
+---------------
+POST /api/cuotas/ajustes-financieros/:usuarioId
+
+Protección:
+- sesión autenticada;
+- administrador real;
+- persona ACTIVA;
+- cuota vigente de la gestión activa;
+- acción permitida y motivo obligatorio;
+- descuento mayor a 0 % y menor a 100 %;
+- monto final consistente con el porcentaje.
+
+ACCIONES
+--------
+- EXCLUIR_CALCULO: esperado y saldo auditados pasan a cero.
+- RESTAURAR_CALCULO: recupera el monto original, aun si la cuota tenía una
+  exención anterior. No modifica esa cuota; solo restaura su participación en
+  la auditoría.
+- MARCAR_EXENTO: esperado y saldo auditados pasan a cero y registra el tipo.
+- MARCAR_DESCUENTO: usa el monto final calculado desde el porcentaje y recalcula
+  únicamente el saldo auditado.
+
+CÁLCULOS
+--------
+El módulo muestra:
+- TOTAL GENERAL: monto original registrado antes de ajustes.
+- TOTAL EXCLUIDO.
+- TOTAL EXENTO, incluyendo exenciones vigentes en cuota y nuevos ajustes.
+- TOTAL DESCUENTO aplicado mediante esta gestión administrativa.
+- TOTAL PARTICIPACIÓN REAL: suma de montos esperados ajustados.
+
+Los importes pagados y verificados nunca se alteran por estos ajustes. El saldo
+ajustado es max(0, esperado ajustado - verificado).
+
+HISTORIAL
+---------
+La interfaz muestra el historial completo con persona, CI, acción, motivo,
+monto original, monto final, administrador y fecha. También se incluye dentro
+de la hoja 01_RESUMEN del Excel de auditoría.
+
+CASOS NOMINALES
+---------------
+Las coincidencias ambiguas de CARLOS y DIEGO y la referencia de descuento de
+DYLAN permanecen como pendientes de revisión. Ningún alias aplica cambios de
+forma automática. Solo una acción explícita sobre una persona identificada por
+su ID crea un ajuste.
+
+ARCHIVOS BACKEND
+----------------
+- backend/src/models/AjusteFinanciero.ts
+- backend/src/services/AjusteFinancieroService.ts
+- backend/src/controllers/AjusteFinancieroController.ts
+- backend/src/services/AuditoriaFinancieraService.ts
+- backend/src/routes/CuotaRoutes.ts
+- backend/src/services/eliminacionUsuarioService.ts
+
+ARCHIVOS FRONTEND
+-----------------
+- frontend/src/api/CuotaApi.ts
+- frontend/src/api/ReporteApi.ts
+- frontend/src/components/cuota/AuditoriaFinancieraGeneral.tsx
+
+PRUEBAS
+-------
+- Excluir: esperado/saldo cero, pago conservado.
+- Restaurar: vuelve al monto original.
+- Exento: esperado/saldo cero.
+- Descuento 50 %: Bs 850 -> Bs 425 y saldo recalculado.
+- Historial: eventos inmutables con administrador y fecha.
+- Seguridad: endpoint exclusivo del administrador real y motivo obligatorio.
+- Protección: el controlador no actualiza ni elimina Cuota o DetalleCuota.
+
+El conjunto completo de pruebas backend aprobó 22/22. El backend compiló; el
+frontend aprobó TypeScript, ESLint de los archivos afectados y build Vite.
+
+CAMBIOS NO REALIZADOS
+---------------------
+- No se eliminaron cuotas.
+- No se eliminaron ni editaron pagos.
+- No se tocaron comprobantes.
+- No se aplicaron ajustes automáticos a personas reales.
+- No se modificó el Control financiero por bloques; los ajustes afectan la
+  Auditoría financiera, que es donde se administran estos casos especiales.

@@ -25,11 +25,12 @@ test("auditoría nueva es de solo lectura y excluye eliminados", () => {
   assert.doesNotMatch(servicio, /updateOne|updateMany|deleteOne|deleteMany|findOneAndUpdate|findByIdAndUpdate|\.save\(/);
 });
 
-test("diferencia esperada separa fuera de bloque y exenciones", () => {
+test("diferencia esperada usa montos ajustados y conserva exenciones como dato informativo", () => {
   const servicio = leerBackend("src/services/AuditoriaFinancieraService.ts");
   assert.match(servicio, /fueraDeBloque: esperadoFuera/);
   assert.match(servicio, /exencionesEnBloque: universoBloques\.montoExento/);
-  assert.match(servicio, /noExplicada: dinero\(universoGeneral\.montoEsperado - universoBloques\.montoEsperado - esperadoFuera - universoBloques\.montoExento\)/);
+  assert.match(servicio, /noExplicada: dinero\(universoGeneral\.montoEsperado - universoBloques\.montoEsperado - esperadoFuera\)/);
+  assert.match(servicio, /montoEsperadoAjustado/);
   assert.match(servicio, /estadoRevision === "VERIFICADO"/);
 });
 
