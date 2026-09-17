@@ -1,0 +1,101 @@
+AUDITORÍA INTEGRAL DE FRATERNOS
+Fecha: 17 de septiembre de 2026
+
+ACCESO
+Reportes -> Auditoría integral de fraternos -> Ver reporte.
+GET /api/reportes/auditoria-integral requiere authenticate y soloAdministradorReal.
+El frontend también oculta la tarjeta a usuarios no administrativos.
+No depende del éxito del reporte ejecutivo para mostrar la tarjeta.
+
+UNIVERSO Y REGLAS
+La consulta comienza en PerfilUsuario, sin exigir cuota, fraterno, talla o bloque.
+Incluye cuentas inactivas y todos los roles almacenados; excluye eliminación lógica.
+Cuenta una vez cada ID de usuario. Los CI/nombres repetidos se señalan, no se fusionan.
+No se infieren exenciones por nombres, apodos o rol.
+Gestión: última ACTIVA/INSCRIPCIONES por año. Sin gestión devuelve las cuentas y tallas.
+Bloques: gestión vigente y estado ACTIVO; DetalleBloque no INACTIVO y no eliminado,
+siguiendo FILTRO_ASIGNACION_ACTIVA (incluye estado ausente heredado).
+Las asignaciones múltiples se muestran como inconsistencia, sin repararlas.
+Se conservan guiaId y guiasIds y se muestran guías vigentes asociados.
+
+TALLAS Y CONCILIACIÓN
+TallaFraterno no tiene gestión: las tallas son globales y esto se indica en pantalla.
+Se resuelven usuarioId y fraternoId, incluso cuando el fraterno es histórico.
+Si ambos vínculos contradicen la identidad, el registro no se atribuye automáticamente.
+Tallas duplicadas: se muestra el registro más reciente, desempate por ID; todos sus
+valores originales quedan en la diferencia para revisión, no se fusionan campos.
+Valores exactos del catálogo son válidos; vacío/null es SIN TALLA y valor no
+reconocido es SIN DEFINIR. No se normaliza ni modifica el dato almacenado.
+Con talla significa al menos una prenda válida. Se muestra también estado completo/parcial.
+Documentos físicos de tallas se cuentan aparte de personas únicas con talla válida.
+
+Identidad matemática:
+conTalla - conBloque = conTallaSinBloque - conBloqueSinTalla.
+También se muestra la intersección de ambos universos.
+309, 325 y 16 NO están codificados. No se ha consultado producción para confirmar
+esas cifras ni identificar personas reales en esta implementación.
+
+PAGOS
+Preregistros, cuotas y pagos no eliminados de la gestión seleccionada automáticamente.
+Cuotas múltiples se agregan y se alertan, no se descartan con un Map por persona.
+Pagado: movimientos no rechazados. Verificado: solo estado VERIFICADO.
+Rechazados figuran en el detalle de pagos, pero no suman al pagado.
+Esperado/saldo usan calcularParticipacionFinanciera y último ajuste usuario/cuota.
+Exención formal por usuario/cuota y descuentos formalizados, sin aplicar alias.
+Sin cuota: SIN CUOTA / NO APLICA, esperado cero, no se inventa obligación tarifaria.
+Monto exento/excluido/descontado es reducción sobre montoTotal registrado, no tarifa
+hipotética. Si la cuota ya está en cero, no se reconstruye una tarifa original.
+Cantidad de cuotas refleja plan elegido; múltiples cuotas se marcan para revisar.
+Cuota 1/2/3 refleja estado de movimientos por numeroPago, no certifica que el importe
+cubra el vencimiento. Verificado significa revisión del movimiento, no pago total.
+Un pago sin bloque NO prueba que el usuario no baile: se etiqueta para revisión.
+No se cambiaron reglas de cobro ni saldos guardados.
+
+ENTREGAS
+Solo ENTREGADO significa entrega actual. DEVUELTO/PERDIDO/DANADO siguen en detalle.
+Se incluyen entregas de fraternos de la gestión, filtrando gestión explícita ajena;
+para registros heredados sin gestionId se usa el vínculo al fraterno.
+Se muestran fecha y responsable de polera y chamarra.
+
+EXCEL
+Exporta universo completo, aunque la pantalla tenga filtros:
+Resumen general; Todos los usuarios; Usuarios con bloque;
+Usuarios con talla sin bloque; Usuarios sin talla; Pagos detallados;
+Entregas de indumentaria; Diferencias encontradas.
+Incluye resumen por tipo/bloque. CI y textos se conservan como texto, no fórmulas.
+Contiene datos personales: uso administrativo, no publicar ni adjuntar a Git.
+
+ARCHIVOS
+Nuevo: backend/src/services/AuditoriaIntegralService.ts
+Modificado: backend/src/routes/ReporteRoutes.ts
+Nuevo: frontend/src/api/AuditoriaIntegralApi.ts
+Nuevo: frontend/src/components/reportes/AuditoriaIntegral.tsx
+Modificado: frontend/src/views/reportes/ReportesView.tsx
+Nuevo: backend/tests/auditoria-integral.test.js
+Nuevo: backend/tests/auditoria-integral-excel.test.js
+Nuevo: este informe.
+
+VERIFICACIÓN
+Diez casos del constructor ejecutados individualmente: aprobados.
+Excel real generado y reabierto con ExcelJS: ocho hojas, filas correctas, CI con
+ceros iniciales conservado y texto que comienza por = no convertido en fórmula.
+Backend compila. Suite backend completa: 24 archivos aprobados, ninguno fallido.
+Build Vite correcto, advertencias existentes de tamaño de bundles.
+TypeScript frontend: 34 diagnósticos iguales a HEAD, verificado con copia temporal
+del árbol versionado. No se corrigieron problemas ajenos a este reporte.
+Lint del componente/API nuevos y diff --check: sin errores.
+La guía react-best-practices se aplicó a carga bajo demanda, hooks estables,
+consulta habilitada solo para administradores y carga diferida de ExcelJS.
+
+LIMITACIONES
+No se verificó visualmente en navegador ni con sesión administrativa de producción.
+Consultas lean de solo lectura, no snapshot transaccional: si hay cambios simultáneos,
+actualizar el reporte antes de comparar con extractos.
+Nombres similares se detectan por tokens normalizados (acentos, mayúsculas, orden),
+no es identificación biométrica ni detección exhaustiva de errores ortográficos.
+Totales por bloque pueden solaparse si existen asignaciones inconsistentes;
+el total general sigue contando cada cuenta una vez.
+El Excel se genera en cliente y los listados se consultan completos; a gran escala
+será necesario paginar y/o generar exportaciones asíncronas.
+No se modificaron BD, archivos R2, .env, roles, pagos, tallas o entregas.
+No se hicieron commit, push, merge ni deploy para esta tarea.

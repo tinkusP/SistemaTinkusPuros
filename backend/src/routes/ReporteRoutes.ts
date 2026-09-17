@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { obtenerAuditoriaIntegral } from "../services/AuditoriaIntegralService";
 import { body, param, query } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
@@ -10,6 +11,9 @@ import { centroControl, pagosCronologicos } from "../controllers/AdministracionC
 import { consultarNominaMatriculas, descargarDocumentoMatricula, exportarDocumentosMatriculasZip, exportarNominaOficial, registrarExportacionReporteMatriculas } from "../controllers/NominaMatriculasController";
 
 const router = Router();
+router.get("/auditoria-integral", authenticate, soloAdministradorReal, async (_req, res) => {
+  res.json(await obtenerAuditoriaIntegral());
+});
 router.get("/formacion", authenticate, soloAdministracion, reporteFormacion);
 router.get("/tallas", authenticate, soloAdministracion, reporteTallas);
 router.get("/tallas-primera-cuota", authenticate, soloAdministradorReal, query("gestionId").optional().isMongoId(), handleInputErrors, reporteTallasPrimeraCuota);
