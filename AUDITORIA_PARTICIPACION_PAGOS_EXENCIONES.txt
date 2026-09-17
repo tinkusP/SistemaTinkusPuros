@@ -1,0 +1,156 @@
+AUDITORÍA COMPLETA DE PARTICIPACIÓN, PAGOS Y EXENCIONES
+Fecha: 17 de septiembre de 2026
+
+ALCANCE
+========
+Se agregó una auditoría independiente de solo lectura. No cambia las tarjetas actuales, cuotas,
+pagos, exenciones, tallas, bloques, roles ni perfiles. El universo usa una persona por usuario y la
+incluye si, en la gestión vigente, tiene al menos una evidencia: bloque activo, talla o cuota.
+
+RESULTADO REAL DE LA LECTURA DE PRODUCCIÓN
+===========================================
+Gestión: Gestión 2026.
+- Participantes únicos: 368.
+- Personas que forman Bs 303.760: 368.
+- Con bloque activo: 309.
+- Con talla: 325.
+- Con cuota: 368.
+- Internos: 113; monto registrado Bs 87.010.
+- Externos: 255; monto registrado Bs 216.750.
+- Monto sin clasificar: Bs 0.
+- Total general registrado: Bs 303.760.
+- Monto explicado: Bs 303.760.
+- Monto sin explicación: Bs 0.
+- Exenciones aplicadas: 7; Bs 5.390 todavía forman parte del total bruto registrado.
+- Free identificados entre las exenciones aplicadas: 3.
+- Descuentos aplicados por monto inferior a la tarifa: 0 en la lectura inicial.
+- Descuentos aplicados o referenciados: 1 (Dylan); permanece pendiente de formalización.
+- Monto real esperado auditado después de exenciones: Bs 298.370.
+- Total de movimientos registrados: Bs 243.725.
+- Total verificado: Bs 240.920.
+- Saldo auditado: Bs 57.450.
+- Sin bloque pero con pago registrado: 13 personas.
+- Sin bloque pero con talla: 17 personas.
+- Sin pago: 55 personas obligadas.
+
+La lectura se realizó con autoIndex=false y autoCreate=false. No se ejecutaron escrituras, cambios
+de índices, migraciones ni reparaciones.
+
+CASOS CONOCIDOS
+===============
+- JONNY ALBERTO HERRERA CONDORI, CI 9939046: identificado inequívocamente. Su exención solicitada
+  todavía no está formalizada en la cuota; el reporte lo marca para revisión y no cambia el monto.
+- KENJI GROVER SADAKATA CONDE, CI 8963878: identificado inequívocamente. Su exención solicitada
+  todavía no está formalizada en la cuota; el reporte lo marca para revisión y no cambia el monto.
+- DYLAN ARMANDO MALLEA AGUILAR, CI 12864017: identificado como referencia de descuento del 50 %,
+  pero el beneficio todavía no está formalizado en el monto de la cuota.
+- OLO y ABI: no existe una coincidencia exacta verificable por esos alias. Se mantienen como
+  referencias sin coincidencia; hace falta nombre completo o CI antes de tomar una decisión.
+- GAUSS: existe una coincidencia individual y la exención ya figura aplicada.
+- BRAYAN y CARLOS: los alias coinciden con varias personas; requieren CI para evitar aplicar un
+  beneficio a la persona equivocada.
+
+INCONSISTENCIAS DETECTADAS
+==========================
+Las categorías detectadas en la lectura inicial fueron:
+- 59 personas con cuota pero sin bloque activo.
+- 17 personas con talla pero sin bloque activo.
+- 15 administradores o guías con tarifa normal que requieren revisión administrativa; el sistema no
+  asume que deban quedar exentos.
+- 7 exentos cuyo monto original continúa dentro del total bruto registrado. El reporte los resta
+  únicamente en el total auditado y conserva el dato histórico.
+- 5 referencias FREE no formalizadas.
+- 2 referencias EXENTO no formalizadas: Jonny y Kenji.
+- 1 descuento nominal no formalizado: Dylan.
+- Alias ambiguos que requieren CI: Brayan, Carlos y otros nombres compartidos.
+
+El detector de pagos repetidos fue corregido después de la lectura inicial para incorporar el número
+de cuota en la huella. Dos cuotas diferentes con igual monto y fecha ya no generan un falso positivo.
+La prueba automatizada cubre este caso. Los comprobantes reutilizados sí se contrastan de forma global.
+
+UNIVERSO Y REGLAS
+=================
+1. Se excluyen perfiles eliminados o inactivos y relaciones con fechaEliminado.
+2. Bloque vigente significa DetalleBloque ACTIVO dentro de un Bloque ACTIVO.
+3. Una talla existe si polera o chamarra contiene un valor real, no vacío ni "sin definir".
+4. Se toma una persona por usuario, aun si existen relaciones inconsistentes duplicadas.
+5. Pago verificado significa exclusivamente DetalleCuota.estadoRevision = VERIFICADO.
+6. EXENTO/FREE solo reduce el esperado auditado si exentoPago está formalizado en la cuota.
+7. DESCUENTO solo se considera aplicado si montoTotal es menor que la tarifa normal vigente.
+8. Los alias conocidos son alertas de revisión y nunca modifican cifras automáticamente.
+
+ENDPOINT CREADO
+===============
+GET /api/reportes/auditoria-participacion
+
+Protección: authenticate + soloAdministradorReal.
+
+MODELOS UTILIZADOS
+==================
+- Gestion.
+- PerfilUsuario.
+- Rol.
+- Preregistro.
+- Fraterno.
+- Guia.
+- PostulanteGuia.
+- Bloque.
+- DetalleBloque.
+- TallaFraterno.
+- ConfiguracionPago.
+- Cuota.
+- DetalleCuota.
+
+EXCEL
+=====
+El botón EXPORTAR AUDITORÍA DE PARTICIPANTES genera:
+- 01_RESUMEN_GENERAL.
+- 02_TODOS_PARTICIPANTES.
+- 03_CON_BLOQUE.
+- 04_SIN_BLOQUE_CON_PAGO.
+- 05_SIN_BLOQUE_CON_TALLA.
+- 06_EXENTOS.
+- 07_DESCUENTOS.
+- 08_SIN_PAGO.
+- 09_INCONSISTENCIAS.
+
+Cada persona incluye datos personales, roles, bloque y guías, tallas, primera/segunda/tercera cuota,
+montos registrados y verificados, saldo, beneficio, exención e inconsistencias.
+
+ARCHIVOS NUEVOS
+===============
+- backend/src/services/AuditoriaParticipacionService.ts
+- backend/tests/auditoria-participacion.test.js
+- frontend/src/components/cuota/AuditoriaParticipacion.tsx
+- AUDITORIA_PARTICIPACION_PAGOS_EXENCIONES.txt
+
+ARCHIVOS MODIFICADOS
+====================
+- backend/src/controllers/ReporteController.ts
+- backend/src/routes/ReporteRoutes.ts
+- frontend/src/api/ReporteApi.ts
+- frontend/src/views/cuota/CuotaView.tsx
+
+PRUEBAS
+========
+- Clasificación interno/externo/exento/free/descuento: aprobada.
+- Cuotas 1, 2 y 3 con estado real o SIN REGISTRO: aprobada.
+- Detección de pagos/comprobantes repetidos: aprobada.
+- Cuotas distintas con mismo monto y fecha no se consideran duplicadas: aprobada.
+- Servicio de solo lectura: aprobado por prueba estática.
+- Endpoint protegido con soloAdministradorReal: aprobado.
+- Nueve hojas Excel requeridas: aprobadas.
+- Suite completa backend: 20/20 aprobada.
+- Build TypeScript backend: aprobado.
+- TypeScript frontend: aprobado.
+- Build de producción Vite frontend: aprobado (solo conserva la advertencia preexistente por tamaño de chunks).
+- ESLint de los archivos frontend afectados: aprobado.
+
+CAMBIOS NO REALIZADOS
+=====================
+- No se cambiaron las tarjetas de cuotas.
+- No se recalcularon ni guardaron montos.
+- No se marcaron exenciones ni descuentos.
+- No se corrigieron datos automáticamente.
+- No se eliminaron registros.
+- No se modificaron pagos, bloques o tallas.

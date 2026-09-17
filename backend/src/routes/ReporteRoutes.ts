@@ -3,7 +3,7 @@ import { body, param, query } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { soloAdministracion, soloAdministradorReal } from "../middleware/soloAdministracion";
 import { handleInputErrors } from "../middleware/validation";
-import { auditoriaFinancieraGeneral, controlFinancieroBloques, reporteEjecutivo, reporteEntregasRopa, reporteIntegrantesPorMatricula, reporteTallasPrimeraCuota } from "../controllers/ReporteController";
+import { auditoriaFinancieraGeneral, auditoriaParticipacion, controlFinancieroBloques, reporteEjecutivo, reporteEntregasRopa, reporteIntegrantesPorMatricula, reporteTallasPrimeraCuota } from "../controllers/ReporteController";
 import { estadoAlmacenamiento, reporteTallas } from "../controllers/AlmacenamientoController";
 import { reporteFormacion } from "../controllers/ReporteFormacionController";
 import { centroControl, pagosCronologicos } from "../controllers/AdministracionController";
@@ -21,6 +21,7 @@ router.get("/integrantes-matricula", authenticate, soloAdministradorReal, query(
 router.get("/entregas-ropa", authenticate, soloAdministracion, reporteEntregasRopa);
 router.get("/control-financiero-bloques", authenticate, soloAdministradorReal, controlFinancieroBloques);
 router.get("/auditoria-financiera", authenticate, soloAdministradorReal, auditoriaFinancieraGeneral);
+router.get("/auditoria-participacion", authenticate, soloAdministradorReal, auditoriaParticipacion);
 router.get("/nomina-matriculas", authenticate, soloAdministradorReal, query("gestionId").optional().isMongoId(), handleInputErrors, consultarNominaMatriculas);
 router.post("/nomina-matriculas/oficial", authenticate, soloAdministradorReal,
   body("gestionId").optional().isMongoId(), body("usuarioIds").optional().isArray({ max: 1000 }), body("usuarioIds.*").optional().isMongoId(),
