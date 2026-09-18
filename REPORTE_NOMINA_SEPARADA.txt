@@ -1,0 +1,105 @@
+REPORTE DE NÓMINA SEPARADA — 18/09/2026
+
+ESTADO
+Implementado localmente. No commit, push ni deploy en esta tarea.
+Lista recibida: 212 entradas únicas.
+Consulta de producción mediante variables Railway, exclusivamente lectura,
+con autoIndex=false y autoCreate=false: 212 usuarios encontrados, 0 no encontrados,
+0 ambiguos, 0 duplicados, 3 usuarios con campos de apellido que requieren revisión.
+No se imprimieron credenciales ni se modificaron documentos de producción.
+
+ENTREGA PRIVADA
+artifacts/nomina-separada/nomina_usuarios_separada.xlsx
+artifacts/nomina-separada/revision-lista.json
+No incluir estos archivos ni la lista personal en Git o en el bundle público.
+Excel comprobado con ExcelJS: 212 filas de usuarios, 12 columnas, dos hojas.
+La segunda hoja contiene metadatos y todas las observaciones.
+La exportación técnica local identifica explícitamente que no hubo sesión web de
+administrador; no inventa un nombre o identidad de quien generó el archivo.
+En el sistema, el administrador se obtiene del usuario autenticado en backend.
+
+ANÁLISIS Y REUTILIZACIÓN
+PerfilUsuario ya almacena nombres, apellidoPaterno y apellidoMaterno por separado.
+No se dividen nombres completos mediante heurísticas. Se conserva literalmente
+cada campo, incluidos apellidos compuestos, vacíos y marcadores inválidos.
+Nombre Completo Original se reconstruye concatenando los campos de identidad;
+no existe otro campo independiente de nombre completo en el modelo consultado.
+RU opcional, sin confundirlo con matrícula/documento universitario.
+WhatsApp se deriva del teléfono boliviano válido; teléfono original no cambia.
+Se reutilizan PerfilUsuario, Fraterno, Rol, authenticate, soloAdministradorReal,
+express-validator, Axios, useAuth, estilos y ExcelJS ya instalados.
+El generador previo de nómina oficial rellena una plantilla distinta de seis
+columnas y exige matrícula real: reutilizar ese universo ocultaría usuarios.
+Por eso se agrega un servicio acotado que parte de todas las cuentas no eliminadas.
+
+ENDPOINTS
+POST /api/reportes/nomina-separada/revisar
+POST /api/reportes/nomina-separada/exportar
+Se usa POST en lugar de GET para no exponer nombres/CI en URLs e historiales y
+soportar listas largas. Son consultas/exportaciones, sin mutar entidades.
+Se conserva el middleware global de auditoría de acceso del sistema; puede
+registrar el POST como actividad. No se modifica ese middleware transversal.
+Ambos requieren administrador real. Respuesta Cache-Control: no-store.
+Entrada lista: 1 a 1000 strings no vacíos, máximo 200 caracteres por elemento.
+
+COINCIDENCIAS
+Nombre completo, CI o código de fraterno. Prefijos opcionales CI: y CODIGO:.
+Para comparar se toleran mayúsculas, espacios y acentos, sin cambiar valores BD.
+Si no hay coincidencia exacta, mismos tokens en distinto orden permiten encontrar
+el usuario, pero queda advertencia de revisión. No hay coincidencias aproximadas
+automáticas que seleccionen otra persona por un error ortográfico.
+Más de un ID coincidente: AMBIGUO, no se exporta; identificar por CI/código.
+Múltiples entradas del mismo ID: una fila, entradas repetidas notificadas.
+CI compartido entre cuentas: advertencia de revisión; no fusionar identidades.
+Roles asociados se resuelven y deduplican, sin inferir un rol a partir de membresía.
+Cuenta INACTIVO permanece visible, ELIMINADO o fechaEliminado no se exporta.
+
+REVISIÓN ANTES DE EXPORTAR
+Reportes -> Nómina usuarios -> Abrir nómina -> pegar lista o cargar TXT -> Revisar.
+Muestra encontrados, faltantes, ambiguos, repetidos, incompletos y vista previa.
+Una huella SHA256 del resultado permite comprobar que los datos no cambiaron
+entre revisión y descarga. No reemplaza autenticación/autorización.
+La exportación vuelve a consultar la BD: cambio de huella devuelve 409 y exige
+nueva revisión. No se aceptan datos de identidad/roles enviados por el cliente.
+Si hay observaciones, se requiere confirmación explícita para exportar solamente
+los usuarios identificados, conservando valores originales y dejando evidencia.
+Editar la lista invalida la revisión. Durante solicitudes se deshabilita edición.
+
+EXCEL
+Nombre: nomina_usuarios_separada.xlsx
+Hoja Nómina usuarios: ID Usuario, Nombre, Apellido Paterno, Apellido Materno,
+Nombre Completo Original, CI, RU, Teléfono, WhatsApp, Sexo, Rol, Estado Usuario.
+Hoja Control de revisión: fecha UTC, administrador/ID, cantidad, resultados y alertas.
+Identificadores y valores del usuario se escriben como texto, no como fórmulas.
+Los apellidos faltantes no se completan automáticamente; no modificar base de datos.
+
+ARCHIVOS PARA COMMIT LIMPIO
+Nuevos:
+- backend/src/services/NominaSeparadaService.ts
+- backend/src/controllers/NominaSeparadaController.ts
+- backend/tests/nomina-separada.test.js
+- frontend/src/api/NominaSeparadaApi.ts
+- frontend/src/components/reportes/NominaSeparada.tsx
+- REPORTE_NOMINA_SEPARADA.txt
+Modificados:
+- backend/src/routes/ReporteRoutes.ts (dos endpoints, validaciones locales)
+- frontend/src/views/reportes/ReportesView.tsx (tarjeta nueva)
+No incluir artifacts, fotografías, documentos, ZIP, respaldos o .env.
+
+VERIFICACIÓN
+Build backend y Vite: correctos (Vite mantiene advertencia previa de bundles grandes).
+Suite backend: 25 archivos de prueba aprobados.
+Pruebas del módulo: apellidos compuestos, homónimos, CI/código, deduplicación,
+roles múltiples, inactivos/eliminados, campos incompletos, orden de palabras,
+CI repetido, huella, Excel real, control de exportación y rutas administrativas.
+Excel real de la lista: se generó y reabrió, 212 IDs únicos y 213 filas con cabecera.
+Lint API/componente nuevos: correcto. git diff --check: correcto.
+TypeScript comparado con una copia limpia de HEAD: mismos 34 diagnósticos,
+sin diferencias ni errores introducidos por este módulo.
+No hubo prueba visual de navegador ni deploy del nuevo módulo.
+La guía react-best-practices orientó hooks estables y evitar consultas automáticas:
+la revisión solo se ejecuta a petición del administrador.
+
+SIN CAMBIOS
+Usuarios, roles, pagos, bloques, tallas, relaciones, plantillas previas, reglas
+financieras, configuración, credenciales y dependencias permanecen intactos.

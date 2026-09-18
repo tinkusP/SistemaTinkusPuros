@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { revisarNominaSeparada, exportarNominaSeparada } from "../controllers/NominaSeparadaController";
 import { obtenerAuditoriaIntegral } from "../services/AuditoriaIntegralService";
 import { body, param, query } from "express-validator";
 import { authenticate } from "../middleware/auth";
@@ -11,6 +12,10 @@ import { centroControl, pagosCronologicos } from "../controllers/AdministracionC
 import { consultarNominaMatriculas, descargarDocumentoMatricula, exportarDocumentosMatriculasZip, exportarNominaOficial, registrarExportacionReporteMatriculas } from "../controllers/NominaMatriculasController";
 
 const router = Router();
+const validarListaNomina = [body("lista").isArray({ min: 1, max: 1000 }), body("lista.*").isString().bail().trim().isLength({ min: 1, max: 200 })];
+router.post("/nomina-separada/revisar", authenticate, soloAdministradorReal, ...validarListaNomina, handleInputErrors, revisarNominaSeparada);
+router.post("/nomina-separada/exportar", authenticate, soloAdministradorReal, ...validarListaNomina,
+  body("huella").isString().matches(/^[a-f0-9]{64}$/), body("aceptarObservaciones").optional().isBoolean({ strict: true }), handleInputErrors, exportarNominaSeparada);
 router.get("/auditoria-integral", authenticate, soloAdministradorReal, async (_req, res) => {
   res.json(await obtenerAuditoriaIntegral());
 });

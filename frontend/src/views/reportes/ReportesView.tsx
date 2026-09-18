@@ -13,6 +13,7 @@ import ReporteIntegrantesMatricula from "@/components/reportes/ReporteIntegrante
 import ReporteEntregaRopa from "@/components/reportes/ReporteEntregaRopa";
 import ControlMatriculas from "@/components/reportes/ControlMatriculas";
 import AuditoriaIntegral from "@/components/reportes/AuditoriaIntegral";
+import NominaSeparada from "@/components/reportes/NominaSeparada";
 
 type Campo = { id: string; titulo: string; valor: (p: PersonaReporte, i: number) => string | number };
 type SeccionReporte = "GENERAL" | "POLERAS" | "CHAMARRAS" | "POSTULANTES_GUIA" | "GUIAS";
@@ -123,11 +124,12 @@ export default function ReportesView() {
     URL.revokeObjectURL(enlace.href);
   };
 
-  if (q.isLoading) return <><AuditoriaIntegral /><p className="p-8 text-center">Generando reporte...</p></>;
-  if (!q.data) return <><AuditoriaIntegral /><p className="p-6 text-red-700">{q.error?.message}</p></>;
+  if (q.isLoading) return <><NominaSeparada /><AuditoriaIntegral /><p className="p-8 text-center">Generando reporte...</p></>;
+  if (!q.data) return <><NominaSeparada /><AuditoriaIntegral /><p className="p-6 text-red-700">{q.error?.message}</p></>;
   const almacenamiento = alm.data;
 
   return <main className="space-y-5">
+    <NominaSeparada />
     <AuditoriaIntegral />
     <ControlMatriculas />
     <ReporteIntegrantesMatricula />
